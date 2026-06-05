@@ -284,6 +284,25 @@ export async function convertLead(leadId: string): Promise<{
 
 const LVL2_FIELD_ID = '1321968000000748250'
 
+export async function findLeadByEmail(email: string): Promise<string | null> {
+  const token = await getAccessToken()
+  const res = await fetch(
+    `${BASE_URL}/Leads/search?criteria=(Email:equals:${encodeURIComponent(email)})&fields=id`,
+    { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
+  )
+  const data = await res.json() as { data?: { id: string }[] }
+  return data.data?.[0]?.id ?? null
+}
+
+export async function addTagsToLead(leadId: string, tags: string[]): Promise<void> {
+  const token = await getAccessToken()
+  const tagNames = tags.map(t => encodeURIComponent(t)).join(',')
+  await fetch(`${BASE_URL}/Leads/actions/add_tags?ids=${leadId}&tag_names=${tagNames}&over_write=false`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+  })
+}
+
 type PickListValue = { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }
 
 async function fetchLvl2Field(token: string): Promise<PickListValue[]> {

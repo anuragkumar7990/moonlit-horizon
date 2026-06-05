@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react'
 
 interface UploadResult {
   row: number
-  status: 'created' | 'skipped' | 'error' | 'excluded'
+  status: 'created' | 'skipped' | 'updated' | 'error' | 'excluded'
   id?: string
   reason?: string
 }
@@ -14,6 +14,7 @@ interface UploadResponse {
   total: number
   created: number
   skipped: number
+  updated: number
   excluded: number
   errors: number
   results: UploadResult[]
@@ -304,20 +305,24 @@ export default function UploadPage() {
       {/* Results */}
       {status === 'done' && response && (
         <div className="space-y-4">
-          <div className="grid grid-cols-4 gap-4">
-            <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-4 text-center">
+          <div className="grid grid-cols-5 gap-3">
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-4 text-center">
               <div className="text-2xl font-bold text-green-700">{response.created}</div>
               <div className="text-sm text-green-600 mt-0.5">Created</div>
             </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-5 py-4 text-center">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-4 text-center">
+              <div className="text-2xl font-bold text-blue-700">{response.updated ?? 0}</div>
+              <div className="text-sm text-blue-600 mt-0.5">Updated</div>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-4 text-center">
               <div className="text-2xl font-bold text-yellow-700">{response.skipped}</div>
-              <div className="text-sm text-yellow-600 mt-0.5">Skipped (duplicate)</div>
+              <div className="text-sm text-yellow-600 mt-0.5">Skipped</div>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 text-center">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-center">
               <div className="text-2xl font-bold text-slate-500">{response.excluded ?? 0}</div>
-              <div className="text-sm text-slate-400 mt-0.5">Excluded (Skip)</div>
+              <div className="text-sm text-slate-400 mt-0.5">Excluded</div>
             </div>
-            <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-center">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-4 text-center">
               <div className="text-2xl font-bold text-red-700">{response.errors}</div>
               <div className="text-sm text-red-600 mt-0.5">Errors</div>
             </div>
@@ -334,11 +339,12 @@ export default function UploadPage() {
                     <span className="text-slate-400 w-12">Row {r.row}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       r.status === 'created'  ? 'bg-green-100 text-green-700' :
+                      r.status === 'updated'  ? 'bg-blue-100 text-blue-700' :
                       r.status === 'skipped'  ? 'bg-yellow-100 text-yellow-700' :
                       r.status === 'excluded' ? 'bg-slate-100 text-slate-500' :
                       'bg-red-100 text-red-700'
                     }`}>
-                      {r.status === 'created' ? 'Created' : r.status === 'skipped' ? 'Skipped' : r.status === 'excluded' ? 'Excluded' : 'Error'}
+                      {r.status === 'created' ? 'Created' : r.status === 'updated' ? 'Updated' : r.status === 'skipped' ? 'Skipped' : r.status === 'excluded' ? 'Excluded' : 'Error'}
                     </span>
                     {r.reason && <span className="text-slate-500">{r.reason}</span>}
                   </div>

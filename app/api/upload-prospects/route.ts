@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLeads } from '@/lib/zoho'
+import { createLeads, findLeadByEmail, addTagsToLead } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
       lvl1Source?: string; lvl2Source?: string; priority?: string
     }
 
-    type RowResult = { row: number; status: 'created' | 'skipped' | 'error' | 'excluded'; id?: string; reason?: string }
+    type RowResult = { row: number; status: 'created' | 'skipped' | 'updated' | 'error' | 'excluded'; id?: string; reason?: string }
 
     const leads: ParsedLead[] = []
     const preResults: RowResult[] = []
@@ -258,8 +258,29 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // For Zoho duplicates: tag with lvl2Source (and priority) instead of just skipping
+    const tagsToAdd = [lvl2Source, ''].filter(Boolean) // will add priority below per-lead
+    if (lvl2Source) {
+      const zohoSkipped = preResults
+        .map((r, i) => ({ r, i }))
+        .filter(({ r }) => r.status === 'skipped' && r.reason === 'Already exists in Zoho')
+      await Promise.all(zohoSkipped.map(async ({ r, i }) => {
+        const leadIdx = pendingIndices.indexOf(i)
+        if (leadIdx < 0) return
+        const lead = leads[leadIdx]
+        const tags = [lvl2Source, lead.priority].filter((t): t is string => Boolean(t))
+        const existingId = await findLeadByEmail(lead.email)
+        if (existingId) {
+          await addTagsToLead(existingId, tags)
+          preResults[i] = { ...r, status: 'updated', reason: `Tagged: ${tags.join(', ')}` }
+        }
+      }))
+    }
+    void tagsToAdd
+
     const created  = preResults.filter(r => r.status === 'created').length
     const skipped  = preResults.filter(r => r.status === 'skipped').length
+    const updated  = preResults.filter(r => r.status === 'updated').length
     const excluded = preResults.filter(r => r.status === 'excluded').length
     const errors   = preResults.filter(r => r.status === 'error').length
 
@@ -268,6 +289,7 @@ export async function POST(req: NextRequest) {
       total: rows.length,
       created,
       skipped,
+      updated,
       excluded,
       errors,
       results: preResults,
