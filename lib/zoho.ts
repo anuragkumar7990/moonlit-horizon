@@ -100,6 +100,7 @@ export async function createLeads(leads: {
       First_Name: l.firstName || undefined,
       Last_Name: l.lastName,
       Company: l.company || undefined,
+      Company_Name: l.company || undefined,
       Email: l.email,
       Mobile: l.phone || undefined,
       Designation: l.designation || undefined,
