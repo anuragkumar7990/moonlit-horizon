@@ -23,10 +23,32 @@ function parseIST(str) {
   return `${m[1]}T${m[2]}:00+05:30`
 }
 
+// Cache for autocomplete data — refreshed every 5 minutes
+const cache = { accounts: [], contacts: [], leads: [], lastFetch: 0 }
+
+async function refreshCache() {
+  try {
+    const [accounts, contacts, leads] = await Promise.all([
+      vercelGet('/api/accounts'),
+      vercelGet('/api/contacts'),
+      vercelGet('/api/leads'),
+    ])
+    cache.accounts = accounts
+    cache.contacts = contacts
+    cache.leads = leads
+    cache.lastFetch = Date.now()
+    console.log(`Cache refreshed — ${accounts.length} accounts, ${contacts.length} contacts, ${leads.length} leads`)
+  } catch (err) {
+    console.error('Cache refresh failed:', err)
+  }
+}
+
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 
 client.on('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`)
+  refreshCache()
+  setInterval(refreshCache, 5 * 60 * 1000)
 })
 
 client.on('interactionCreate', async interaction => {
@@ -35,10 +57,10 @@ client.on('interactionCreate', async interaction => {
     const focused = interaction.options.getFocused(true)
 
     try {
+      const query = focused.value.toLowerCase()
+
       if (focused.name === 'account') {
-        const accounts = await vercelGet('/api/accounts')
-        const query = focused.value.toLowerCase()
-        const choices = accounts
+        const choices = cache.accounts
           .filter(a => a.accountName.toLowerCase().includes(query))
           .slice(0, 25)
           .map(a => ({ name: a.accountName, value: a.id }))
@@ -46,9 +68,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (focused.name === 'contact') {
-        const contacts = await vercelGet('/api/contacts')
-        const query = focused.value.toLowerCase()
-        const choices = contacts
+        const choices = cache.contacts
           .filter(c => {
             const full = `${c.firstName} ${c.lastName}`.toLowerCase()
             return full.includes(query) || (c.email || '').toLowerCase().includes(query)
@@ -62,9 +82,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (focused.name === 'prospect') {
-        const leads = await vercelGet('/api/leads')
-        const query = focused.value.toLowerCase()
-        const choices = leads
+        const choices = cache.leads
           .filter(l => {
             const full = `${l.firstName} ${l.lastName}`.toLowerCase()
             const company = (l.company || '').toLowerCase()
