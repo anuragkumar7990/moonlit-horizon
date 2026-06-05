@@ -94,7 +94,7 @@ export async function createDeal(payload: {
   }
   const record = data.data?.[0]
   if (record && (record.status === 'error' || record.code)) {
-    throw new Error(`Zoho: ${record.message ?? record.code ?? JSON.stringify(record)}`)
+    throw new Error(`Zoho: ${record.message ?? record.code} | ${JSON.stringify(record)}`)
   }
   return record?.details?.id ?? ''
 }
