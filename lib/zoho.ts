@@ -174,6 +174,15 @@ export async function getCallById(id: string): Promise<{
   }
 }
 
+export async function linkContactToAccount(contactId: string, accountId: string): Promise<void> {
+  const token = await getAccessToken()
+  await fetch(`${BASE_URL}/Contacts`, {
+    method: 'PUT',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [{ id: contactId, Account_Contact: { id: accountId } }] }),
+  })
+}
+
 export async function findOrCreateAccount(name: string): Promise<{ id: string; accountName: string }> {
   const accounts = await getZohoAccounts()
   const existing = accounts.find(a => a.accountName.toLowerCase() === name.toLowerCase())

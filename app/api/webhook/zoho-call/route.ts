@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { convertLead, getContactById, getLeadById, getZohoAccounts, getCallById } from '@/lib/zoho'
+import { convertLead, findOrCreateAccount, linkContactToAccount, getContactById, getLeadById, getZohoAccounts, getCallById } from '@/lib/zoho'
 import { bookMeeting } from '@/lib/booking'
 
 export const dynamic = 'force-dynamic'
@@ -96,7 +96,17 @@ export async function POST(req: NextRequest) {
         contactId = converted.contactId
         accountId = converted.accountId
         accountName = converted.accountName ?? ''
-        console.log(`[webhook/zoho-call] Converted → Contact ${contactId} Account ${accountId}`)
+        console.log(`[webhook/zoho-call] Converted → Contact ${contactId} Account ${accountId || 'none'}`)
+
+        // Zoho often returns Accounts:null on conversion — find/create account and link the contact
+        if (!accountId && lead.company) {
+          console.log(`[webhook/zoho-call] No account from conversion, finding/creating for "${lead.company}"`)
+          const acct = await findOrCreateAccount(lead.company)
+          accountId = acct.id
+          accountName = acct.accountName
+          await linkContactToAccount(contactId, accountId)
+          console.log(`[webhook/zoho-call] Linked Contact ${contactId} → Account ${accountId}`)
+        }
       }
     }
 
