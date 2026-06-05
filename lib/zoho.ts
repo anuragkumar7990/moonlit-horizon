@@ -282,29 +282,27 @@ export async function convertLead(leadId: string): Promise<{
 
 const LVL2_FIELD_ID = '1321968000000748250'
 
-export async function getLvl2SourceValues(): Promise<string[]> {
-  const token = await getAccessToken()
-  const res = await fetch(`${BASE_URL}/settings/fields/${LVL2_FIELD_ID}?module=Leads`, {
+type PickListValue = { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }
+
+async function fetchLvl2Field(token: string): Promise<PickListValue[]> {
+  const res = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
     cache: 'no-store',
   })
-  const data = await res.json() as { fields?: { pick_list_values: { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }[] }[] }
-  const field = data.fields?.[0]
-  if (!field) return []
-  return field.pick_list_values
-    .filter(v => v.actual_value !== '-None-')
-    .map(v => v.actual_value)
+  const data = await res.json() as { fields?: ({ api_name: string; pick_list_values?: PickListValue[] })[] }
+  const field = data.fields?.find(f => f.api_name === 'Lvl_2_Source')
+  return field?.pick_list_values ?? []
+}
+
+export async function getLvl2SourceValues(): Promise<string[]> {
+  const token = await getAccessToken()
+  const values = await fetchLvl2Field(token)
+  return values.filter(v => v.actual_value !== '-None-').map(v => v.actual_value)
 }
 
 export async function addLvl2SourceValue(value: string): Promise<void> {
   const token = await getAccessToken()
-  // Fetch current pick_list_values so we can append without overwriting
-  const getRes = await fetch(`${BASE_URL}/settings/fields/${LVL2_FIELD_ID}?module=Leads`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    cache: 'no-store',
-  })
-  const getData = await getRes.json() as { fields?: { pick_list_values: { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }[] }[] }
-  const existing = getData.fields?.[0]?.pick_list_values ?? []
+  const existing = await fetchLvl2Field(token)
   const putRes = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
     method: 'PUT',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
