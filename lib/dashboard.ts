@@ -1,5 +1,6 @@
 import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,
+  startOfDay, endOfDay,
   isWithinInterval, subWeeks, format, parseISO, isPast,
 } from 'date-fns'
 import type { Call, Meeting, ZohoDeal, Target, FunnelStage, FunnelData, LeadCounts, WeeklyPoint } from './types'
@@ -211,6 +212,119 @@ export function buildFunnel(deals: ZohoDeal[]): FunnelData {
     won:  { count: wonCount, amount: wonAmt  },
     lost: { count: lostCount, amount: lostAmt },
   }
+}
+
+// ── Tanishq-specific ─────────────────────────────────────────────────────────
+
+export interface TanishqPeriodMetrics {
+  dialled:        { achieved: number; target: number | null }
+  connected:      { achieved: number; target: number | null }
+  meetingsBooked: { achieved: number; target: number | null }
+}
+
+export interface TanishqMetrics {
+  daily:   TanishqPeriodMetrics
+  weekly:  TanishqPeriodMetrics
+  monthly: TanishqPeriodMetrics
+}
+
+export interface TodayMeeting {
+  meetingId:   string
+  accountName: string
+  contactName: string
+  meetingTime: string
+  gMeetLink:   string
+  meetingType: string
+}
+
+export interface FollowUpItem {
+  account:      string
+  contactName:  string
+  contactPhone: string
+  notes:        string
+  outcome:      string
+}
+
+export function buildTanishqMetrics(
+  calls: Call[],
+  meetings: Meeting[],
+  targets: Target[],
+): TanishqMetrics {
+  const now = new Date()
+  const todayStart = startOfDay(now)
+  const todayEnd   = endOfDay(now)
+  const weekStart  = startOfWeek(now, { weekStartsOn: 1 })
+  const weekEnd    = endOfWeek(now,   { weekStartsOn: 1 })
+  const monthStart = startOfMonth(now)
+  const monthEnd   = endOfMonth(now)
+
+  const inToday = (d: Date) => isWithinInterval(d, { start: todayStart, end: todayEnd })
+  const inWeek  = (d: Date) => isWithinInterval(d, { start: weekStart,  end: weekEnd  })
+  const inMonth = (d: Date) => isWithinInterval(d, { start: monthStart, end: monthEnd })
+
+  let dD = 0, dC = 0, wD = 0, wC = 0, mD = 0, mC = 0
+
+  for (const call of calls) {
+    const d = safeParseDate(call.date)
+    if (!d) continue
+    if (inToday(d)) { dD++; if (isConnected(call.outcome)) dC++ }
+    if (inWeek(d))  { wD++; if (isConnected(call.outcome)) wC++ }
+    if (inMonth(d)) { mD++; if (isConnected(call.outcome)) mC++ }
+  }
+
+  const dMtg = meetings.filter(m => { const d = safeParseDate(m.createdAt); return d && inToday(d) && m.meetingType === 'L1' }).length
+  const wMtg = meetings.filter(m => { const d = safeParseDate(m.createdAt); return d && inWeek(d)  && m.meetingType === 'L1' }).length
+  const mMtg = meetings.filter(m => { const d = safeParseDate(m.createdAt); return d && inMonth(d) && m.meetingType === 'L1' }).length
+
+  const tDial = getTarget(targets, 'Calls Dialled')
+  const tConn = getTarget(targets, 'Calls Connected')
+  const tMtg  = getTarget(targets, 'Meetings Booked')
+
+  return {
+    daily: {
+      dialled:        { achieved: dD,   target: divOrNull(tDial, 22) },
+      connected:      { achieved: dC,   target: divOrNull(tConn, 22) },
+      meetingsBooked: { achieved: dMtg, target: divOrNull(tMtg,  22) },
+    },
+    weekly: {
+      dialled:        { achieved: wD,   target: divOrNull(tDial, 4) },
+      connected:      { achieved: wC,   target: divOrNull(tConn, 4) },
+      meetingsBooked: { achieved: wMtg, target: divOrNull(tMtg,  4) },
+    },
+    monthly: {
+      dialled:        { achieved: mD,   target: tDial },
+      connected:      { achieved: mC,   target: tConn },
+      meetingsBooked: { achieved: mMtg, target: tMtg  },
+    },
+  }
+}
+
+export function buildTodaysMeetings(meetings: Meeting[]): TodayMeeting[] {
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  return meetings
+    .filter(m => m.meetingTime.startsWith(todayStr))
+    .sort((a, b) => a.meetingTime.localeCompare(b.meetingTime))
+    .map(m => ({
+      meetingId:   m.meetingId,
+      accountName: m.accountName,
+      contactName: m.contactName,
+      meetingTime: m.meetingTime,
+      gMeetLink:   m.gMeetLink,
+      meetingType: m.meetingType,
+    }))
+}
+
+export function buildFollowUps(calls: Call[]): FollowUpItem[] {
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  return calls
+    .filter(c => c.followUpDate?.startsWith(todayStr))
+    .map(c => ({
+      account:      c.account,
+      contactName:  c.contactName,
+      contactPhone: c.contactPhone,
+      notes:        c.notes,
+      outcome:      c.outcome,
+    }))
 }
 
 export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoint[] {
