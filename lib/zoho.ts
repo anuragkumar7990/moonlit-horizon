@@ -46,14 +46,18 @@ export async function getDealByAccount(accountName: string): Promise<ZohoDeal | 
 
 export async function getContacts(): Promise<ZohoContact[]> {
   const data = await zohoGet('/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name&per_page=200') as { data?: Record<string, unknown>[] }
-  return (data.data ?? []).map((c) => ({
-    id: String(c.id ?? ''),
-    firstName: String(c.First_Name ?? ''),
-    lastName: String(c.Last_Name ?? ''),
-    email: String(c.Email ?? ''),
-    phone: String(c.Phone ?? c.Mobile ?? ''),
-    accountName: typeof c.Account_Name === 'object' && c.Account_Name !== null ? String((c.Account_Name as Record<string, unknown>).name ?? '') : String(c.Account_Name ?? ''),
-  }))
+  return (data.data ?? []).map((c) => {
+    const acct = typeof c.Account_Name === 'object' && c.Account_Name !== null ? c.Account_Name as Record<string, unknown> : null
+    return {
+      id: String(c.id ?? ''),
+      firstName: String(c.First_Name ?? ''),
+      lastName: String(c.Last_Name ?? ''),
+      email: String(c.Email ?? ''),
+      phone: String(c.Phone ?? c.Mobile ?? ''),
+      accountId: String(acct?.id ?? ''),
+      accountName: String(acct?.name ?? c.Account_Name ?? ''),
+    }
+  })
 }
 
 export async function getZohoAccounts(): Promise<ZohoAccount[]> {
@@ -123,15 +127,17 @@ export async function getContactById(id: string): Promise<ZohoContact | null> {
   const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name`) as { data?: Record<string, unknown>[] }
   const c = data.data?.[0]
   if (!c) return null
+  const accountLookup = typeof c.Account_Name === 'object' && c.Account_Name !== null
+    ? c.Account_Name as Record<string, unknown>
+    : null
   return {
     id: String(c.id ?? ''),
     firstName: String(c.First_Name ?? ''),
     lastName: String(c.Last_Name ?? ''),
     email: String(c.Email ?? ''),
     phone: String(c.Phone ?? c.Mobile ?? ''),
-    accountName: typeof c.Account_Name === 'object' && c.Account_Name !== null
-      ? String((c.Account_Name as Record<string, unknown>).name ?? '')
-      : String(c.Account_Name ?? ''),
+    accountId: String(accountLookup?.id ?? ''),
+    accountName: String(accountLookup?.name ?? c.Account_Name ?? ''),
   }
 }
 

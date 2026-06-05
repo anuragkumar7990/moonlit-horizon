@@ -114,10 +114,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (!accountId) {
-    if (call.whatId?.id && call.whatId.module === 'Accounts') {
+    // Use Account ID from the contact's Account lookup field (most reliable)
+    if (contact.accountId) {
+      accountId = contact.accountId
+      accountName = contact.accountName
+    } else if (call.whatId?.id && call.whatId.module === 'Accounts') {
       accountId = call.whatId.id
       accountName = call.whatId.name ?? contact.accountName
     } else if (contact.accountName) {
+      // Last resort: search by name
       const accounts = await getZohoAccounts()
       const found = accounts.find(a => a.accountName === contact.accountName)
       if (found) { accountId = found.id; accountName = found.accountName }

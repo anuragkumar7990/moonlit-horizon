@@ -51,6 +51,7 @@ export interface ZohoContact {
   lastName: string
   email: string
   phone: string
+  accountId: string
   accountName: string
 }
 
