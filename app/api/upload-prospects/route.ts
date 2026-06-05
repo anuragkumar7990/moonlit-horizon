@@ -91,17 +91,14 @@ function clean(val: string): string {
   return t
 }
 
-// Rule 4: normalise phone (handles scientific notation from Excel, e.g. 9.1967811E+9)
+// Rule 4: normalise phone
+// Scientific notation (e.g. 9.17711E+11) means Excel truncated the number — skip it entirely
+// rather than store digits padded with zeros. Fix in Excel: format phone column as Text before CSV export.
 function normalisePhone(val: string): string | undefined {
   const trimmed = val.trim()
   if (!trimmed) return undefined
-  let normalized = trimmed
-  if (/^[\d.]+[eE][+\-]?\d+$/.test(trimmed)) {
-    const num = Math.round(parseFloat(trimmed))
-    if (isNaN(num)) return undefined
-    normalized = num.toString()
-  }
-  const digits = normalized.replace(/\D/g, '')
+  if (/^[\d.]+[eE][+\-]?\d+$/i.test(trimmed)) return undefined  // precision lost — skip
+  const digits = trimmed.replace(/\D/g, '')
   if (!digits) return undefined
   return digits.length > 10 ? `+${digits}` : digits
 }
