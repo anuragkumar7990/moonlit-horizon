@@ -14,6 +14,7 @@ interface UploadResponse {
   total: number
   created: number
   skipped: number
+  excluded: number
   errors: number
   results: UploadResult[]
   error?: string
@@ -81,7 +82,7 @@ export default function UploadPage() {
       }
     } catch (err) {
       setStatus('error')
-      setResponse({ ok: false, total: 0, created: 0, skipped: 0, errors: 0, results: [], error: String(err) })
+      setResponse({ ok: false, total: 0, created: 0, skipped: 0, excluded: 0, errors: 0, results: [], error: String(err) })
     }
   }
 
@@ -199,7 +200,7 @@ export default function UploadPage() {
       {/* Results */}
       {status === 'done' && response && (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-4 text-center">
               <div className="text-2xl font-bold text-green-700">{response.created}</div>
               <div className="text-sm text-green-600 mt-0.5">Created</div>
@@ -207,6 +208,10 @@ export default function UploadPage() {
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-5 py-4 text-center">
               <div className="text-2xl font-bold text-yellow-700">{response.skipped}</div>
               <div className="text-sm text-yellow-600 mt-0.5">Skipped (duplicate)</div>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 text-center">
+              <div className="text-2xl font-bold text-slate-500">{response.excluded ?? 0}</div>
+              <div className="text-sm text-slate-400 mt-0.5">Excluded (Skip)</div>
             </div>
             <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-center">
               <div className="text-2xl font-bold text-red-700">{response.errors}</div>
@@ -224,11 +229,12 @@ export default function UploadPage() {
                   <div key={r.row} className="px-5 py-2.5 flex items-center gap-3 text-sm">
                     <span className="text-slate-400 w-12">Row {r.row}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      r.status === 'created' ? 'bg-green-100 text-green-700' :
-                      r.status === 'skipped' ? 'bg-yellow-100 text-yellow-700' :
+                      r.status === 'created'  ? 'bg-green-100 text-green-700' :
+                      r.status === 'skipped'  ? 'bg-yellow-100 text-yellow-700' :
+                      r.status === 'excluded' ? 'bg-slate-100 text-slate-500' :
                       'bg-red-100 text-red-700'
                     }`}>
-                      {r.status === 'created' ? 'Created' : r.status === 'skipped' ? 'Skipped' : 'Error'}
+                      {r.status === 'created' ? 'Created' : r.status === 'skipped' ? 'Skipped' : r.status === 'excluded' ? 'Excluded' : 'Error'}
                     </span>
                     {r.reason && <span className="text-slate-500">{r.reason}</span>}
                   </div>
@@ -251,10 +257,14 @@ export default function UploadPage() {
             {[
               ['First Name', 'firstname, first_name'],
               ['Last Name', 'lastname, last_name'],
-              ['Company', 'company, organization'],
-              ['Email *', 'email, email address — required'],
-              ['Phone', 'phone, mobile'],
-              ['Designation', 'designation, title, role'],
+              ['Company', 'company, organization, organisation'],
+              ['Email *', 'email — personal; also detects any "Work Email" column'],
+              ['Work Email', 'any header containing "work" + "email" — preferred over personal'],
+              ['Phone', 'phone_number, phone, mobile'],
+              ['Designation', 'designation, title, role, position'],
+              ['City', 'city'],
+              ['Attendance', 'attendance — Attended → Contacted, else Not Contacted'],
+              ['Priority', 'priority — rows with "Skip" are excluded entirely'],
             ].map(([field, variants]) => (
               <div key={field} className="flex gap-2">
                 <span className="font-medium text-slate-700 w-28 shrink-0">{field}</span>
@@ -262,7 +272,9 @@ export default function UploadPage() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-slate-400 mt-3">Header names are matched case-insensitively. Only Email is required.</p>
+          <p className="text-xs text-slate-400 mt-3">
+            Headers matched case-insensitively. Only Email is required. Duplicate emails, phones, and names within the same file are auto-deduplicated.
+          </p>
         </div>
       )}
     </div>

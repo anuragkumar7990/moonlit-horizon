@@ -56,12 +56,20 @@ const bookProspectCommand = new SlashCommandBuilder()
   )
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
+const clientId = process.env.DISCORD_CLIENT_ID
+const guildId  = process.env.DISCORD_GUILD_ID
 
 ;(async () => {
-  console.log('Registering /book and /book-prospect commands...')
+  // 1. Clear all global commands
+  console.log('Clearing global commands...')
+  await rest.put(Routes.applicationCommands(clientId), { body: [] })
+  console.log('Global commands cleared.')
+
+  // 2. Register guild commands (instant, no propagation delay)
+  console.log(`Registering guild commands for guild ${guildId}...`)
   await rest.put(
-    Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
+    Routes.applicationGuildCommands(clientId, guildId),
     { body: [bookCommand.toJSON(), bookProspectCommand.toJSON()] }
   )
-  console.log('Done. Commands registered globally (may take up to 1 hour to appear).')
+  console.log('Done. /book and /book-prospect registered to guild.')
 })()

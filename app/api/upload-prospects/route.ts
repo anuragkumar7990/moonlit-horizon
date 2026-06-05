@@ -3,6 +3,8 @@ import { createLeads } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
 
+// ── CSV parsing ──────────────────────────────────────────────────────────────
+
 function parseCSVLine(line: string): string[] {
   const result: string[] = []
   let current = ''
@@ -26,23 +28,92 @@ function parseCSVLine(line: string): string[] {
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return []
-  const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase())
+  // Rule 7: ignore empty-header columns
+  const rawHeaders = parseCSVLine(lines[0]).map(h => h.trim())
+  const headers = rawHeaders.map(h => h.toLowerCase())
+  const validIndices = headers.map((h, i) => h ? i : -1).filter(i => i >= 0)
+
   return lines.slice(1).map(line => {
     const values = parseCSVLine(line)
     const row: Record<string, string> = {}
-    headers.forEach((h, i) => { row[h] = (values[i] ?? '').trim() })
+    validIndices.forEach(i => { row[headers[i]] = (values[i] ?? '').trim() })
     return row
   }).filter(row => Object.values(row).some(v => v))
 }
 
+// ── Column matching helpers ──────────────────────────────────────────────────
+
+const normalise = (s: string) => s.replace(/[\s_\-]/g, '').toLowerCase()
+
 function findKey(headers: string[], variants: string[]): string {
-  const normalise = (s: string) => s.replace(/[\s_\-]/g, '').toLowerCase()
   for (const v of variants) {
     const match = headers.find(h => normalise(h) === normalise(v))
     if (match) return match
   }
   return ''
 }
+
+// Work email: any header containing both "work" and "email"
+function findWorkEmailKey(headers: string[]): string {
+  return headers.find(h => h.includes('work') && h.includes('email')) ?? ''
+}
+
+// ── Email logic ──────────────────────────────────────────────────────────────
+
+const FREE_PROVIDERS = new Set([
+  'gmail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.in', 'yahoo.co.uk',
+  'hotmail.com', 'outlook.com', 'live.com', 'rediffmail.com', 'icloud.com',
+  'protonmail.com', 'zohomail.in', 'ymail.com', 'mail.com',
+])
+
+function isFreeEmail(email: string): boolean {
+  const domain = email.split('@')[1]?.toLowerCase() ?? ''
+  return FREE_PROVIDERS.has(domain)
+}
+
+function selectEmail(workEmail: string, personalEmail: string): string {
+  const work = workEmail.trim()
+  const personal = personalEmail.trim()
+  if (work && !isFreeEmail(work)) return work
+  if (personal) return personal
+  if (work) return work  // both free-provider: use work as fallback
+  return ''
+}
+
+// ── Field cleaning ───────────────────────────────────────────────────────────
+
+// Rule 3: treat placeholder values as empty
+function clean(val: string): string {
+  const t = val.trim()
+  if (/^[.\-]+$/.test(t)) return ''
+  if (/^(n\/a|na|none|null|undefined)$/i.test(t)) return ''
+  return t
+}
+
+// Rule 4: normalise phone
+function normalisePhone(val: string): string | undefined {
+  const digits = val.replace(/\D/g, '')
+  if (!digits) return undefined
+  return digits.length > 10 ? `+${digits}` : digits
+}
+
+// Rule 5: validate city
+function cleanCity(val: string): string | undefined {
+  const t = clean(val)
+  if (!t) return undefined
+  if (/^\d+$/.test(t)) return undefined  // all digits
+  return t
+}
+
+// ── Attendance → Lead Status (Rule 6) ────────────────────────────────────────
+
+function attendanceToStatus(val: string): string {
+  const t = val.trim().toLowerCase()
+  if (t === 'attended') return 'Contacted'
+  return 'Not Contacted'
+}
+
+// ── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -57,50 +128,146 @@ export async function POST(req: NextRequest) {
     }
 
     const headers = Object.keys(rows[0])
-    const firstNameKey = findKey(headers, ['firstname', 'first name', 'first_name'])
-    const lastNameKey  = findKey(headers, ['lastname', 'last name', 'last_name'])
-    const nameKey      = findKey(headers, ['name', 'fullname', 'full name'])
-    const companyKey   = findKey(headers, ['company', 'organization', 'organisation', 'account', 'companyname', 'company name'])
-    const emailKey     = findKey(headers, ['email', 'emailaddress', 'email address', 'e-mail'])
-    const phoneKey     = findKey(headers, ['phone', 'mobile', 'phonenumber', 'phone number', 'contact number'])
-    const designationKey = findKey(headers, ['designation', 'title', 'role', 'jobtitle', 'job title', 'position'])
 
-    if (!emailKey) {
+    // Detect column keys
+    const firstNameKey    = findKey(headers, ['firstname', 'first name', 'first_name'])
+    const lastNameKey     = findKey(headers, ['lastname', 'last name', 'last_name'])
+    const nameKey         = findKey(headers, ['name', 'fullname', 'full name'])
+    const companyKey      = findKey(headers, ['company', 'organization', 'organisation', 'account', 'companyname', 'company name'])
+    const personalEmailKey = findKey(headers, ['email', 'emailaddress', 'email address', 'e-mail'])
+    const workEmailKey    = findWorkEmailKey(headers)
+    const phoneKey        = findKey(headers, ['phone_number', 'phone', 'mobile', 'phonenumber', 'phone number', 'contact number'])
+    const designationKey  = findKey(headers, ['designation', 'title', 'role', 'jobtitle', 'job title', 'position'])
+    const priorityKey     = findKey(headers, ['priority'])
+    const cityKey         = findKey(headers, ['city'])
+    const attendanceKey   = findKey(headers, ['attendance'])
+
+    if (!personalEmailKey && !workEmailKey) {
       return NextResponse.json({
-        error: 'Could not find an Email column. Expected a column named "Email", "Email Address", or "E-mail".',
+        error: 'Could not find an Email column. Expected a column named "Email", "Work Email", or similar.',
       }, { status: 400 })
     }
 
-    const leads = rows.map(row => {
-      let firstName = firstNameKey ? row[firstNameKey] ?? '' : ''
-      let lastName  = lastNameKey  ? row[lastNameKey]  ?? '' : ''
+    // ── Within-file dedup tracking (Rule 9) ──────────────────────────────────
+    const seenEmails = new Set<string>()
+    const seenPhones = new Set<string>()
+    const seenNames  = new Set<string>()
+
+    type ParsedLead = {
+      firstName: string; lastName: string; company: string; email: string
+      phone?: string; designation?: string; city?: string; leadStatus?: string
+    }
+
+    type RowResult = { row: number; status: 'created' | 'skipped' | 'error' | 'excluded'; id?: string; reason?: string }
+
+    const leads: ParsedLead[] = []
+    const preResults: RowResult[] = []
+
+    rows.forEach((row, idx) => {
+      const rowNum = idx + 1
+
+      // Rule 1: skip excluded rows
+      const priority = clean(priorityKey ? row[priorityKey] ?? '' : '')
+      if (priority.toLowerCase() === 'skip') {
+        preResults.push({ row: rowNum, status: 'excluded', reason: 'Priority = Skip' })
+        return
+      }
+
+      // Email selection (Rule 2)
+      const workEmail     = workEmailKey     ? clean(row[workEmailKey]     ?? '') : ''
+      const personalEmail = personalEmailKey ? clean(row[personalEmailKey] ?? '') : ''
+      const email = selectEmail(workEmail, personalEmail)
+      if (!email) {
+        preResults.push({ row: rowNum, status: 'error', reason: 'No valid email address found' })
+        return
+      }
+
+      // Phone (Rule 4)
+      const phone = normalisePhone(phoneKey ? row[phoneKey] ?? '' : '')
+
+      // Name (Rules 3 + 8)
+      let firstName = clean(firstNameKey ? row[firstNameKey] ?? '' : '')
+      let lastName  = clean(lastNameKey  ? row[lastNameKey]  ?? '' : '')
       if (!firstName && !lastName && nameKey) {
-        const parts = (row[nameKey] ?? '').trim().split(/\s+/)
+        const parts = clean(row[nameKey] ?? '').split(/\s+/)
         firstName = parts[0] ?? ''
         lastName  = parts.slice(1).join(' ')
       }
-      return {
-        firstName: firstName.trim(),
-        lastName:  lastName.trim(),
-        company:   companyKey   ? (row[companyKey]   ?? '').trim() : '',
-        email:     (row[emailKey] ?? '').trim(),
-        phone:     phoneKey       ? (row[phoneKey]       ?? '').trim() || undefined : undefined,
-        designation: designationKey ? (row[designationKey] ?? '').trim() || undefined : undefined,
+      // If still no last name, promote first name to last name (Zoho requires Last_Name)
+      if (!lastName && firstName) {
+        lastName  = firstName
+        firstName = ''
       }
-    }).filter(l => l.email)
+      const company     = clean(companyKey     ? row[companyKey]     ?? '' : '')
+      const designation = clean(designationKey ? row[designationKey] ?? '' : '') || undefined
+      const city        = cleanCity(cityKey ? row[cityKey] ?? '' : '')
+      const leadStatus  = attendanceKey ? attendanceToStatus(row[attendanceKey] ?? '') : 'Not Contacted'
 
-    if (leads.length === 0) {
-      return NextResponse.json({
-        error: 'No rows with email addresses found. Make sure the CSV has a non-empty Email column.',
-      }, { status: 400 })
+      if (!lastName) {
+        if (!company) {
+          preResults.push({ row: rowNum, status: 'error', reason: 'No name or company to use as Last Name' })
+          return
+        }
+        // fallback: use company as last name
+      }
+
+      // Rule 9: within-file dedup
+      const emailKey2 = email.toLowerCase()
+      const fullName  = `${firstName} ${lastName}`.trim().toLowerCase()
+
+      if (seenEmails.has(emailKey2)) {
+        preResults.push({ row: rowNum, status: 'skipped', reason: 'Duplicate email in this file' })
+        return
+      }
+      if (phone && seenPhones.has(phone)) {
+        preResults.push({ row: rowNum, status: 'skipped', reason: 'Duplicate phone number in this file' })
+        return
+      }
+      if (fullName && seenNames.has(fullName)) {
+        preResults.push({ row: rowNum, status: 'skipped', reason: 'Duplicate name in this file' })
+        return
+      }
+
+      seenEmails.add(emailKey2)
+      if (phone) seenPhones.add(phone)
+      if (fullName) seenNames.add(fullName)
+
+      leads.push({ firstName, lastName: lastName || company, company, email, phone, designation, city, leadStatus })
+      preResults.push({ row: rowNum, status: 'created' })  // placeholder — updated after Zoho call
+    })
+
+    // ── Send valid leads to Zoho ──────────────────────────────────────────────
+    const pendingIndices = preResults
+      .map((r, i) => (r.status === 'created' ? i : -1))
+      .filter(i => i >= 0)
+
+    if (pendingIndices.length > 0) {
+      const { results: zohoResults } = await createLeads(leads)
+      zohoResults.forEach((zr, idx) => {
+        const preIdx = pendingIndices[idx]
+        preResults[preIdx] = {
+          row: preResults[preIdx].row,
+          status: zr.status,
+          id: zr.id,
+          reason: zr.reason,
+        }
+      })
     }
 
-    const { results } = await createLeads(leads)
-    const created = results.filter(r => r.status === 'created').length
-    const skipped = results.filter(r => r.status === 'skipped').length
-    const errors  = results.filter(r => r.status === 'error').length
+    const created  = preResults.filter(r => r.status === 'created').length
+    const skipped  = preResults.filter(r => r.status === 'skipped').length
+    const excluded = preResults.filter(r => r.status === 'excluded').length
+    const errors   = preResults.filter(r => r.status === 'error').length
 
-    return NextResponse.json({ ok: true, total: leads.length, created, skipped, errors, results })
+    return NextResponse.json({
+      ok: true,
+      total: rows.length,
+      created,
+      skipped,
+      excluded,
+      errors,
+      results: preResults,
+    })
   } catch (err) {
     console.error('[/api/upload-prospects]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

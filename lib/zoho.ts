@@ -81,6 +81,8 @@ export async function createLeads(leads: {
   email: string
   phone?: string
   designation?: string
+  city?: string
+  leadStatus?: string
 }[]): Promise<{
   results: { row: number; status: 'created' | 'skipped' | 'error'; id?: string; reason?: string }[]
 }> {
@@ -92,8 +94,9 @@ export async function createLeads(leads: {
     Email: l.email,
     Mobile: l.phone || undefined,
     Designation: l.designation || undefined,
+    City: l.city || undefined,
     Lead_Source: 'Internal Community Data',
-    Lead_Status: 'Not Contacted',
+    Lead_Status: l.leadStatus || 'Not Contacted',
   }))
   const res = await fetch(`${BASE_URL}/Leads`, {
     method: 'POST',
