@@ -36,9 +36,12 @@ export default function FunnelColumn({ data }: { data: FunnelData }) {
         <button
           title="Won deals — full table coming soon"
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-mh-surface2 border border-mh-border
-            hover:border-mh-gold hover:bg-[#1a1a0e] transition-all group cursor-pointer"
+            hover:border-mh-gold hover:bg-[#1a1a0e] transition-all cursor-pointer"
         >
-          <span className="text-base leading-none">🏆</span>
+          {/* trophy */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 15c-3.31 0-6-2.69-6-6V3h12v6c0 3.31-2.69 6-6 6zm0 2c1.1 0 2 .9 2 2v1H10v-1c0-1.1.9-2 2-2zM7 20h10v2H7v-2zM4 3H2v4c0 1.65 1.35 3 3 3V3zm16 0h-2v7c1.65 0 3-1.35 3-3V3h-1z"/>
+          </svg>
           <div className="text-left">
             <p className="text-[10px] text-mh-muted leading-none mb-0.5">Won</p>
             <p className="text-sm font-semibold text-mh-gold leading-none">{won.count}</p>
@@ -48,9 +51,12 @@ export default function FunnelColumn({ data }: { data: FunnelData }) {
         <button
           title="Lost deals — full table coming soon"
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-mh-surface2 border border-mh-border
-            hover:border-mh-negative hover:bg-[#1a0a0a] transition-all group cursor-pointer"
+            hover:border-mh-negative hover:bg-[#1a0a0a] transition-all cursor-pointer"
         >
-          <span className="text-base leading-none">👎</span>
+          {/* thumbs down */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#FF4444" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/>
+          </svg>
           <div className="text-left">
             <p className="text-[10px] text-mh-muted leading-none mb-0.5">Lost</p>
             <p className="text-sm font-semibold text-mh-negative leading-none">{lost.count}</p>
