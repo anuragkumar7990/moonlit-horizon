@@ -52,7 +52,7 @@ export default async function AnuragPage() {
           {todayMeetings.length === 0 ? (
             <p className="text-mh-muted text-sm italic">No meetings today</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
               {todayMeetings.map(m => (
                 <div
                   key={m.meetingId}

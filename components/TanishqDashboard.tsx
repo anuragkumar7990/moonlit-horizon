@@ -86,7 +86,7 @@ export default function TanishqDashboard({
           {todaysMeetings.length === 0 ? (
             <p className="text-mh-muted text-sm italic">No meetings scheduled for today</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
               {todaysMeetings.map(mtg => (
                 <div
                   key={mtg.meetingId}
