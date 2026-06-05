@@ -191,7 +191,7 @@ export async function findOrCreateAccount(name: string): Promise<{ id: string; a
   return { id, accountName: name }
 }
 
-export async function convertLead(leadId: string, accountId: string): Promise<{
+export async function convertLead(leadId: string): Promise<{
   contactId: string
   accountId: string
   contactName?: string
@@ -206,8 +206,6 @@ export async function convertLead(leadId: string, accountId: string): Promise<{
         overwrite: true,
         notify_lead_owner: false,
         notify_new_entity_owner: false,
-        Accounts: { id: accountId },
-        Contacts: {},
       }]
     }),
   })
