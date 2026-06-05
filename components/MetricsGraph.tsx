@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  Tooltip, ResponsiveContainer,
 } from 'recharts'
 import type { WeeklyPoint } from '@/lib/types'
 
@@ -14,6 +14,13 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'conversion', label: 'Lead Conversion' },
   { key: 'emails',     label: 'Emails'          },
 ]
+
+const LEGEND_ITEMS: Record<Filter, { name: string; color: string }[]> = {
+  calls:      [{ name: 'Dialled', color: '#E8341C' }, { name: 'Connected', color: '#22C55E' }],
+  meetings:   [{ name: 'L1 Booked', color: '#E8341C' }, { name: 'L1 Conducted', color: '#FFD700' }],
+  conversion: [{ name: 'Connection %', color: '#E8341C' }, { name: 'Booking %', color: '#22C55E' }],
+  emails:     [],
+}
 
 const TOOLTIP_STYLE = {
   background: '#111111',
@@ -29,7 +36,7 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
   return (
     <div className="flex flex-col h-full">
       {/* Filter pills */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
+      <div className="flex flex-wrap gap-1.5 mb-3">
         {FILTERS.map(f => (
           <button
             key={f.key}
@@ -44,6 +51,18 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
           </button>
         ))}
       </div>
+
+      {/* Custom legend — fully controlled order */}
+      {filter !== 'emails' && (
+        <div className="flex gap-4 mb-2">
+          {LEGEND_ITEMS[filter].map(item => (
+            <span key={item.name} className="flex items-center gap-1.5 text-[11px] text-mh-muted">
+              <span className="inline-block w-5 h-[2px] rounded" style={{ background: item.color }} />
+              {item.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Chart area */}
       <div className="flex-1 min-h-0">
@@ -68,21 +87,20 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
                 allowDecimals={false}
               />
               <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: '11px', color: '#999999', paddingTop: '8px' }} />
 
               {filter === 'calls' && <>
-                <Line type="monotone" dataKey="connected" stroke="#22C55E" strokeWidth={2} dot={false} name="Connected" />
-                <Line type="monotone" dataKey="dialled"   stroke="#E8341C" strokeWidth={2} dot={false} name="Dialled"   />
+                <Line type="monotone" dataKey="dialled"   stroke="#E8341C" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="connected" stroke="#22C55E" strokeWidth={2} dot={false} />
               </>}
 
               {filter === 'meetings' && <>
-                <Line type="monotone" dataKey="l1Booked"    stroke="#E8341C" strokeWidth={2} dot={false} name="L1 Booked"    />
-                <Line type="monotone" dataKey="l1Conducted" stroke="#FFD700" strokeWidth={2} dot={false} name="L1 Conducted" />
+                <Line type="monotone" dataKey="l1Booked"    stroke="#E8341C" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="l1Conducted" stroke="#FFD700" strokeWidth={2} dot={false} />
               </>}
 
               {filter === 'conversion' && <>
-                <Line type="monotone" dataKey="connectionRate" stroke="#E8341C" strokeWidth={2} dot={false} name="Connection %" unit="%" />
-                <Line type="monotone" dataKey="bookingRate"    stroke="#22C55E" strokeWidth={2} dot={false} name="Booking %"    unit="%" />
+                <Line type="monotone" dataKey="connectionRate" stroke="#E8341C" strokeWidth={2} dot={false} unit="%" />
+                <Line type="monotone" dataKey="bookingRate"    stroke="#22C55E" strokeWidth={2} dot={false} unit="%" />
               </>}
             </LineChart>
           </ResponsiveContainer>
