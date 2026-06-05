@@ -114,14 +114,16 @@ export async function createLeads(leads: {
 }
 
 export async function getLeads(): Promise<{ id: string; firstName: string; lastName: string; email: string; company: string }[]> {
-  const data = await zohoGet('/Leads?fields=First_Name,Last_Name,Email,Company,Company_Name&per_page=200&criteria=(Converted__s:equals:false)') as { data?: Record<string, unknown>[] }
-  return (data.data ?? []).map(l => ({
-    id: String(l.id ?? ''),
-    firstName: String(l.First_Name ?? ''),
-    lastName: String(l.Last_Name ?? ''),
-    email: String(l.Email ?? ''),
-    company: String(l.Company ?? l.Company_Name ?? ''),
-  }))
+  const data = await zohoGet('/Leads?fields=First_Name,Last_Name,Email,Company,Company_Name,Converted__s&per_page=200') as { data?: Record<string, unknown>[] }
+  return (data.data ?? [])
+    .filter(l => !l.Converted__s)
+    .map(l => ({
+      id: String(l.id ?? ''),
+      firstName: String(l.First_Name ?? ''),
+      lastName: String(l.Last_Name ?? ''),
+      email: String(l.Email ?? ''),
+      company: String(l.Company ?? l.Company_Name ?? ''),
+    }))
 }
 
 export async function getLeadById(id: string): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string } | null> {
