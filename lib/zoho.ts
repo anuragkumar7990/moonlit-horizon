@@ -103,6 +103,22 @@ export async function createLeads(leads: {
   return { results }
 }
 
+export async function getLeadById(id: string): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string } | null> {
+  try {
+    const data = await zohoGet(`/Leads/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Company`) as { data?: Record<string, unknown>[] }
+    const l = data.data?.[0]
+    if (!l) return null
+    return {
+      id: String(l.id ?? ''),
+      firstName: String(l.First_Name ?? ''),
+      lastName: String(l.Last_Name ?? ''),
+      email: String(l.Email ?? ''),
+      phone: String(l.Phone ?? l.Mobile ?? ''),
+      company: String(l.Company ?? ''),
+    }
+  } catch { return null }
+}
+
 export async function getContactById(id: string): Promise<ZohoContact | null> {
   const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name`) as { data?: Record<string, unknown>[] }
   const c = data.data?.[0]

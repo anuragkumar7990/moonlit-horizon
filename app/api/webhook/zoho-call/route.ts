@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { convertLead, getContactById, getZohoAccounts, getCallById } from '@/lib/zoho'
+import { convertLead, getContactById, getLeadById, getZohoAccounts, getCallById } from '@/lib/zoho'
 import { bookMeeting } from '@/lib/booking'
 
 export const dynamic = 'force-dynamic'
@@ -75,25 +75,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Call has no linked Contact or Lead (Who_Id missing)' }, { status: 400 })
   }
 
-  let contactId = call.whoId.id
+  const whoId = call.whoId.id
+  let contactId = ''
   let accountId = ''
   let accountName = ''
 
-  if (call.whoId.module === 'Leads') {
-    console.log(`[webhook/zoho-call] Converting Lead ${contactId} to Contact+Account`)
-    const converted = await convertLead(contactId)
-    if (!converted) {
-      return NextResponse.json({ error: `Failed to convert Lead ${contactId}` }, { status: 500 })
+  // Zoho sometimes omits the module field from Who_Id, so we can't always trust it.
+  // Strategy: if module is explicitly "Contacts" skip the lead check; otherwise check.
+  const isDefinitelyContact = call.whoId.module === 'Contacts'
+
+  if (!isDefinitelyContact) {
+    // Could be a Lead (explicitly flagged, or module unknown) — check Zoho
+    const lead = await getLeadById(whoId)
+    if (lead) {
+      console.log(`[webhook/zoho-call] Converting Lead ${whoId} to Contact+Account`)
+      const converted = await convertLead(whoId)
+      if (!converted) {
+        return NextResponse.json({ error: `Failed to convert Lead ${whoId}` }, { status: 500 })
+      }
+      contactId = converted.contactId
+      accountId = converted.accountId
+      accountName = converted.accountName ?? ''
+      console.log(`[webhook/zoho-call] Converted → Contact ${contactId}, Account ${accountId}`)
     }
-    contactId = converted.contactId
-    accountId = converted.accountId
-    accountName = converted.accountName ?? ''
-    console.log(`[webhook/zoho-call] Converted → Contact ${contactId}, Account ${accountId}`)
   }
+
+  // Not a lead (or lead check skipped) — use Who_Id as Contact directly
+  if (!contactId) contactId = whoId
 
   const contact = await getContactById(contactId)
   if (!contact) {
-    return NextResponse.json({ error: `Contact ${contactId} not found in Zoho` }, { status: 404 })
+    return NextResponse.json({ error: `Who_Id ${whoId} not found as Contact or Lead in Zoho` }, { status: 404 })
   }
   if (!contact.email) {
     return NextResponse.json({
