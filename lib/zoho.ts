@@ -212,14 +212,23 @@ export async function convertLead(leadId: string): Promise<{
   const text = await res.text()
   console.log(`[convertLead] status=${res.status} body=${text}`)
   if (!text) return null
-  const data = JSON.parse(text) as { data?: { Contacts?: { id: string; name?: string }; Accounts?: { id: string; name?: string } }[] }
-  const record = data.data?.[0]
-  if (!record?.Contacts?.id) return null
+  const data = JSON.parse(text) as {
+    data?: {
+      code: string
+      status: string
+      details?: {
+        Contacts?: { id: string; name?: string } | null
+        Accounts?: { id: string; name?: string } | null
+      }
+    }[]
+  }
+  const details = data.data?.[0]?.details
+  if (!details?.Contacts?.id) return null
   return {
-    contactId: record.Contacts.id,
-    contactName: record.Contacts.name,
-    accountId: record.Accounts?.id ?? '',
-    accountName: record.Accounts?.name,
+    contactId: details.Contacts.id,
+    contactName: details.Contacts.name,
+    accountId: details.Accounts?.id ?? '',
+    accountName: details.Accounts?.name,
   }
 }
 
