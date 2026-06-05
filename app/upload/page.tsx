@@ -111,6 +111,43 @@ export default function UploadPage() {
         </p>
       </div>
 
+      {/* Source selectors — always visible */}
+      {status !== 'uploading' && status !== 'done' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Lead Source</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Lvl 1 Source
+              </label>
+              <select
+                value={lvl1Source}
+                onChange={e => setLvl1Source(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— None —</option>
+                {LVL1_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Lvl 2 Source
+              </label>
+              <input
+                list="lvl2-options"
+                value={lvl2Source}
+                onChange={e => setLvl2Source(e.target.value)}
+                placeholder="Type or select…"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="lvl2-options">
+                {LVL2_OPTIONS.map(v => <option key={v} value={v} />)}
+              </datalist>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drop zone */}
       {!file && (
         <div
@@ -162,38 +199,6 @@ export default function UploadPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-
-          {/* Source selectors */}
-          <div className="px-5 py-4 border-t border-slate-100 grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Lvl 1 Source
-              </label>
-              <select
-                value={lvl1Source}
-                onChange={e => setLvl1Source(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">— None —</option>
-                {LVL1_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Lvl 2 Source
-              </label>
-              <input
-                list="lvl2-options"
-                value={lvl2Source}
-                onChange={e => setLvl2Source(e.target.value)}
-                placeholder="Type or select…"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <datalist id="lvl2-options">
-                {LVL2_OPTIONS.map(v => <option key={v} value={v} />)}
-              </datalist>
-            </div>
           </div>
 
           <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
