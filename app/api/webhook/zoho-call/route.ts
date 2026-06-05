@@ -41,9 +41,10 @@ async function extractCallId(req: NextRequest): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-webhook-secret')
+  // Secret can arrive as X-Webhook-Secret header OR ?secret= query param
+  const secret = req.headers.get('x-webhook-secret') ?? req.nextUrl.searchParams.get('secret')
   if (secret !== WEBHOOK_SECRET) {
-    console.warn('[webhook/zoho-call] Rejected: bad or missing X-Webhook-Secret')
+    console.warn('[webhook/zoho-call] Rejected: bad or missing secret')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
