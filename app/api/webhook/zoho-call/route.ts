@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { convertLead, getContactById, getLeadById, getZohoAccounts, getCallById } from '@/lib/zoho'
+import { convertLead, findOrCreateAccount, getContactById, getLeadById, getZohoAccounts, getCallById } from '@/lib/zoho'
 import { bookMeeting } from '@/lib/booking'
 
 export const dynamic = 'force-dynamic'
@@ -93,8 +93,11 @@ export async function POST(req: NextRequest) {
   if (!isDefinitelyContact) {
     const lead = await getLeadById(resolvedId)
     if (lead) {
-      console.log(`[webhook/zoho-call] Converting Lead ${resolvedId} to Contact+Account (company="${lead.company}")`)
-      const converted = await convertLead(resolvedId, lead.company || undefined)
+      const companyName = lead.company || `${lead.firstName} ${lead.lastName}`.trim()
+      console.log(`[webhook/zoho-call] Finding/creating Account for "${companyName}"`)
+      const account = await findOrCreateAccount(companyName)
+      console.log(`[webhook/zoho-call] Converting Lead ${resolvedId} → Account ${account.id}`)
+      const converted = await convertLead(resolvedId, account.id)
       if (!converted) {
         return NextResponse.json({ error: `Failed to convert Lead ${resolvedId}` }, { status: 500 })
       }

@@ -169,7 +169,24 @@ export async function getCallById(id: string): Promise<{
   }
 }
 
-export async function convertLead(leadId: string, accountName?: string): Promise<{
+export async function findOrCreateAccount(name: string): Promise<{ id: string; accountName: string }> {
+  const accounts = await getZohoAccounts()
+  const existing = accounts.find(a => a.accountName.toLowerCase() === name.toLowerCase())
+  if (existing) return existing
+
+  const token = await getAccessToken()
+  const res = await fetch(`${BASE_URL}/Accounts`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [{ Account_Name: name }] }),
+  })
+  const data = await res.json() as { data?: { details?: { id: string } }[] }
+  const id = data.data?.[0]?.details?.id
+  if (!id) throw new Error(`Failed to create Account for "${name}"`)
+  return { id, accountName: name }
+}
+
+export async function convertLead(leadId: string, accountId: string): Promise<{
   contactId: string
   accountId: string
   contactName?: string
@@ -184,7 +201,7 @@ export async function convertLead(leadId: string, accountName?: string): Promise
         overwrite: true,
         notify_lead_owner: false,
         notify_new_entity_owner: false,
-        Accounts: accountName ? { Account_Name: accountName } : {},
+        Accounts: { id: accountId },
         Contacts: {},
       }]
     }),
