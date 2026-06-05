@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+    const lvl1Source = (formData.get('lvl1Source') as string | null) ?? ''
+    const lvl2Source = (formData.get('lvl2Source') as string | null) ?? ''
 
     const text = await file.text()
     const rows = parseCSV(text)
@@ -156,6 +158,7 @@ export async function POST(req: NextRequest) {
     type ParsedLead = {
       firstName: string; lastName: string; company: string; email: string
       phone?: string; designation?: string; city?: string; leadStatus?: string
+      lvl1Source?: string; lvl2Source?: string
     }
 
     type RowResult = { row: number; status: 'created' | 'skipped' | 'error' | 'excluded'; id?: string; reason?: string }
@@ -232,7 +235,7 @@ export async function POST(req: NextRequest) {
       if (phone) seenPhones.add(phone)
       if (fullName) seenNames.add(fullName)
 
-      leads.push({ firstName, lastName: lastName || company, company, email, phone, designation, city, leadStatus })
+      leads.push({ firstName, lastName: lastName || company, company, email, phone, designation, city, leadStatus, lvl1Source: lvl1Source || undefined, lvl2Source: lvl2Source || undefined })
       preResults.push({ row: rowNum, status: 'created' })  // placeholder — updated after Zoho call
     })
 

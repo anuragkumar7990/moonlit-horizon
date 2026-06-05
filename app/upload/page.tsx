@@ -20,6 +20,13 @@ interface UploadResponse {
   error?: string
 }
 
+const LVL1_OPTIONS = ['Webinar', 'Events', 'Email', 'Referrals', 'Internal Community Data']
+const LVL2_OPTIONS = [
+  "TribeQonf'25", "TribeQonf'26", "QonfX'25 (Hyd)", "QonfX'25 (Blr)",
+  "QonfX'26 (Blr)", "Testflix'25", "Webinar - Ganesa (22.04.26)",
+  "Webinar - Anshu Tiwari (19.05.26)", "Email Sample Set",
+]
+
 function parseCSVPreview(text: string): { headers: string[]; rows: string[][] } {
   const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 6)
   if (lines.length === 0) return { headers: [], rows: [] }
@@ -35,6 +42,8 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
   const [response, setResponse] = useState<UploadResponse | null>(null)
+  const [lvl1Source, setLvl1Source] = useState('Webinar')
+  const [lvl2Source, setLvl2Source] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(f: File) {
@@ -49,10 +58,7 @@ export default function UploadPage() {
     setPreview(parseCSVPreview(text))
   }
 
-  function onDragOver(e: DragEvent) {
-    e.preventDefault()
-    setIsDragging(true)
-  }
+  function onDragOver(e: DragEvent) { e.preventDefault(); setIsDragging(true) }
   function onDragLeave() { setIsDragging(false) }
   function onDrop(e: DragEvent) {
     e.preventDefault()
@@ -70,6 +76,8 @@ export default function UploadPage() {
     setStatus('uploading')
     const form = new FormData()
     form.append('file', file)
+    if (lvl1Source) form.append('lvl1Source', lvl1Source)
+    if (lvl2Source) form.append('lvl2Source', lvl2Source)
     try {
       const res = await fetch('/api/upload-prospects', { method: 'POST', body: form })
       const data: UploadResponse = await res.json()
@@ -119,13 +127,7 @@ export default function UploadPage() {
           <div className="text-4xl mb-3">📂</div>
           <p className="text-slate-700 font-medium">Drop your CSV here, or click to browse</p>
           <p className="text-slate-400 text-sm mt-1">Accepts .csv files — First Name, Last Name, Company, Email, Phone, Designation</p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={onInputChange}
-          />
+          <input ref={inputRef} type="file" accept=".csv" className="hidden" onChange={onInputChange} />
         </div>
       )}
 
@@ -137,9 +139,7 @@ export default function UploadPage() {
               <span className="font-medium text-slate-800">{file.name}</span>
               <span className="text-slate-400 text-sm ml-2">— preview (first 5 rows)</span>
             </div>
-            <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-600">
-              Change file
-            </button>
+            <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-600">Change file</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -156,15 +156,46 @@ export default function UploadPage() {
                 {preview.rows.map((row, i) => (
                   <tr key={i} className="border-t border-slate-100">
                     {row.map((cell, j) => (
-                      <td key={j} className="px-4 py-2.5 text-slate-700 whitespace-nowrap max-w-[180px] truncate">
-                        {cell}
-                      </td>
+                      <td key={j} className="px-4 py-2.5 text-slate-700 whitespace-nowrap max-w-[180px] truncate">{cell}</td>
                     ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Source selectors */}
+          <div className="px-5 py-4 border-t border-slate-100 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Lvl 1 Source
+              </label>
+              <select
+                value={lvl1Source}
+                onChange={e => setLvl1Source(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— None —</option>
+                {LVL1_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Lvl 2 Source
+              </label>
+              <input
+                list="lvl2-options"
+                value={lvl2Source}
+                onChange={e => setLvl2Source(e.target.value)}
+                placeholder="Type or select…"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="lvl2-options">
+                {LVL2_OPTIONS.map(v => <option key={v} value={v} />)}
+              </datalist>
+            </div>
+          </div>
+
           <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
             <p className="text-sm text-slate-500">
               Rows detected: <strong className="text-slate-700">{preview.rows.length} shown</strong> — actual count may be higher
@@ -184,7 +215,7 @@ export default function UploadPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
           <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
           <p className="text-slate-700 font-medium">Importing leads into Zoho CRM…</p>
-          <p className="text-slate-400 text-sm mt-1">This may take a few seconds</p>
+          <p className="text-slate-400 text-sm mt-1">This may take a few seconds for large files</p>
         </div>
       )}
 
