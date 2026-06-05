@@ -4,7 +4,7 @@ import { useState, useRef, DragEvent, ChangeEvent } from 'react'
 
 interface UploadResult {
   row: number
-  status: 'created' | 'skipped' | 'error'
+  status: 'created' | 'skipped' | 'error' | 'excluded'
   id?: string
   reason?: string
 }
