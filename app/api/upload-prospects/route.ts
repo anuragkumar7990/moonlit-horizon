@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
     type ParsedLead = {
       firstName: string; lastName: string; company: string; email: string
       phone?: string; designation?: string; city?: string; leadStatus?: string
-      lvl1Source?: string; lvl2Source?: string
+      lvl1Source?: string; lvl2Source?: string; priority?: string
     }
 
     type RowResult = { row: number; status: 'created' | 'skipped' | 'error' | 'excluded'; id?: string; reason?: string }
@@ -205,6 +205,7 @@ export async function POST(req: NextRequest) {
       const designation = clean(designationKey ? row[designationKey] ?? '' : '') || undefined
       const city        = cleanCity(cityKey ? row[cityKey] ?? '' : '')
       const leadStatus  = attendanceKey ? attendanceToStatus(row[attendanceKey] ?? '') : 'Not Contacted'
+      const priorityTag = /^p[123]$/i.test(priority) ? priority.toUpperCase() : undefined
 
       if (!lastName) {
         if (!company) {
@@ -235,7 +236,7 @@ export async function POST(req: NextRequest) {
       if (phone) seenPhones.add(phone)
       if (fullName) seenNames.add(fullName)
 
-      leads.push({ firstName, lastName: lastName || company, company, email, phone, designation, city, leadStatus, lvl1Source: lvl1Source || undefined, lvl2Source: lvl2Source || undefined })
+      leads.push({ firstName, lastName: lastName || company, company, email, phone, designation, city, leadStatus, lvl1Source: lvl1Source || undefined, lvl2Source: lvl2Source || undefined, priority: priorityTag })
       preResults.push({ row: rowNum, status: 'created' })  // placeholder — updated after Zoho call
     })
 

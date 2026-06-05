@@ -85,6 +85,7 @@ export async function createLeads(leads: {
   leadStatus?: string
   lvl1Source?: string
   lvl2Source?: string
+  priority?: string
 }[]): Promise<{
   results: { row: number; status: 'created' | 'skipped' | 'error'; id?: string; reason?: string }[]
 }> {
@@ -109,6 +110,7 @@ export async function createLeads(leads: {
       Lead_Status: l.leadStatus || 'Not Contacted',
       Lvl_1_Source: l.lvl1Source || undefined,
       Lvl_2_Source: l.lvl2Source || undefined,
+      Tag: l.priority ? [{ name: l.priority }] : undefined,
     }))
     const res = await fetch(`${BASE_URL}/Leads`, {
       method: 'POST',
