@@ -87,33 +87,51 @@ export async function createLeads(leads: {
   results: { row: number; status: 'created' | 'skipped' | 'error'; id?: string; reason?: string }[]
 }> {
   const token = await getAccessToken()
-  const data = leads.map(l => ({
-    First_Name: l.firstName || undefined,
-    Last_Name: l.lastName,
-    Company: l.company || undefined,
-    Email: l.email,
-    Mobile: l.phone || undefined,
-    Designation: l.designation || undefined,
-    City: l.city || undefined,
-    Lead_Source: 'Internal Community Data',
-    Lead_Status: l.leadStatus || 'Not Contacted',
-  }))
-  const res = await fetch(`${BASE_URL}/Leads`, {
-    method: 'POST',
-    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data, trigger: [] }),
-  })
-  const json = await res.json() as { data?: { code: string; status: string; details?: { id: string }; message?: string }[] }
-  const results = (json.data ?? []).map((r, i) => {
-    if (r.status === 'success' || r.code === 'SUCCESS') {
-      return { row: i + 1, status: 'created' as const, id: r.details?.id }
-    } else if (r.code === 'DUPLICATE_DATA') {
-      return { row: i + 1, status: 'skipped' as const, reason: 'Already exists in Zoho' }
+
+  // Zoho allows max 100 records per POST — split into batches
+  const BATCH_SIZE = 100
+  const allResults: { row: number; status: 'created' | 'skipped' | 'error'; id?: string; reason?: string }[] = []
+
+  for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+    const batch = leads.slice(i, i + BATCH_SIZE)
+    const data = batch.map(l => ({
+      First_Name: l.firstName || undefined,
+      Last_Name: l.lastName,
+      Company: l.company || undefined,
+      Email: l.email,
+      Mobile: l.phone || undefined,
+      Designation: l.designation || undefined,
+      City: l.city || undefined,
+      Lead_Source: 'Internal Community Data',
+      Lead_Status: l.leadStatus || 'Not Contacted',
+    }))
+    const res = await fetch(`${BASE_URL}/Leads`, {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, trigger: [] }),
+    })
+    const json = await res.json() as { data?: { code: string; status: string; details?: { id: string }; message?: string }[] }
+    const batchResults = (json.data ?? []).map((r, j) => {
+      const row = i + j + 1
+      if (r.status === 'success' || r.code === 'SUCCESS') {
+        return { row, status: 'created' as const, id: r.details?.id }
+      } else if (r.code === 'DUPLICATE_DATA') {
+        return { row, status: 'skipped' as const, reason: 'Already exists in Zoho' }
+      } else {
+        return { row, status: 'error' as const, reason: r.message ?? r.code }
+      }
+    })
+    // If Zoho returned no data array, mark whole batch as errors
+    if (!json.data) {
+      for (let j = 0; j < batch.length; j++) {
+        allResults.push({ row: i + j + 1, status: 'error', reason: 'Zoho returned no response for this batch' })
+      }
     } else {
-      return { row: i + 1, status: 'error' as const, reason: r.message ?? r.code }
+      allResults.push(...batchResults)
     }
-  })
-  return { results }
+  }
+
+  return { results: allResults }
 }
 
 export async function getLeads(): Promise<{ id: string; firstName: string; lastName: string; email: string; company: string }[]> {
