@@ -81,6 +81,7 @@ export async function createDeal(payload: {
       data: [{
         Deal_Name: payload.dealName,
         Stage: payload.stage,
+        Pipeline: '-None-',
         Closing_Date: payload.closingDate,
         Account_Name: { id: payload.accountId },
         Contact_Name: { id: payload.contactId },
