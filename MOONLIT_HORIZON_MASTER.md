@@ -18,7 +18,13 @@
 8. [The Discord Bot](#8-the-discord-bot)
 9. [Upload Prospects — Full Feature History](#9-upload-prospects--full-feature-history)
 10. [Google Sheet Structure](#10-google-sheet-structure)
-11. [What's Planned — Mission Control Dashboard](#11-whats-planned--mission-control-dashboard)
+11. [Mission Control Dashboard — Full Build Plan](#11-mission-control-dashboard--full-build-plan)
+12. [Design System](#12-design-system)
+13. [Data Architecture & Lead Journey](#13-data-architecture--lead-journey)
+14. [Discord Channels & Slash Commands](#14-discord-channels--slash-commands)
+15. [Testing Strategy & Failure Recovery](#15-testing-strategy--failure-recovery)
+16. [Token Optimisation Guardrails](#16-token-optimisation-guardrails)
+17. [Build Sequence & Timeline](#17-build-sequence--timeline)
 
 ---
 
@@ -455,70 +461,63 @@ Every created and updated lead is logged to the `Prospects` tab:
 
 **URL**: https://docs.google.com/spreadsheets/d/1aIbzFh0vH-9XYeuNeNRRqcyG_dWnwIPBs4cqJGyyoD4/edit
 
-| Tab | Columns | Written by |
-|---|---|---|
-| **Meetings** | Meeting ID, Account Name, Contact Name, Contact Email, Meeting Time, Meeting Type, G-Meet Link, Deal ID, Status, Created At | OpenClaw Meeting Booking Agent + `/api/book` |
-| **Notes** | Meeting ID, Account Name, Summary, Actionables, Created At | OpenClaw Notes Summarisation Agent |
-| **Communications** | Thread ID, Account Name, Source (Discord/Gmail), Message Preview, Timestamp | OpenClaw Communications Tracker Agent |
-| **Accounts** | Account Name, Primary Contact, Contact Email, Stage, Last Activity | Manual + OpenClaw |
-| **Prospects** | Date, Email, First Name, Last Name, Company, Designation, City, Phone, Lvl 1 Source, Lvl 2 Source, Priority, Status | `/api/upload-prospects` (auto-created on first upload) |
+| Tab | Columns | Written by | Status |
+|---|---|---|---|
+| **Meetings** | Meeting ID, Account Name, Contact Name, Contact Email, Meeting Time, Meeting Type (L1/L2/L3+), G-Meet Link, Deal ID, Status, Notes Status, Created At | `/api/book` + OpenClaw | Exists |
+| **Notes** | Meeting ID, Account Name, Summary, Actionables, Assigned To, Created At | OpenClaw Notes Summarisation Agent (via Circleback MCP) | Exists |
+| **Communications** | Thread ID, Account Name, Source (Discord/Gmail), Message Preview, Timestamp | OpenClaw Communications Tracker Agent | Exists |
+| **Accounts** | Account Name, Primary Contact, Contact Email, Stage, Last Activity | Manual + OpenClaw | Exists |
+| **Prospects** | Date, Email, First Name, Last Name, Company, Designation, City, Phone, Lvl 1 Source, Lvl 2 Source, Priority, Status | `/api/upload-prospects` | Exists — uncalled leads only |
+| **Calling** | Date Moved, Email, First Name, Last Name, Company, Designation, City, Phone, Lvl 1 Source, Lvl 2 Source, Priority, Original Upload Date | Calling Team Agent (when call is logged) | New |
+| **Calls** | Date, Time, Account, Contact Name, Contact Phone, SDR, Duration, Outcome, Notes, Zoho Call ID, Follow-up Date, Recording Drive Link, Transcript Summary, Auto Tags | Calling Team Agent + Call Transcription Agent | New |
+| **Targets** | Month, Metric Name, Target Value, Actual Value | `#targets` Discord channel bot | New |
+| **Tasks** | Date, Task, Type (P0/Objective), Assigned To, Linked Deal, Status, Completed At | P0 Agent + manual | New |
+| **Payments** | Date, Account, Deal, Amount, Invoice Date, Due Date, Status, Notes | Manual + Payments Agent | New |
+| **Trainers** | Trainer ID, Name, LinkedIn, Specialisation, Availability, Day Rate, Rating Score, Status (Prospect/Vetted/Onboarded), Contract Signed, Notes | Supply Agent | New |
+| **People** | Email, First Name, Last Name, Company, Designation, City, Phone, Lvl 1 Source, Lvl 2 Source, Priority, Lead Status, Account Intelligence Summary, Last Updated | People & Accounts Agent | New |
+
+**Key data rule — Prospect → Calling transition**: When any call is logged for a prospect, the row moves from the `Prospects` tab → `Calling` tab. The `Prospects` tab always represents uncalled leads only ("calling stock"). Weeks of stock = `COUNT(Prospects rows) ÷ 250` (Tanishq's weekly call capacity).
 
 ---
 
-## 11. What's Planned — Mission Control Dashboard
+## 11. Mission Control Dashboard — Full Build Plan
+
+> Last updated: 2026-06-06. This section replaces all prior planning notes for the dashboard.
 
 ### Overview
-The current Sales Pipeline homepage will be replaced by a full Mission Control Dashboard. It will be the single source of truth for the entire business — pulling from Zoho CRM, Google Sheets, and payment systems.
 
-The dashboard is backed by a **multi-agent AI system** (running on the existing Hostinger VPS via OpenClaw) that actively manages each module. Commands flow in through Discord `#sales-ops`; each agent team posts its outputs to a dedicated Discord channel.
+The current Sales Pipeline homepage will be replaced by the **Master Tracker** — a live business command centre. The system is backed by a multi-agent AI layer (OpenClaw on Hostinger VPS) with Discord as the interaction surface.
+
+**13 modules. 4 personalised views. 1 master orchestrator.**
 
 ---
 
-### Agent Architecture
+### 11.1 — Agent Architecture
 
 ```
-                    ┌─────────────────────────────┐
-                    │   MOONLIT HORIZON            │
-                    │   (Master Orchestrator)      │
-                    │   Listens on: #sales-ops     │
-                    └────────────┬────────────────┘
+                    ┌──────────────────────────────┐
+                    │   MOONLIT HORIZON             │
+                    │   (Master Orchestrator)       │
+                    │   Listens on: #sales-ops      │
+                    └────────────┬─────────────────┘
                                  │ routes to
-          ┌──────────┬───────────┼───────────┬──────────┬──────────┬──────────┐
-          ▼          ▼           ▼           ▼          ▼          ▼          ▼
-     Calling      Meetings    Emails      Funnel      P0s       Stats    Payments
-      Team         Team        Team        Team       Team       Team      Team
-          │          │           │           │          │          │          │
-    #calls-log  #meetings-log #email-log #funnel    #p0-tasks   #stats   #payments
+     ┌──────────┬────────────────┼────────────┬──────────┬──────────┬──────────┐
+     ▼          ▼                ▼            ▼          ▼          ▼          ▼
+  Calling    Meetings          Emails       Funnel      P0s       Stats    Payments
+   Team        Team             Team         Team       Team       Team      Team
+     │           │               │            │          │          │          │
+#calls-log  #meetings-log   #email-log  #funnel-upd  #p0-tasks   #stats   #payments
 ```
 
-**Platform**: OpenClaw on Hostinger VPS (no additional cost — already running)
+**Platform**: OpenClaw on Hostinger VPS (no additional cost)
 
-**Discord channel structure**:
-| Channel | Purpose |
-|---|---|
-| `#sales-ops` | All commands in — the only place you talk to the system |
-| `#calls-log` | Calling Team outputs — call logs, summaries, daily tally |
-| `#meetings-log` | Meetings Team outputs — booking confirmations, follow-up reminders |
-| `#email-log` | Emails Team outputs — new thread alerts, draft suggestions |
-| `#funnel-updates` | Funnel Team outputs — deal stage changes, stale deal alerts |
-| `#p0-tasks` | P0 Team outputs — today's critical tasks, completions |
-| `#stats` | Stats Team outputs — daily/weekly digest |
-| `#payments` | Payments Team outputs — invoice sent, payment received, overdue alerts |
+**Master Agent — Moonlit Horizon**
+- Single entry point: commands arrive in `#sales-ops`
+- Routes to the right sub-agent team; handles cross-module queries
+- Daily morning briefing at 9am IST → `#sales-ops`
+- Weekly digest every Monday 9am → `#stats`
 
----
-
-### Master Agent — Moonlit Horizon
-
-**Role**: Single entry point for all AI interactions. Interprets commands from `#sales-ops`, decides which sub-agent team(s) to engage, and handles cross-module queries.
-
-**Capabilities**:
-- Route any command to the right team ("log a call with Wabtec" → Calling Team)
-- Answer cross-module questions ("what's the status on Zoomcar?" → queries Meetings + Funnel + Emails simultaneously and summarises)
-- Produce daily morning briefings (pushes to `#sales-ops` at 9am IST)
-- Produce weekly digest (pushes to `#stats` every Monday)
-- Handle ambiguous commands and ask for clarification
-
-**Example commands** (all typed in `#sales-ops`):
+**Example commands:**
 ```
 /mh status Wabtec
 /mh briefing
@@ -526,173 +525,565 @@ The dashboard is backed by a **multi-agent AI system** (running on the existing 
 /mh log call
 /mh p0 today
 /mh funnel
+/mh stats
 ```
 
 ---
 
-### Sub-Agent Team 1 — Calling Team
+### 11.2 — Homepage: Master Tracker
 
-**Agents**:
-1. **Call Logger** — logs a new call from Discord command into Zoho CRM + `Calls` Sheets tab
-2. **Call Monitor** — polls Zoho Calls module every 30 min, catches calls logged directly in Zoho, syncs to Sheets
-3. **Call Summariser** — parses call notes/outcomes, generates a 1-line summary, posts to `#calls-log`
-
-**Discord output channel**: `#calls-log`
-
-**Data flow**: Discord command / Zoho CRM Calls → Google Sheets `Calls` tab → Dashboard
-
-**Dashboard module**: Calling Tracker
-- Total calls today / this week
-- Calls by outcome (Connected, No Answer, Callback Requested, etc.)
-- Calls per team member
-- Timeline of recent calls — account, contact, duration, outcome, notes
-
-**New Sheets tab**: `Calls` — Date, Account, Contact, SDR, Duration, Outcome, Notes, Zoho Call ID
+The homepage is a **five-column live metrics grid**. All columns show toggle: **Daily | Weekly | Monthly**. Targets shown in muted grey; achieved value is larger and glows gold (`#FFD700`) when actual ≥ target.
 
 ---
 
-### Sub-Agent Team 2 — Meetings Team
+**Column I — Calls**
 
-**Agents** (2 already built, 1 new):
-1. **Meeting Booking Agent** ✅ — Discord /book flow → Calendar + Zoho Deal + Sheets + confirmation
-2. **Notes Summarisation Agent** ✅ — Circleback → Sheets `Notes` tab
-3. **Follow-up Reminder Agent** 🆕 — 24h after a meeting with no follow-up logged → pings assigned SDR in `#meetings-log`
-
-**Discord output channel**: `#meetings-log`
-
-**Dashboard module**: Meetings
-- Upcoming meetings this week
-- Past meetings with notes status (notes received / pending)
-- Meeting funnel: Booked → Attended → Follow-up Sent → Proposal Sent
-- Global view across all accounts
-
----
-
-### Sub-Agent Team 3 — Emails Team
-
-**Agents** (1 already built, 1 new):
-1. **Communications Tracker Agent** ✅ — Gmail + Discord threads → `Communications` Sheets tab
-2. **Email Draft Agent** 🆕 — on command, drafts a follow-up email for a given account based on meeting notes and deal stage; posts draft to `#email-log` for review before sending
-
-**Discord output channel**: `#email-log`
-
-**Dashboard module**: Emails
-- Recent email threads per account
-- Filter by account, date range, source (Gmail / Discord)
-- Unactioned threads flagged
-
----
-
-### Sub-Agent Team 4 — Funnel Team
-
-**Agents**:
-1. **Funnel Monitor** — polls Zoho Deals every hour, detects stage changes, posts updates to `#funnel-updates`
-2. **Stale Deal Alerter** — flags deals with no activity for 7+ days; posts alert to `#funnel-updates` tagging the deal owner
-3. **Funnel Reporter** — on command or weekly, posts full funnel summary to `#funnel-updates`
-
-**Discord output channel**: `#funnel-updates`
-
-**Data flow**: Zoho CRM Leads + Deals → Dashboard
-
-**Dashboard module**: Funnel
-- Count and value at each stage
-- Drop-off rates between stages
-- Average time in each stage
-- Deals at risk highlighted
-- Filter by source (Webinar, Events, Cold Outreach, etc.)
-
----
-
-### Sub-Agent Team 5 — P0 Team
-
-**Agents**:
-1. **P0 Generator** — runs every morning at 8:30am IST; auto-creates P0 tasks from: meetings with no follow-up, proposals overdue, payments pending; posts to `#p0-tasks`
-2. **P0 Notifier** — tags assigned person on their P0 in `#p0-tasks`; re-pings at 2pm if still open
-3. **P0 Closer** — listens for "done" / "mark complete" replies in `#p0-tasks`; updates task status in Sheets
-
-**Discord output channel**: `#p0-tasks`
-
-**Dashboard module**: P0 Tasks
-- Today's P0s with assignee and linked deal/contact
-- Completed today vs still open
-- Auto-generated vs manually added
-
-**New Sheets tab**: `Tasks` — Date, Task, Assigned To, Linked Deal, Status, Completed At
-
----
-
-### Sub-Agent Team 6 — Stats Team
-
-**Agents**:
-1. **Daily Stats Agent** — posts a morning metrics snapshot to `#stats` at 9am IST
-2. **Weekly Digest Agent** — every Monday 9am, posts full weekly report to `#stats`
-3. **On-demand Stats Agent** — responds to `/mh stats` command with current numbers
-
-**Discord output channel**: `#stats`
-
-**Dashboard module**: Stats
-- Revenue this month vs last month vs target
-- Leads added by source
-- Conversion rate: Leads → Meetings → Proposals → Closed
-- Average deal size, win rate
-- Team performance per person
-
----
-
-### Sub-Agent Team 7 — Payments Team
-
-**Agents**:
-1. **Invoice Tracker** — monitors `Payments` Sheets tab for status changes; posts to `#payments` when invoice sent or payment received
-2. **Overdue Alerter** — daily check for invoices past due date; tags Anurag in `#payments`
-
-**Discord output channel**: `#payments`
-
-**Data source**: TBD — `Payments` tab in Google Sheets (manual entry to start), with Zoho Books or Razorpay integration later
-
-**Dashboard module**: Payments and Invoices
-- Total invoiced / received / outstanding this month
-- Per-deal payment status
-- Invoice list: client, amount, date, status (Draft / Sent / Paid / Overdue)
-
-**New Sheets tab**: `Payments` — Date, Account, Deal, Amount, Invoice Date, Due Date, Status, Notes
-
----
-
-### The 5 Dashboard Views
-
-The dashboard opens to **Overall Business View** by default. A view selector at the top switches context without changing the URL.
-
-| View | Modules shown | Primary audience |
+| Metric | Source | Notes |
 |---|---|---|
-| **Overall Business** | All 7 modules, full picture | Opening default |
-| **Anurag's View** | Funnel + Stats + Payments + P0s | Strategic oversight |
-| **Mahesh's View** | TBD | TBD |
-| **Ashutosh's View** | TBD | TBD |
-| **Tanishq's View** | Calling + Meetings + P0s assigned to Tanishq | SDR daily ops |
+| Calls Dialled | `Calls` Sheets tab + Zoho CRM Calls module | Cross-checked; any discrepancy flagged |
+| Calls Connected | Zoho CRM call results: Meeting Scheduled / Call Back Later / Send More Info / Connected / Not Interested | Any result confirming the call was answered |
+| Meetings Booked | `Meetings` Sheets tab + Zoho Deals (stage ≥ "Meeting Booked") | Must match; discrepancy flagged |
 
 ---
 
-### Build Sequence
+**Column II — Meetings**
 
-**Phase 1 — Dashboard UI**
-1. View selector component (5 views)
-2. Module 2: Meetings — global view (extends existing code)
-3. Module 4: Funnel — Zoho Deals data already accessible
-4. Module 6: Stats — aggregates existing data
-5. Module 1: Calling Tracker — new Zoho Calls integration + Sheets tab
-6. Module 3: Emails — surfaces existing Communications data
-7. Module 5: P0 Tasks — new Tasks Sheets tab
-8. Module 7: Payments — new Payments Sheets tab
+| Metric | Source | Notes |
+|---|---|---|
+| L1 Meetings Booked | Zoho Deals — always matches `Meetings` sheet | Discrepancy auto-flagged |
+| L1 Meetings Conducted | Circleback MCP (notes received = conducted); SDR fallback via Discord; Zoho Deal stage | Each conducted meeting: LLM extracts 2-3 line action points per person (Tanishq / Ashutosh / Anurag / trainer / Mahesh) stored in `Notes` tab (Assigned To column). Account Intelligence generated and stored in `People` tab. |
+| L2 Meetings Conducted | `Meetings` Sheets tab filtered by Meeting Type = "L2+" | |
 
-**Phase 2 — Agent Layer (OpenClaw)**
-1. Moonlit Horizon master agent
-2. Calling Team agents (Call Logger, Call Monitor, Call Summariser)
-3. Meetings Team: Follow-up Reminder Agent (other 2 already built)
-4. Emails Team: Email Draft Agent (Comms Tracker already built)
-5. Funnel Team agents
-6. P0 Team agents
-7. Stats Team agents
-8. Payments Team agents
+---
+
+**Column III — Leads**
+
+Hot / Warm / Cold counts with icon and % change week-on-week.
+
+| Bucket | Score range | Source |
+|---|---|---|
+| Hot | ≥ 75 | Zoho CRM lead score |
+| Warm | 50–74 | Zoho CRM lead score |
+| Cold | < 50 | Zoho CRM lead score |
+
+---
+
+**Column IV — Current Funnel**
+
+Visual funnel from Zoho Deal stages:
+`Prospect → Call Attempted → Connected → L1 Booked → L1 Conducted → L2 Booked → L2 Conducted → Proposal Sent → Negotiation → Won / Lost`
+
+Count + value at each stage. Drawn as a narrow vertical funnel or horizontal bar chart.
+
+---
+
+**Column V — Metrics Graph**
+
+Filter bar: **Calls | Meetings | Lead Conversion | Emails**. Weekly time series.
+
+| Metric | Category |
+|---|---|
+| Calls Dialled | Calls |
+| Calls Connected | Calls |
+| Meetings Booked | Calls |
+| Calls Dialled → Connected % | Calls |
+| Connected → Meeting Booked % | Calls |
+| Meeting Booked → L1 Conducted % | Meetings |
+| L1 → L2 Conversion % | Meetings |
+| L2 → L3+ % | Meetings |
+| Dials to Payment Conversion | Lead Conversion |
+| Lead Conversion Time per stage | Lead Conversion |
+| Emails Sent per week | Emails |
+| Email Open Rate | Emails |
+
+Lead Conversion Time = days a lead stays in each stage, calculated from Zoho creation date + status change history.
+
+---
+
+**Below the columns:**
+
+**Weekly Summary** — LLM-generated, 5 bullets. Sources: all Sheets tabs + Zoho Deals + Calls. Covers: what went well, what didn't, focus areas, objective progress, notable lead movements. Auto-posted to `#stats` every Monday 9am IST.
+
+**Monthly Summary** — LLM-generated, posted to `#stats` on the 1st of each month with a download link to the monthly report PDF.
+
+*(Phase 3 — optional)* A named AI persona (e.g. "MH") in the bottom-right corner of the dashboard. Click → real-time LLM summary from live data.
+
+---
+
+### 11.3 — Person Views
+
+Four circular avatar icons at the top of every page (M / A / A / T — initials). Active view has a Vermillion ring. Clicking switches context. Default = **Overall Business** (all modules).
+
+Icons use initials for Phase 1; face illustrations (Midjourney or equivalent) deferred to Phase 3.
+
+---
+
+**Mahesh's View** — Founder. Busy. Numbers only.
+
+| Section | Content |
+|---|---|
+| Weekly Summary | Max 6-7 bullets. Metric deviations from targets (WoW delta for: Calls Dialled, Connected, L1 Booked, L2 Booked, L3+ Booked, Payment Pending, Negotiation, Won, Lost). What's working, what isn't, payment status. |
+| Weekly Report | Download link (PDF, auto-generated Sunday night) |
+| Monthly Report | Download link (auto-generated 1st of month); previous month link stays visible |
+| Stats at a Glance | Same 5-column grid as homepage (condensed) |
+| Call-outs & Reminders | Card list from `/reminder` Discord command |
+| Funnel View | Same funnel chart as homepage |
+
+*Revisit after first weekly use for any additional items.*
+
+---
+
+**Ashutosh's View** — Co-founder, daily operations, manages Anurag + Tanishq.
+
+| Section | Content |
+|---|---|
+| Weekly Summary | Operations-focused |
+| Prospect Database Health | Total uncalled count; weeks of stock remaining (÷ 250/week); breakdown by Lvl 1 Source; ⚠ notice if any source < 2 weeks; actionable per source |
+| Email Status | Weekly + Monthly: Emails Sent / Opened / Actions. Filter by Lvl 1 + Lvl 2 Source. Active campaign performance view. |
+| Pending Tasks | `Tasks` tab filtered by Assigned To = Ashutosh / Anurag / Tanishq |
+| Funnel | Same as homepage |
+| Leads Overview | Hot/Warm/Cold counts + Total + WoW change |
+| Weekly Report | Download link (Ashutosh-specific: pipeline health, calling performance, objective progress) |
+| Objective Progress | Short-term + long-term progress bars per objective area |
+
+Source types tracked in Prospect Database Health: Events (Webinars + Conferences), Cold-Engineering (Apollo), Cold-L&D (Apollo), Email-Engineering, Email-L&D, Referrals, Internal Community Data.
+
+---
+
+**Tanishq's View** — SDR. Daily execution: who to call, what meetings are coming up.
+
+| Section | Content |
+|---|---|
+| Targets vs Achieved | Toggle: Daily / Weekly / Monthly. Calls Dialled / Connected / Meetings Booked — target vs actual. Gold glow when achieved ≥ target. Targets from `Targets` Sheets tab; daily = monthly ÷ 22; weekly = monthly ÷ 4. |
+| Prospects to Call — Today | Top 50 uncalled leads by score. Download CSV link. |
+| Prospects to Call — This Week | Top 250 uncalled leads, split Mon–Fri (50/day). Download link per day + weekly cumulative. Ranked by Lead Scoring Rubric (Fit 10pts + Need 20pts + Budget 13pts + Authority 13pts + Timeline 8pts = 64pts max from available fields; remaining 36pts from Engagement + Personal where known). Re-ranked every Sunday 11pm. Top 250 get `#top250` tag in Zoho; tag removed from those outside 250. |
+| Meetings for Today | Card list. Cards flip on click to reveal account intel summary (from People & Accounts, sourced via Circleback MCP). |
+| Follow-ups & Reminders | To-do card list: leads stale in same stage too long; leads with overdue actionables; leads tagged for callback from previous call. |
+
+---
+
+**Anurag's View** — Category Head. Cross-functional overview.
+
+| Section | Content |
+|---|---|
+| Pending Tasks | All open tasks across Tanishq + Ashutosh + Anurag (`Tasks` tab) |
+| Objective Tracking | All objective areas, short-term + long-term progress bars |
+| Meetings Today | Same card view as Tanishq's |
+| Funnel at a Glance | Condensed funnel |
+| Payments Pending | Invoices due or overdue |
+| Prospect Database Health | Same as Ashutosh's view |
+| Quick Links | Zoho CRM, Google Sheets, Calendar, Circleback, Discord, Upload Prospects, Book Meeting |
+
+*This view will be finalised after Phase 1 build using cumulative real data.*
+
+---
+
+### 11.4 — All Modules
+
+#### Module 1 — Prospect Database
+- **Source**: `Prospects` tab (uncalled only) + Zoho CRM Leads (Not Contacted)
+- **Shows**: total count, weeks of stock by source, source breakdown chart
+- **Interaction**: download top-250 list, trigger manual re-ranking
+- **Agent**: Prospect Health Monitor — posts to `#funnel-updates` when any source drops below 2-week threshold
+
+#### Module 2 — Calling
+- **Source**: `Calls` Sheets tab + Zoho CRM Calls module
+- **Shows**: calls today / this week / this month; by outcome; by SDR; timeline of recent calls
+- **Prospect transition**: when a call is logged → row moves from `Prospects` tab → `Calling` tab
+- **Agents**: Call Logger, Call Monitor (polls Zoho every 30min), Call Summariser
+
+**Call Recording Pipeline:**
+- iPad recordings uploaded manually to Google Drive folder `Call Recordings/`
+- Call Transcription Agent uses Google Drive MCP (`list_recent_files`, `download_file_content`) to detect new files
+- **Transcription**: Whisper (open-source, Docker on Hostinger VPS) — zero cost, no API tokens
+- **Linking**: filename convention `YYYYMMDD_FirstnameLastname.m4a` → agent matches to Zoho contact
+- **Post-transcription**:
+  1. Transcript stored in `Calls` tab (Recording Drive Link + Transcript Summary columns)
+  2. LLM generates 3-5 line call summary (~500 tokens)
+  3. Zoho auto-tagged via keyword matching (no LLM): `Callback-Requested`, `Not-Interested`, `Meeting-Scheduled`
+  4. If meeting scheduled: triggers meeting booking flow automatically
+  5. Summary appended to account intelligence in `People` tab
+
+#### Module 3 — Emails
+- **Source**: `Communications` Sheets tab + Gmail API
+- **Shows**: threads by account, filter by date/source, unactioned threads flagged
+- **Metrics**: emails sent per week, open rate (GMass or equivalent tracking)
+- **Agents**: Comms Tracker (existing ✅) + Email Draft Agent (new 🆕)
+
+#### Module 4 — Meetings
+- **Source**: `Meetings` Sheets tab + Google Calendar + Zoho Deals
+- **Circleback MCP** is the primary source for meeting notes and transcripts. All agents needing meeting context call Circleback MCP (`SearchMeetings`, `ReadMeetings`, `GetTranscriptsForMeetings`). No reliance on manual notes entry.
+- **Shows**: upcoming meetings, meeting funnel (Booked → Conducted → Follow-up Sent → Proposal Sent), notes status per account
+- **Action points**: per meeting, LLM extracts 2-3 line actions assigned per person (Tanishq / Ashutosh / Anurag / trainer / Mahesh)
+- **Agents**: Meeting Booking Agent ✅, Notes Summarisation Agent ✅, Follow-up Reminder Agent 🆕 (24h after meeting with no follow-up → ping SDR in `#meetings-log`)
+
+#### Module 5 — People & Accounts
+- **Two Sheets tabs**: `People` (all contacts) + `Accounts` (companies with meeting history)
+- **People tab**: contacts with full history, lead status, account intel summary
+- **Accounts tab**: company-level view — all contacts at that company, deal stage, last activity, notes
+- **Account Intelligence**: LLM aggregates Zoho CRM history + Circleback MCP transcripts + email threads + Communications tab → stored in `People` tab → surfaced as flip card (Tanishq's view) and detail panel (client page)
+- **Trigger**: regenerated whenever a new meeting or email arrives for an account (~1,500 tokens/account)
+- **Phase 2+ module** — data collection starts in Phase 1
+
+#### Module 6 — P0 Tasks
+- **Source**: `Tasks` Sheets tab
+- **P0 Generator**: runs 8:30am IST — auto-creates tasks from meetings with no follow-up (>24h), proposals overdue, payments pending
+- **P0 Notifier**: tags assignee in `#p0-tasks`; re-pings at 2pm if still open
+- **P0 Closer**: listens for "done" / "mark complete" in `#p0-tasks` → updates Sheets
+
+#### Module 7 — Objectives
+- **Short-term** (weekly/monthly) + **long-term** (quarterly) per objective area
+- **Objective areas**: Lead Generation, Calling, Meetings, Lead Conversion, Trainer Supply, Service Delivery, Admin, Process Setup, Revenue, Team Capacity
+- **Update via Discord**: `/objective update` → bot asks short-term or long-term → objective area → logs to `Tasks` tab (Type = Objective)
+- **Dashboard**: progress bars per area, grouped by short/long-term
+- **Discord channel**: `#objectives`
+
+#### Module 8 — Reports
+- Auto-generated PDFs: Weekly (Sunday night) + Monthly (1st of month)
+- Mahesh view: metric deviations, payments
+- Ashutosh view: pipeline health, objectives
+- Anurag view: full operational summary
+- Download links on each person's view
+- *PDF generation tool TBD: Puppeteer, @react-pdf/renderer, or Sheets export. Decide before Phase 1b.*
+
+#### Module 9 — Payments
+- **Source**: `Payments` Sheets tab (manual entry to start)
+- **Shows**: invoiced / received / outstanding this month; per-deal status; overdue invoices
+- **Agents**: Invoice Tracker + Overdue Alerter (daily check; tags Anurag in `#payments`)
+- **Future**: Zoho Books or Razorpay API integration
+
+#### Module 10 — Stats
+- Aggregates all metrics from all other modules
+- Daily snapshot → `#stats` at 9am IST
+- Weekly digest → `#stats` every Monday
+
+#### Module 11 — Supply (Trainer Sourcing)
+Trainer pipeline: LinkedIn outreach → Google Form → Meeting → Sample Video review → Rating Rubric → Onboarded
+
+| Stage | Action |
+|---|---|
+| LinkedIn | Connection + message sent |
+| Google Form | Trainer fills in profile, specialisations, availability, day rate, sample video |
+| Meeting | Booked via Moonlit Horizon booking flow |
+| Sample Video | Reviewed via Google Drive link in Form response |
+| Rating Rubric | Scored on: technical depth, delivery quality, responsiveness, pricing (rubric in existing Google Sheet — user to share link) |
+| Onboarded | Contract signed; added to `Trainers` Sheets tab with Status = Onboarded |
+
+**Dashboard view**: trainer pipeline stage counts, upcoming actions, available trainers by specialisation, deal-trainer mapping (which trainer is confirmed for which engagement).
+
+*Details TBD: user to share Google Form and rating rubric Sheets before Phase 3.*
+
+#### Module 12 — Lead Generation
+- Tracks lead source performance: # uploaded / # called / # connected / # meetings booked — per source
+- Identifies top-performing and underperforming sources
+- Alerts when a source type drops below threshold
+
+#### Module 13 — Quick Links
+- Static card grid: Zoho CRM, Google Sheets, Google Calendar, Circleback, Discord, Upload Prospects, Book Meeting
+- No agent. Pure UI.
+
+---
+
+### 11.5 — Monthly Target Setting (#targets Flow)
+
+1. **1st of each month**: bot posts a structured message in `#targets` requesting targets for all tracked metrics
+2. Team fills in the values; bot records to `Targets` Sheets tab
+3. Message is pinned for the month
+4. **Last day of month**: bot compares actuals vs targets for each metric, posts end-of-month recommendations, unpins old message
+5. **Daily/weekly derivation**: daily target = monthly ÷ 22 working days; weekly = monthly ÷ 4
+
+---
+
+## 12. Design System
+
+### Colours
+
+| Role | Hex | Usage |
+|---|---|---|
+| Background | `#0A0A0A` | Page background (near-black) |
+| Surface / cards | `#111111` / `#161616` | Card backgrounds, alternating table rows |
+| Primary text | `#FFFFFF` | All body and metric text |
+| Secondary text | `#999999` | Labels, timestamps, helper text |
+| Accent | `#E8341C` | Vermillion — metric labels, active states, pointers |
+| Positive delta | `#22C55E` | Green — % change indicators only, used sparingly |
+| Negative delta | `#FF4444` | Red — % change indicators only, used sparingly |
+| Target achieved | `#FFD700` | Gold glow — achieved metric when actual ≥ target |
+| Border | `#2A2A2A` | Card and table borders |
+
+Gold glow CSS: `box-shadow: 0 0 12px #FFD70088; color: #FFD700;`
+
+### Typography
+
+**Font**: Poppins (Google Fonts) — add via `next/font/google`. Fallback: Inter.
+
+| Element | Weight | Size |
+|---|---|---|
+| Primary KPI values | 600 | 2.5–3rem |
+| Secondary metrics | 600 | 1.5–2rem |
+| Section headings | 700 | 1.25rem |
+| Card labels (Vermillion) | 400 | 0.75rem, uppercase, letter-spacing 0.05em |
+| Body text | 400 | 0.875rem |
+| Secondary / muted | 400 | 0.75rem, `#999999` |
+
+### Components
+
+All cards: `border-radius: 12px; padding: 20px; border: 1px solid #2A2A2A; background: #111111;`
+
+All tables: alternating rows `#111111` / `#161616`; header row `#1A1A1A` with Vermillion text.
+
+Person view circles: 40px diameter, initials centred (Poppins 600), active view = 2px Vermillion ring.
+
+Spacing unit: 8px grid. Target achieved value: larger font + gold glow. Metric that is below target: shown normally (no red — red is only for explicit negative % change).
+
+### Responsiveness
+Desktop-first at 1280px+. Layout must not break at 1024px.
+
+---
+
+## 13. Data Architecture & Lead Journey
+
+### The Full Lead Journey
+
+```
+[CSV Upload] → Prospects tab (Not Contacted, uncalled stock)
+                    ↓
+           [Top-250 re-ranking] every Sunday 11pm
+           Score by Fit/Need/Budget/Authority/Timeline rubric
+           Top 250 get #top250 Zoho tag
+                    ↓
+       [Tanishq calls] → Call logged (Zoho CRM + Calls tab)
+       Prospect row moved: Prospects tab → Calling tab
+                    ↓
+            [iPad recording uploaded to Drive]
+            Whisper transcription → Calls tab
+            Zoho auto-tagged (keyword match)
+                    ↓  (if call connected)
+            Lead_Status = Contacted in Zoho
+                    ↓  (if meeting scheduled)
+            Zoho Deal created → Meetings tab row added
+                    ↓
+         [L1 Meeting Conducted]
+         Circleback MCP → Notes tab (summary + action points)
+         Account Intelligence generated → People tab
+                    ↓
+         [L2 Meeting Conducted]
+                    ↓
+         [Proposal Sent → Won]
+         Payments tab (invoice created)
+                    ↓
+               Payment Received
+```
+
+### Prospect Stock Rule
+
+- `Prospects` tab = Not Contacted only (uncalled stock)
+- `Calling` tab = anyone a call has been logged for
+- Movement is one-way: once a call is logged, a lead never returns to Prospects tab
+- **Weeks of stock** = `COUNT(Prospects rows) ÷ 250`
+- Low stock threshold: < 2 weeks remaining for any source type → Prospect Health Monitor alert
+
+### Top-250 Weekly Re-ranking
+
+Runs every Sunday at 11pm IST:
+1. Agent reads all rows in `Prospects` tab
+2. Scores each lead using: Fit (10pts) + Need (20pts) + Budget (13pts) + Authority (13pts) + Timeline (8pts) = 64pts max from available fields
+3. Top 250 by score → tagged `#top250` in Zoho CRM; tag removed from all others
+4. Tanishq's call list is built from this tagged set each week
+5. Process is fully rule-based — zero LLM tokens consumed
+
+### Account Intelligence
+
+Generated per account when a new meeting or email arrives:
+- **Input**: Zoho CRM field history + Circleback MCP transcripts/notes + `Communications` Sheets tab threads
+- **Output**: 200-word summary stored in `People` tab (Account Intelligence Summary column)
+- **Surfaced**: flip card in Tanishq's meetings view; detail panel in `/client/[account]` page
+- **Token cost**: ~1,500 tokens/account/update
+
+---
+
+## 14. Discord Channels & Slash Commands
+
+### Channel Structure
+
+| Channel | Purpose | Posting agents |
+|---|---|---|
+| `#sales-ops` | All commands in — single entry point | Moonlit Horizon master + morning briefing |
+| `#calls-log` | Call logs, summaries, daily tally | Calling Team |
+| `#meetings-log` | Booking confirmations, follow-up reminders | Meetings Team |
+| `#email-log` | Thread alerts, email draft suggestions | Emails Team |
+| `#funnel-updates` | Deal stage changes, stale alerts, prospect DB low-stock alerts | Funnel Team + Prospect Health Monitor |
+| `#p0-tasks` | Today's critical tasks, completions | P0 Team |
+| `#objectives` | Objective updates, progress tracking | Objectives bot |
+| `#stats` | Daily/weekly/monthly digest + summaries | Stats Team |
+| `#payments` | Invoice sent, payment received, overdue alerts | Payments Team |
+| `#targets` | Monthly target setting; pinned message; end-of-month review | Targets bot |
+
+### Slash Commands
+
+| Command | Effect |
+|---|---|
+| `/mh status {account}` | Cross-module status for one account (Meetings + Funnel + Emails simultaneously) |
+| `/mh briefing` | Morning briefing on demand |
+| `/mh book meeting` | Trigger meeting booking flow |
+| `/mh log call` | Log a call (bot prompts for details) |
+| `/mh p0 today` | Today's P0 tasks |
+| `/mh funnel` | Current funnel snapshot |
+| `/mh stats` | On-demand current metrics |
+| `/objective update` | Log progress: bot asks short/long-term → objective area → records to Tasks tab |
+| `/reminder {person} {message}` | Add a reminder card to a person's dashboard view |
+| `/book` | Book a meeting with an existing CRM account (existing command ✅) |
+| `/book-prospect` | Convert Lead → Contact and book meeting (existing command ✅) |
+
+---
+
+## 15. Testing Strategy & Failure Recovery
+
+### Integration Failure Modes
+
+| Integration | Common Failure | Detection | Recovery |
+|---|---|---|---|
+| Zoho CRM API | 401 Unauthorized | Token expiry (> 55min idle) | `_tokenCache` auto-refreshes on next call — transparent |
+| Zoho CRM API | 429 Rate Limit | `RATE_LIMIT` in response | Exponential backoff, max 3 retries with 1s/2s/4s delays |
+| Google Sheets | 403 Forbidden | OAuth refresh expired | If refresh fails → `console.error` + Discord alert to `#sales-ops` via bot |
+| Google Sheets | Append fails silently | No rows written | **Fix needed**: send Discord alert in `appendProspectRows` catch block |
+| Zoho Leads batch | Empty `data` array | `json.data` undefined | Already handled — marks entire batch as errors |
+| Discord bot crash | Process exits | VPS has no auto-restart | **Fix needed**: use `pm2` to manage the bot process; `pm2 startup` for auto-restart on reboot |
+| Whisper Docker | Container down | Transcription job fails | Job queued; retry after 5 min; alert to `#calls-log` if still failing |
+| OpenClaw agent | Hallucinated tool call | LLM error / unexpected output | Each agent has `max_iterations = 5`; failures posted to `#sales-ops` |
+| Vercel build | TypeScript error | CI fails, no deploy | Check all `UploadResponse` branches include `updated` field |
+| Vercel deployment | Queued / stuck | Dashboard shows Queued > 10min | Cancel all queued from Vercel dashboard; redeploy latest SHA |
+| Circleback MCP | No meeting found | Empty search result | Graceful fallback — log to Notes tab as "Notes pending" |
+| Google Drive MCP | File not found | `download_file_content` 404 | Skip file; post filename to `#calls-log` for manual re-upload |
+
+### Pre-deploy Smoke Test
+
+Before every production deploy:
+1. Upload a test CSV (5 rows: 1 normal, 1 duplicate, 1 Skip priority) → verify: 1 created, 1 updated/skipped, 1 excluded
+2. Check Zoho lead created with correct Lvl 1 + Lvl 2 Source and any tags
+3. Check `Prospects` tab in Sheets has the new row
+4. Check Lvl 2 Source dropdown still loads from Zoho API
+
+### Call Recording Test
+1. Upload a test `.m4a` named `YYYYMMDD_TestUser.m4a` to the `Call Recordings/` Drive folder
+2. Verify Whisper transcription completes within 2 minutes
+3. Verify `Calls` tab has the new row with Transcript Summary filled
+4. Verify Zoho contact receives the auto-tag matching the transcript content
+
+---
+
+## 16. Token Optimisation Guardrails
+
+### Principles
+
+1. **Agents never receive raw data dumps.** Always aggregate server-side first; pass only summaries to the LLM.
+2. **Dashboard reads are cached** for 5 minutes in the API route — no re-fetch on every component render.
+3. **Summaries are cached with TTL.** Weekly/monthly summaries stored in `Tasks` tab with a `Generated At` timestamp. Regenerate only if > 7 days old or explicitly triggered.
+4. **Account Intelligence is event-triggered**, not scheduled — regenerated only when a new meeting note or email arrives for that account.
+5. **Top-250 re-ranking is rule-based** — zero LLM tokens.
+6. **Call recording tagging is rule-based** — keyword match on transcript, no LLM.
+7. **Discord bot only processes messages in designated channels** — not the full server stream.
+8. **All polling loops have minimum intervals**: Calls = 30min, Gmail = 15min, Funnel = 60min. No sub-minute polling.
+
+### Token Budget (approximate)
+
+| Task | Tokens in+out | Frequency | Monthly cost |
+|---|---|---|---|
+| Daily morning briefing | ~2,000 | Daily | ~60,000/mo |
+| Weekly summary generation | ~4,000 | Weekly | ~16,000/mo |
+| Monthly report generation | ~8,000 | Monthly | ~8,000/mo |
+| Account intelligence update | ~1,500/account | Per meeting/email | Varies |
+| Meeting action points extraction | ~1,000/meeting | Per conducted meeting | Varies |
+| Call summary (LLM) | ~500/call | Per transcribed call | ~10,000/mo at 20 calls/day |
+| Email draft suggestion | ~1,200 | On-demand | Minimal |
+| Top-250 re-ranking | 0 | Weekly | 0 |
+| Call auto-tagging | 0 | Per call | 0 |
+
+**Total baseline (before account intel and meeting actions)**: ~94,000 tokens/month.
+
+OpenClaw model selection: use the cheapest model tier for rule-following tasks (call logger, P0 generator); reserve Claude Sonnet 4.x for intelligence tasks (account intel, summaries, email drafts).
+
+---
+
+## 17. Build Sequence & Timeline
+
+### Phase 0 — Foundation *(now, before Phase 1)*
+
+- [ ] Add Poppins to Next.js via `next/font/google`; update `tailwind.config.ts` with design tokens (colours, font, spacing)
+- [ ] Create new Sheets tabs: `Calls`, `Calling`, `Targets`, `Tasks`, `Payments` (manual entry to start)
+- [ ] Create Discord channels: `#targets`, `#objectives` (all others already exist)
+- [ ] Set up `pm2` on VPS for Discord bot auto-restart
+- [ ] Set up Whisper Docker container on VPS
+- [ ] Add `Assigned To` column to `Notes` tab in Sheets
+
+### Phase 1 — Master Tracker UI *(target: 2026-06-08 10:00 IST)*
+
+- [ ] Replace homepage (`app/page.tsx`) with Master Tracker 5-column layout
+- [ ] Column I: Calls metrics (live from `Calls` tab; hardcoded targets initially)
+- [ ] Column II: Meetings metrics (from `Meetings` tab + Zoho Deals)
+- [ ] Column III: Leads Hot/Warm/Cold counts (from Zoho CRM, scored against rubric)
+- [ ] Column IV: Funnel (from Zoho Deals — all stages)
+- [ ] Column V: Metrics graph (Recharts, filterable by category)
+- [ ] Weekly Summary card (static text placeholder → LLM in Phase 2b)
+- [ ] Person view selector (4 circles at top of every page)
+
+### Phase 1b — Person Views UI
+
+- [ ] Mahesh's view page
+- [ ] Tanishq's view page (targets toggle + call lists + meetings cards)
+- [ ] Ashutosh's view page (prospect DB health + pipeline + email status)
+- [ ] Anurag's view page (tasks + objectives + meetings + funnel)
+- [ ] Decide PDF report tool (Puppeteer / @react-pdf/renderer / Sheets export)
+
+### Phase 2 — Core Agent Layer
+
+- [ ] Moonlit Horizon master agent (OpenClaw)
+- [ ] Calling Team: Call Logger, Call Monitor, Call Summariser
+- [ ] Meetings Follow-up Reminder Agent (other 2 already built ✅)
+- [ ] Email Draft Agent (Comms Tracker already built ✅)
+- [ ] Funnel Monitor + Stale Deal Alerter
+- [ ] P0 Team: P0 Generator, P0 Notifier, P0 Closer
+- [ ] Stats Team: Daily Stats Agent, Weekly Digest Agent, On-demand Stats Agent
+- [ ] Payments Team: Invoice Tracker, Overdue Alerter
+
+### Phase 2b — Intelligence & Automation Layer
+
+- [ ] Account Intelligence generator (Circleback MCP + LLM → People tab)
+- [ ] LLM Weekly Summary generation (replaces static placeholder)
+- [ ] `#targets` monthly bot (target setting + end-of-month review)
+- [ ] `/objective update` Discord command
+- [ ] `/reminder` Discord command
+- [ ] Call Recording Pipeline: Google Drive MCP watcher → Whisper → Calls tab → Zoho tagging
+- [ ] Top-250 weekly re-ranker (rule-based, Sunday 11pm cron)
+
+### Phase 3 — Supply Module
+
+- [ ] `Trainers` tab setup in Sheets
+- [ ] Connect Google Form → Trainers tab (Apps Script or Zapier)
+- [ ] Trainer rating rubric integration *(user to share Form + Sheets)*
+- [ ] Trainer recommendation on deal booking
+- [ ] Supply module dashboard view
+
+### Phase 4 — People & Accounts Module
+
+- [ ] `People` and `Accounts` tabs (data collection starts Phase 1)
+- [ ] Account Intelligence surfaced in `/client/[account]` page
+- [ ] People & Accounts module dashboard view
+- [ ] Full contact timeline per person
+
+---
+
+## Open Items
+
+| Item | Owner | Needed by |
+|---|---|---|
+| Supply Module: share Google Form + rating rubric Sheets | Anurag | Before Phase 3 |
+| Anurag's view: finalize after Phase 1 build | Anurag | After Phase 1b |
+| Mahesh's view: additional items after first weekly use | Mahesh / Anurag | After first Monday |
+| Email open rate tracking mechanism (GMass or equivalent) | Anurag | Before Module 3 build |
+| Lead Conversion Time: historical stage data for existing leads | Anurag | Phase 2b |
+| Reports PDF generation tool decision | Anurag | Before Phase 1b |
+| Person avatar illustrations (initials used in Phase 1) | Anurag | Phase 3 |
+| Ashutosh's weekly report: KPI priorities | Ashutosh / Anurag | Before Phase 1b |
 
 ---
 
