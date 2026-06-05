@@ -134,7 +134,7 @@ client.on('interactionCreate', async interaction => {
         `**Type:** ${typeLabel}\n` +
         `**Time (IST):** ${dateFormatted}\n` +
         `**G-Meet:** ${data.gMeetLink || '_(link in calendar invite)_'}\n` +
-        `**Deal:** ${data.dealId ? `Created in Zoho CRM` : 'Skipped (deal may already exist)'}`
+        `**Deal:** ${data.dealId ? `Created in Zoho CRM` : data.dealError ? `❌ ${data.dealError}` : 'Skipped (deal may already exist)'}`
       )
     } catch (err) {
       console.error('/book error:', err)
