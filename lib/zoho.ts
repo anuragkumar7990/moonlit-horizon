@@ -87,6 +87,13 @@ export async function createDeal(payload: {
       }]
     }),
   })
-  const data = await res.json() as { data?: { details?: { id: string } }[] }
-  return data.data?.[0]?.details?.id ?? ''
+  const data = await res.json() as { data?: { details?: { id: string }; status?: string; message?: string; code?: string }[]; status?: string; message?: string; code?: string }
+  if (data.status === 'error' || data.code) {
+    throw new Error(`Zoho: ${data.message ?? data.code ?? JSON.stringify(data)}`)
+  }
+  const record = data.data?.[0]
+  if (record && (record.status === 'error' || record.code)) {
+    throw new Error(`Zoho: ${record.message ?? record.code ?? JSON.stringify(record)}`)
+  }
+  return record?.details?.id ?? ''
 }
