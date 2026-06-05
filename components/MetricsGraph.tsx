@@ -71,8 +71,8 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
               <Legend wrapperStyle={{ fontSize: '11px', color: '#999999', paddingTop: '8px' }} />
 
               {filter === 'calls' && <>
-                <Line type="monotone" dataKey="dialled"   stroke="#E8341C" strokeWidth={2} dot={false} name="Dialled"   />
                 <Line type="monotone" dataKey="connected" stroke="#22C55E" strokeWidth={2} dot={false} name="Connected" />
+                <Line type="monotone" dataKey="dialled"   stroke="#E8341C" strokeWidth={2} dot={false} name="Dialled"   />
               </>}
 
               {filter === 'meetings' && <>

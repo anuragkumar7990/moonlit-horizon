@@ -303,20 +303,72 @@ export async function addTagsToLead(leadId: string, tags: string[]): Promise<voi
   })
 }
 
+function scoreLeadForDashboard(lead: Record<string, unknown>): number {
+  const desig  = String(lead.Designation  ?? '').toLowerCase()
+  const status = String(lead.Lead_Status  ?? '').toLowerCase()
+  const source = String(lead.Lvl_1_Source ?? '').toLowerCase()
+  const hasCo  = !!(lead.Company || lead.Company_Name)
+
+  // Authority (0–13)
+  let authority = 2
+  if (/\b(cto|ceo|coo|cpo|vp|svp|evp|president|founder|director)\b/.test(desig)) authority = 13
+  else if (/\b(head|principal|senior|sr\.?\s)\b/.test(desig)) authority = 9
+  else if (/\b(manager|lead|tech\slead)\b/.test(desig)) authority = 7
+  else if (/\b(engineer|developer|qa|sdet|tester|analyst)\b/.test(desig)) authority = 5
+
+  // Need (0–20)
+  let need = 5
+  if (/\b(qa|quality|test|sdet|automation|qe)\b/.test(desig)) need = 20
+  else if (/\b(l&d|learning|training|talent|enablement)\b/.test(desig)) need = 18
+  else if (/\b(engineer|developer|software|tech)\b/.test(desig)) need = 12
+
+  // Budget proxy (0–11)
+  let budget = hasCo ? 6 : 2
+  if (/\b(vp|director|head|cto|ceo)\b/.test(desig) && hasCo) budget = 11
+  else if (/\b(manager|senior|lead)\b/.test(desig) && hasCo) budget = 8
+
+  // Timeline (0–8)
+  let timeline = 3
+  if (status === 'contacted') timeline = 8
+  else if (status === 'attempted to contact') timeline = 5
+
+  // Fit (0–7)
+  const fit = hasCo ? 7 : 2
+
+  // Engagement from source (0–20)
+  let engagement = 3
+  if (/event|webinar|conference|summit|meetup/.test(source)) engagement = 20
+  else if (/community|internal/.test(source)) engagement = 15
+  else if (/email/.test(source)) engagement = 10
+  else if (/cold/.test(source)) engagement = 6
+
+  return authority + need + budget + timeline + fit + engagement
+}
+
 export async function getLeadsByStatus(): Promise<LeadCounts> {
   try {
-    const data = await zohoGet('/Leads?fields=Lead_Status,Tag,Converted__s&per_page=200') as { data?: Record<string, unknown>[] }
+    const data = await zohoGet(
+      '/Leads?fields=Lead_Status,Tag,Converted__s,Designation,Company,Company_Name,Lvl_1_Source&per_page=200'
+    ) as { data?: Record<string, unknown>[] }
     const leads = (data.data ?? []).filter(l => !l.Converted__s)
     let hot = 0, warm = 0, cold = 0
+
     for (const lead of leads) {
+      // Explicit tags take priority
       const tags = Array.isArray(lead.Tag)
         ? (lead.Tag as Record<string, unknown>[]).map(t => String(t.name ?? '').toLowerCase())
         : []
-      const status = String(lead.Lead_Status ?? '').toLowerCase()
-      if (tags.includes('hot')) hot++
-      else if (tags.includes('warm') || status === 'contacted') warm++
-      else cold++
+      if (tags.includes('hot'))  { hot++;  continue }
+      if (tags.includes('warm')) { warm++; continue }
+      if (tags.includes('cold')) { cold++; continue }
+
+      // Score-based classification (max ~79 pts)
+      const score = scoreLeadForDashboard(lead)
+      if (score >= 60)      hot++
+      else if (score >= 35) warm++
+      else                  cold++
     }
+
     return { hot, warm, cold, total: leads.length }
   } catch {
     return { hot: 0, warm: 0, cold: 0, total: 0 }

@@ -161,13 +161,16 @@ const FUNNEL_ORDER = [
   'Prospect', 'Call Attempted', 'Connected',
   'L1 Booked', 'L1 Conducted',
   'L2 Booked', 'L2 Conducted',
-  'Proposal Sent', 'Negotiation', 'Won', 'Lost',
+  'Proposal Sent', 'Negotiation', 'Won',
 ]
+
+const EXCLUDE_FROM_FUNNEL = new Set(['Lost'])
 
 export function buildFunnel(deals: ZohoDeal[]): FunnelStage[] {
   const map = new Map<string, { count: number; amount: number }>()
   for (const d of deals) {
     const s = d.stage || 'Unknown'
+    if (EXCLUDE_FROM_FUNNEL.has(s)) continue
     const cur = map.get(s) ?? { count: 0, amount: 0 }
     map.set(s, { count: cur.count + 1, amount: cur.amount + Number(d.amount || 0) })
   }
@@ -178,7 +181,7 @@ export function buildFunnel(deals: ZohoDeal[]): FunnelStage[] {
     if (d) result.push({ stage, ...d })
   }
   map.forEach((d, stage) => {
-    if (!FUNNEL_ORDER.includes(stage)) result.push({ stage, ...d })
+    if (!FUNNEL_ORDER.includes(stage) && !EXCLUDE_FROM_FUNNEL.has(stage)) result.push({ stage, ...d })
   })
   return result
 }
