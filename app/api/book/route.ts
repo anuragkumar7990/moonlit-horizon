@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
         accountId,
         contactId,
         dealName: title,
-        stage: meetingType === 'L1' ? 'L1 Meeting Booked' : 'L2 Meeting Booked',
+        stage: meetingType === 'L1' ? 'Discovery Call booked' : 'Outline Meeting Conducted',
         closingDate,
       })
     } catch (err) {
