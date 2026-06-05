@@ -120,7 +120,7 @@ export default function UploadPage() {
       }
     } catch (err) {
       setStatus('error')
-      setResponse({ ok: false, total: 0, created: 0, skipped: 0, excluded: 0, errors: 0, results: [], error: String(err) })
+      setResponse({ ok: false, total: 0, created: 0, skipped: 0, updated: 0, excluded: 0, errors: 0, results: [], error: String(err) })
     }
   }
 
