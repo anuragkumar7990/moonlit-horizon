@@ -2,7 +2,7 @@ import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   isWithinInterval, subWeeks, format, parseISO, isPast,
 } from 'date-fns'
-import type { Call, Meeting, ZohoDeal, Target, FunnelStage, WeeklyPoint } from './types'
+import type { Call, Meeting, ZohoDeal, Target, FunnelStage, FunnelData, LeadCounts, WeeklyPoint } from './types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -158,32 +158,59 @@ export function buildMeetingsData(
 }
 
 const FUNNEL_ORDER = [
-  'Prospect', 'Call Attempted', 'Connected',
-  'L1 Booked', 'L1 Conducted',
-  'L2 Booked', 'L2 Conducted',
-  'Proposal Sent', 'Negotiation', 'Won',
+  'Discovery Call booked',
+  'Discovery Call Conducted',
+  'Outline Meeting Conducted',
+  'Negotiation',
+  'Payment Pending',
 ]
 
-const EXCLUDE_FROM_FUNNEL = new Set(['Lost'])
+const s = (v: string) => v.toLowerCase().trim()
 
-export function buildFunnel(deals: ZohoDeal[]): FunnelStage[] {
-  const map = new Map<string, { count: number; amount: number }>()
+const HOT_STAGES  = new Set(['negotiation', 'payment pending'])
+const WARM_STAGES = new Set(['discovery call conducted', 'outline meeting conducted'])
+const COLD_STAGES = new Set(['discovery call booked'])
+
+export function buildLeadCounts(deals: ZohoDeal[]): LeadCounts {
+  let hot = 0, warm = 0, cold = 0
   for (const d of deals) {
-    const s = d.stage || 'Unknown'
-    if (EXCLUDE_FROM_FUNNEL.has(s)) continue
-    const cur = map.get(s) ?? { count: 0, amount: 0 }
-    map.set(s, { count: cur.count + 1, amount: cur.amount + Number(d.amount || 0) })
+    const stage = s(d.stage)
+    if (HOT_STAGES.has(stage))  hot++
+    else if (WARM_STAGES.has(stage)) warm++
+    else if (COLD_STAGES.has(stage)) cold++
+  }
+  return { hot, warm, cold, total: hot + warm + cold }
+}
+
+export function buildFunnel(deals: ZohoDeal[]): FunnelData {
+  const map = new Map<string, { count: number; amount: number }>()
+  let wonCount = 0, wonAmt = 0, lostCount = 0, lostAmt = 0
+
+  for (const d of deals) {
+    const stage = d.stage || 'Unknown'
+    const sl = s(stage)
+    if (sl === 'won') { wonCount++; wonAmt += Number(d.amount || 0) }
+    else if (sl === 'lost') { lostCount++; lostAmt += Number(d.amount || 0) }
+    else {
+      const cur = map.get(stage) ?? { count: 0, amount: 0 }
+      map.set(stage, { count: cur.count + 1, amount: cur.amount + Number(d.amount || 0) })
+    }
   }
 
-  const result: FunnelStage[] = []
+  const stages: FunnelStage[] = []
   for (const stage of FUNNEL_ORDER) {
     const d = map.get(stage)
-    if (d) result.push({ stage, ...d })
+    if (d) stages.push({ stage, ...d })
   }
   map.forEach((d, stage) => {
-    if (!FUNNEL_ORDER.includes(stage) && !EXCLUDE_FROM_FUNNEL.has(stage)) result.push({ stage, ...d })
+    if (!FUNNEL_ORDER.includes(stage)) stages.push({ stage, ...d })
   })
-  return result
+
+  return {
+    stages,
+    won:  { count: wonCount, amount: wonAmt  },
+    lost: { count: lostCount, amount: lostAmt },
+  }
 }
 
 export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoint[] {

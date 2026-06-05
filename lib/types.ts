@@ -57,6 +57,12 @@ export interface FunnelStage {
   amount: number
 }
 
+export interface FunnelData {
+  stages: FunnelStage[]
+  won:  { count: number; amount: number }
+  lost: { count: number; amount: number }
+}
+
 export interface WeeklyPoint {
   week: string
   dialled: number

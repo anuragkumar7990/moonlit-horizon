@@ -4,7 +4,7 @@ import MetricCard from './MetricCard'
 import MetricsGraph from './MetricsGraph'
 import FunnelColumn from './FunnelColumn'
 import PersonSelector from './PersonSelector'
-import type { LeadCounts, FunnelStage, WeeklyPoint } from '@/lib/types'
+import type { LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
 type Period = 'weekly' | 'monthly'
@@ -13,7 +13,7 @@ interface Props {
   callsData:    CallsColumnData
   meetingsData: MeetingsColumnData
   leads:        LeadCounts
-  funnel:       FunnelStage[]
+  funnel:       FunnelData
   weeklyTrend:  WeeklyPoint[]
 }
 
@@ -111,7 +111,7 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         {/* IV — Pipeline funnel */}
         <div className="card">
           <ColHeader>Pipeline</ColHeader>
-          <FunnelColumn stages={funnel} />
+          <FunnelColumn data={funnel} />
         </div>
 
         {/* V — Metrics graph */}
