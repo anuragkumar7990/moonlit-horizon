@@ -45,9 +45,9 @@ export async function getDealByAccount(accountName: string): Promise<ZohoDeal | 
 }
 
 export async function getContacts(): Promise<ZohoContact[]> {
-  const data = await zohoGet('/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name&per_page=200') as { data?: Record<string, unknown>[] }
+  const data = await zohoGet('/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact&per_page=200') as { data?: Record<string, unknown>[] }
   return (data.data ?? []).map((c) => {
-    const acct = typeof c.Account_Name === 'object' && c.Account_Name !== null ? c.Account_Name as Record<string, unknown> : null
+    const acct = typeof c.Account_Contact === 'object' && c.Account_Contact !== null ? c.Account_Contact as Record<string, unknown> : null
     return {
       id: String(c.id ?? ''),
       firstName: String(c.First_Name ?? ''),
@@ -55,7 +55,7 @@ export async function getContacts(): Promise<ZohoContact[]> {
       email: String(c.Email ?? ''),
       phone: String(c.Phone ?? c.Mobile ?? ''),
       accountId: String(acct?.id ?? ''),
-      accountName: String(acct?.name ?? c.Account_Name ?? ''),
+      accountName: String(acct?.name ?? ''),
     }
   })
 }
@@ -124,11 +124,11 @@ export async function getLeadById(id: string): Promise<{ id: string; firstName: 
 }
 
 export async function getContactById(id: string): Promise<ZohoContact | null> {
-  const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name`) as { data?: Record<string, unknown>[] }
+  const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact`) as { data?: Record<string, unknown>[] }
   const c = data.data?.[0]
   if (!c) return null
-  const accountLookup = typeof c.Account_Name === 'object' && c.Account_Name !== null
-    ? c.Account_Name as Record<string, unknown>
+  const accountLookup = typeof c.Account_Contact === 'object' && c.Account_Contact !== null
+    ? c.Account_Contact as Record<string, unknown>
     : null
   return {
     id: String(c.id ?? ''),
@@ -137,7 +137,7 @@ export async function getContactById(id: string): Promise<ZohoContact | null> {
     email: String(c.Email ?? ''),
     phone: String(c.Phone ?? c.Mobile ?? ''),
     accountId: String(accountLookup?.id ?? ''),
-    accountName: String(accountLookup?.name ?? c.Account_Name ?? ''),
+    accountName: String(accountLookup?.name ?? ''),
   }
 }
 
