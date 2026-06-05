@@ -75,13 +75,20 @@ export async function POST(req: NextRequest) {
     // Create Zoho CRM Deal
     const closingDate = new Date(startTime.getTime() + 30 * 24 * 60 * 60 * 1000)
       .toISOString().split('T')[0]
-    const dealId = await createDeal({
-      accountId,
-      contactId,
-      dealName: title,
-      stage: 'Meeting Booked',
-      closingDate,
-    }).catch(() => '')
+    let dealId = ''
+    let dealError = ''
+    try {
+      dealId = await createDeal({
+        accountId,
+        contactId,
+        dealName: title,
+        stage: 'Qualification',
+        closingDate,
+      })
+    } catch (err) {
+      dealError = String(err)
+      console.error('[/api/book] Zoho deal creation failed:', err)
+    }
 
     // Append to Google Sheets Meetings tab
     await sheets.spreadsheets.values.append({
@@ -121,7 +128,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ ok: true, meetingId, gMeetLink, dealId })
+    return NextResponse.json({ ok: true, meetingId, gMeetLink, dealId, dealError: dealError || undefined })
   } catch (err) {
     console.error('[/api/book]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
