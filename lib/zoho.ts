@@ -21,7 +21,7 @@ async function zohoGet(path: string): Promise<unknown> {
   const token = await getAccessToken()
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    next: { revalidate: 60 },
+    cache: 'no-store',
   })
   return res.json()
 }
