@@ -50,6 +50,7 @@ export interface ZohoContact {
   firstName: string
   lastName: string
   email: string
+  phone: string
   accountName: string
 }
 

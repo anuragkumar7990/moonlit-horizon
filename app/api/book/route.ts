@@ -29,11 +29,12 @@ export async function POST(req: NextRequest) {
       contactId: string
       contactName: string
       contactEmail: string
+      contactPhone?: string
       meetingTime: string
       meetingType: 'L1' | 'L2+'
     }
 
-    const { accountName, contactName, contactEmail, meetingTime, meetingType, accountId, contactId } = body
+    const { accountName, contactName, contactEmail, contactPhone = '', meetingTime, meetingType, accountId, contactId } = body
 
     const title = meetingType === 'L1'
       ? `${accountName} <> The Test Tribe | Upskilling for Teams`
@@ -80,10 +81,13 @@ export async function POST(req: NextRequest) {
     try {
       dealId = await createDeal({
         accountId,
-        contactId,
-        dealName: title,
+        accountName,
+        contactName,
+        contactEmail,
+        contactPhone,
         stage: meetingType === 'L1' ? 'Discovery Call booked' : 'Outline Meeting Conducted',
         closingDate,
+        dateOfFirstContact: startTime.toISOString().split('T')[0],
       })
     } catch (err) {
       dealError = String(err)

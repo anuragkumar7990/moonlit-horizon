@@ -45,12 +45,13 @@ export async function getDealByAccount(accountName: string): Promise<ZohoDeal | 
 }
 
 export async function getContacts(): Promise<ZohoContact[]> {
-  const data = await zohoGet('/Contacts?fields=First_Name,Last_Name,Email,Account_Name&per_page=200') as { data?: Record<string, unknown>[] }
+  const data = await zohoGet('/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name&per_page=200') as { data?: Record<string, unknown>[] }
   return (data.data ?? []).map((c) => ({
     id: String(c.id ?? ''),
     firstName: String(c.First_Name ?? ''),
     lastName: String(c.Last_Name ?? ''),
     email: String(c.Email ?? ''),
+    phone: String(c.Phone ?? c.Mobile ?? ''),
     accountName: typeof c.Account_Name === 'object' && c.Account_Name !== null ? String((c.Account_Name as Record<string, unknown>).name ?? '') : String(c.Account_Name ?? ''),
   }))
 }
@@ -65,10 +66,13 @@ export async function getZohoAccounts(): Promise<ZohoAccount[]> {
 
 export async function createDeal(payload: {
   accountId: string
-  contactId: string
-  dealName: string
+  accountName: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
   stage: string
   closingDate: string
+  dateOfFirstContact: string
 }): Promise<string> {
   const token = await getAccessToken()
   const res = await fetch(`${BASE_URL}/Deals`, {
@@ -79,12 +83,18 @@ export async function createDeal(payload: {
     },
     body: JSON.stringify({
       data: [{
-        Deal_Name: payload.dealName,
+        Deal_Name: payload.accountName,
         Stage: payload.stage,
         Pipeline: 'Internal Community Data',
         Closing_Date: payload.closingDate,
-        Account_Name: { id: payload.accountId },
-        Contact_Name: { id: payload.contactId },
+        Account: { id: payload.accountId },
+        Company_Name: payload.accountName,
+        Contact_Full_Name: payload.contactName,
+        Contact_Email: payload.contactEmail,
+        Contact_Phone_No: payload.contactPhone || undefined,
+        Deal_Tag: 'Warm',
+        Date_of_First_Contact: payload.dateOfFirstContact,
+        Lvl_1_Source: 'Internal Community Data',
       }]
     }),
   })

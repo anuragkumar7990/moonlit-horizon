@@ -108,6 +108,7 @@ client.on('interactionCreate', async interaction => {
           contactId,
           contactName: `${contact.firstName} ${contact.lastName}`.trim(),
           contactEmail: contact.email,
+          contactPhone: contact.phone || '',
           meetingTime,
           meetingType,
         }),
