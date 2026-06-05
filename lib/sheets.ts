@@ -100,6 +100,54 @@ export async function getAccounts(): Promise<Account[]> {
   }))
 }
 
+const CALLS_HEADERS = [
+  'Date', 'Time', 'Account', 'Contact Name', 'Contact Phone', 'SDR',
+  'Duration', 'Outcome', 'Notes', 'Zoho Call ID', 'Follow-up Date',
+  'Recording Drive Link', 'Transcript Summary', 'Auto Tags',
+]
+
+export async function appendCallRow(row: {
+  date: string
+  time: string
+  account: string
+  contactName: string
+  contactPhone: string
+  sdr: string
+  outcome: string
+  notes: string
+  followUpDate: string
+}): Promise<void> {
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Calls')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Calls' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Calls!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [CALLS_HEADERS] },
+    })
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Calls!A:N',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[
+        row.date, row.time, row.account, row.contactName, row.contactPhone,
+        row.sdr, '', row.outcome, row.notes, '',
+        row.followUpDate, '', '', '',
+      ]],
+    },
+  })
+}
+
 const PROSPECTS_HEADERS = ['Date', 'Email', 'First Name', 'Last Name', 'Company', 'Designation', 'City', 'Phone', 'Lvl 1 Source', 'Lvl 2 Source', 'Priority', 'Status']
 
 export async function appendProspectRows(rows: {

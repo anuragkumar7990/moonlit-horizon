@@ -14,6 +14,19 @@ async function vercelGet(path) {
   return res.json()
 }
 
+async function vercelPost(path, body) {
+  const res = await fetch(`${VERCEL_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: BASIC_AUTH },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Vercel POST ${path} → ${res.status}: ${text}`)
+  }
+  return res.json()
+}
+
 // Parse "YYYY-MM-DD HH:MM" as IST
 function parseIST(str) {
   const clean = str.trim()
@@ -21,6 +34,19 @@ function parseIST(str) {
   const m = normalised.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/)
   if (!m) return null
   return `${m[1]}T${m[2]}:00+05:30`
+}
+
+// Outcome label for display
+const OUTCOME_LABELS = {
+  'meeting booked':   '✅ Meeting Booked',
+  'connected':        '✅ Connected — Interested',
+  'not interested':   '✅ Connected — Not Interested',
+  'callback later':   '✅ Connected — Callback Later',
+  'send more info':   '✅ Connected — Send More Info',
+  'no answer':        '📵 No Answer',
+  'voicemail':        '📵 Voicemail',
+  'busy':             '📵 Busy',
+  'wrong number':     '📵 Wrong Number',
 }
 
 // Cache for autocomplete data — refreshed every 5 minutes
@@ -55,10 +81,41 @@ client.on('interactionCreate', async interaction => {
   // ── Autocomplete ────────────────────────────────────────────────
   if (interaction.type === InteractionType.ApplicationCommandAutocomplete) {
     const focused = interaction.options.getFocused(true)
+    const query = focused.value.toLowerCase()
 
     try {
-      const query = focused.value.toLowerCase()
+      // /mh log call — account autocomplete (searches both accounts + leads by company)
+      if (interaction.commandName === 'mh' && focused.name === 'account') {
+        const accountChoices = cache.accounts
+          .filter(a => a.accountName.toLowerCase().includes(query))
+          .map(a => ({ name: a.accountName, value: a.accountName }))
 
+        const leadChoices = cache.leads
+          .filter(l => {
+            const company = (l.company || '').toLowerCase()
+            const name = `${l.firstName} ${l.lastName}`.toLowerCase()
+            return company.includes(query) || name.includes(query)
+          })
+          .map(l => {
+            const displayName = l.company
+              ? `${l.company} (${l.firstName} ${l.lastName})`.trim()
+              : `${l.firstName} ${l.lastName}`.trim()
+            return { name: displayName, value: l.company || `${l.firstName} ${l.lastName}`.trim() }
+          })
+
+        const seen = new Set()
+        const choices = [...accountChoices, ...leadChoices]
+          .filter(c => {
+            if (seen.has(c.value)) return false
+            seen.add(c.value)
+            return true
+          })
+          .slice(0, 25)
+
+        return interaction.respond(choices)
+      }
+
+      // /book — account autocomplete (returns Zoho ID as value)
       if (focused.name === 'account') {
         const choices = cache.accounts
           .filter(a => a.accountName.toLowerCase().includes(query))
@@ -223,6 +280,57 @@ client.on('interactionCreate', async interaction => {
     } catch (err) {
       console.error('/book-prospect error:', err)
       await interaction.editReply(`❌ Unexpected error: ${err.message}`)
+    }
+  }
+
+  // ── /mh log call ────────────────────────────────────────────────
+  if (interaction.commandName === 'mh') {
+    const group = interaction.options.getSubcommandGroup(false)
+    const sub   = interaction.options.getSubcommand(false)
+
+    if (group === 'log' && sub === 'call') {
+      await interaction.deferReply()
+
+      const account     = interaction.options.getString('account', true)
+      const outcome     = interaction.options.getString('outcome', true)
+      const contact     = interaction.options.getString('contact')   ?? ''
+      const phone       = interaction.options.getString('phone')     ?? ''
+      const notes       = interaction.options.getString('notes')     ?? ''
+      const followUpRaw = interaction.options.getString('follow_up') ?? ''
+
+      // Validate follow-up date if provided
+      if (followUpRaw && !/^\d{4}-\d{2}-\d{2}$/.test(followUpRaw)) {
+        return interaction.editReply('❌ Follow-up date must be in `YYYY-MM-DD` format, e.g. `2026-06-09`')
+      }
+
+      const sdr = interaction.user.displayName || interaction.user.username
+
+      try {
+        await vercelPost('/api/log-call', {
+          account,
+          contactName:  contact,
+          contactPhone: phone,
+          sdr,
+          outcome,
+          notes,
+          followUpDate: followUpRaw,
+        })
+
+        const outcomeLabel = OUTCOME_LABELS[outcome] ?? outcome
+        const lines = [
+          `📞 **Call logged** by ${sdr}`,
+          `**Account:** ${account}`,
+        ]
+        if (contact) lines.push(`**Contact:** ${contact}${phone ? ` · ${phone}` : ''}`)
+        lines.push(`**Outcome:** ${outcomeLabel}`)
+        if (followUpRaw) lines.push(`**Follow-up:** ${followUpRaw}`)
+        if (notes) lines.push(`**Notes:** ${notes}`)
+
+        await interaction.editReply(lines.join('\n'))
+      } catch (err) {
+        console.error('/mh log call error:', err)
+        await interaction.editReply(`❌ Failed to log call: ${err.message}`)
+      }
     }
   }
 })

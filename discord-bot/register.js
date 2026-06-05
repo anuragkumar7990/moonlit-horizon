@@ -55,6 +55,62 @@ const bookProspectCommand = new SlashCommandBuilder()
       )
   )
 
+const mhCommand = new SlashCommandBuilder()
+  .setName('mh')
+  .setDescription('Moonlit Horizon — sales ops commands')
+  .addSubcommandGroup(group =>
+    group
+      .setName('log')
+      .setDescription('Log sales activity')
+      .addSubcommand(sub =>
+        sub
+          .setName('call')
+          .setDescription('Log a call you just made')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Company / account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('outcome')
+              .setDescription('How did the call go?')
+              .setRequired(true)
+              .addChoices(
+                { name: '✅ Meeting Booked',             value: 'meeting booked'   },
+                { name: '✅ Connected — Interested',     value: 'connected'        },
+                { name: '✅ Connected — Not Interested', value: 'not interested'   },
+                { name: '✅ Connected — Callback Later', value: 'callback later'   },
+                { name: '✅ Connected — Send More Info', value: 'send more info'   },
+                { name: '📵 No Answer',                 value: 'no answer'        },
+                { name: '📵 Voicemail',                 value: 'voicemail'        },
+                { name: '📵 Busy',                      value: 'busy'             },
+                { name: '📵 Wrong Number',              value: 'wrong number'     },
+              )
+          )
+          .addStringOption(opt =>
+            opt.setName('contact')
+              .setDescription('Contact name (optional)')
+              .setRequired(false)
+          )
+          .addStringOption(opt =>
+            opt.setName('phone')
+              .setDescription('Contact phone number (optional)')
+              .setRequired(false)
+          )
+          .addStringOption(opt =>
+            opt.setName('notes')
+              .setDescription('Notes from the call (optional)')
+              .setRequired(false)
+          )
+          .addStringOption(opt =>
+            opt.setName('follow_up')
+              .setDescription('Follow-up date in YYYY-MM-DD format (optional)')
+              .setRequired(false)
+          )
+      )
+  )
+
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
 const clientId = process.env.DISCORD_CLIENT_ID
 const guildId  = process.env.DISCORD_GUILD_ID
@@ -69,7 +125,7 @@ const guildId  = process.env.DISCORD_GUILD_ID
   console.log(`Registering guild commands for guild ${guildId}...`)
   await rest.put(
     Routes.applicationGuildCommands(clientId, guildId),
-    { body: [bookCommand.toJSON(), bookProspectCommand.toJSON()] }
+    { body: [bookCommand.toJSON(), bookProspectCommand.toJSON(), mhCommand.toJSON()] }
   )
-  console.log('Done. /book and /book-prospect registered to guild.')
+  console.log('Done. /book, /book-prospect, and /mh registered to guild.')
 })()
