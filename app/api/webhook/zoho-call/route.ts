@@ -71,27 +71,32 @@ export async function POST(req: NextRequest) {
     }, { status: 400 })
   }
 
-  if (!call.whoId?.id) {
-    return NextResponse.json({ error: 'Call has no linked Contact or Lead (Who_Id missing)' }, { status: 400 })
+  // Resolve the entity ID to act on.
+  // Contact-linked call: Who_Id = Contact, What_Id = Account
+  // Lead-linked call:    Who_Id = null,    What_Id = Lead,    $se_module = "Leads"
+  let resolvedId = call.whoId?.id ?? ''
+  const isLeadCall = !call.whoId?.id && call.seModule === 'Leads' && !!call.whatId?.id
+
+  if (isLeadCall) resolvedId = call.whatId!.id
+
+  if (!resolvedId) {
+    return NextResponse.json({ error: 'Call has no linked Contact or Lead (Who_Id and What_Id both missing)' }, { status: 400 })
   }
 
-  const whoId = call.whoId.id
   let contactId = ''
   let accountId = ''
   let accountName = ''
 
-  // Zoho sometimes omits the module field from Who_Id, so we can't always trust it.
-  // Strategy: if module is explicitly "Contacts" skip the lead check; otherwise check.
-  const isDefinitelyContact = call.whoId.module === 'Contacts'
+  // If it's a Lead (either explicit via $se_module or detected by Who_Id module), convert first.
+  const isDefinitelyContact = call.whoId?.module === 'Contacts' && !isLeadCall
 
   if (!isDefinitelyContact) {
-    // Could be a Lead (explicitly flagged, or module unknown) — check Zoho
-    const lead = await getLeadById(whoId)
+    const lead = await getLeadById(resolvedId)
     if (lead) {
-      console.log(`[webhook/zoho-call] Converting Lead ${whoId} to Contact+Account`)
-      const converted = await convertLead(whoId)
+      console.log(`[webhook/zoho-call] Converting Lead ${resolvedId} to Contact+Account`)
+      const converted = await convertLead(resolvedId)
       if (!converted) {
-        return NextResponse.json({ error: `Failed to convert Lead ${whoId}` }, { status: 500 })
+        return NextResponse.json({ error: `Failed to convert Lead ${resolvedId}` }, { status: 500 })
       }
       contactId = converted.contactId
       accountId = converted.accountId
@@ -100,12 +105,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Not a lead (or lead check skipped) — use Who_Id as Contact directly
-  if (!contactId) contactId = whoId
+  // Not a lead (or lead check skipped) — use resolved ID as Contact directly
+  if (!contactId) contactId = resolvedId
 
   const contact = await getContactById(contactId)
   if (!contact) {
-    return NextResponse.json({ error: `Who_Id ${whoId} not found as Contact or Lead in Zoho` }, { status: 404 })
+    return NextResponse.json({ error: `${resolvedId} not found as Contact or Lead in Zoho` }, { status: 404 })
   }
   if (!contact.email) {
     return NextResponse.json({

@@ -146,6 +146,7 @@ export async function getCallById(id: string): Promise<{
   id: string
   callResult: string
   proposedMeetingTime: string
+  seModule: string
   whoId: { id: string; module: string; name: string } | null
   whatId: { id: string; module: string; name: string } | null
 } | null> {
@@ -162,6 +163,7 @@ export async function getCallById(id: string): Promise<{
     id: String(c.id ?? ''),
     callResult: String(c.Call_Result ?? ''),
     proposedMeetingTime: String(c.Proposed_Meeting_Time ?? ''),
+    seModule: String(c.$se_module ?? ''),
     whoId,
     whatId,
   }
