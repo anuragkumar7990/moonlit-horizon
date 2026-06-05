@@ -25,6 +25,7 @@ const LVL2_OPTIONS = [
   "TribeQonf'25", "TribeQonf'26", "QonfX'25 (Hyd)", "QonfX'25 (Blr)",
   "QonfX'26 (Blr)", "Testflix'25", "Webinar - Ganesa (22.04.26)",
   "Webinar - Anshu Tiwari (19.05.26)", "Email Sample Set",
+  "RAG Workshop with Janani (04.06.26)",
 ]
 
 function parseCSVPreview(text: string): { headers: string[]; rows: string[][] } {
