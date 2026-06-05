@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, DragEvent, ChangeEvent } from 'react'
+import { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react'
 
 interface UploadResult {
   row: number
@@ -21,12 +21,6 @@ interface UploadResponse {
 }
 
 const LVL1_OPTIONS = ['Webinar', 'Events', 'Email', 'Referrals', 'Internal Community Data']
-const LVL2_OPTIONS = [
-  "TribeQonf'25", "TribeQonf'26", "QonfX'25 (Hyd)", "QonfX'25 (Blr)",
-  "QonfX'26 (Blr)", "Testflix'25", "Webinar - Ganesa (22.04.26)",
-  "Webinar - Anshu Tiwari (19.05.26)", "Email Sample Set",
-  "RAG Workshop with Janani (04.06.26)",
-]
 
 function parseCSVPreview(text: string): { headers: string[]; rows: string[][] } {
   const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 6)
@@ -45,7 +39,41 @@ export default function UploadPage() {
   const [response, setResponse] = useState<UploadResponse | null>(null)
   const [lvl1Source, setLvl1Source] = useState('Webinar')
   const [lvl2Source, setLvl2Source] = useState('')
+  const [lvl2Options, setLvl2Options] = useState<string[]>([])
+  const [lvl2Loading, setLvl2Loading] = useState(true)
+  const [addingNew, setAddingNew] = useState(false)
+  const [newSourceValue, setNewSourceValue] = useState('')
+  const [addingStatus, setAddingStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetch('/api/zoho-sources')
+      .then(r => r.json())
+      .then((d: { values?: string[] }) => { setLvl2Options(d.values ?? []); setLvl2Loading(false) })
+      .catch(() => setLvl2Loading(false))
+  }, [])
+
+  async function handleAddSource() {
+    if (!newSourceValue.trim()) return
+    setAddingStatus('saving')
+    try {
+      const res = await fetch('/api/zoho-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: newSourceValue.trim() }),
+      })
+      const data: { ok?: boolean; value?: string; error?: string } = await res.json()
+      if (data.error) { setAddingStatus('error'); return }
+      const added = data.value!
+      setLvl2Options(prev => [...prev, added])
+      setLvl2Source(added)
+      setAddingNew(false)
+      setNewSourceValue('')
+      setAddingStatus('idle')
+    } catch {
+      setAddingStatus('error')
+    }
+  }
 
   async function handleFile(f: File) {
     if (!f.name.endsWith('.csv')) {
@@ -134,16 +162,55 @@ export default function UploadPage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 Lvl 2 Source
               </label>
-              <input
-                list="lvl2-options"
-                value={lvl2Source}
-                onChange={e => setLvl2Source(e.target.value)}
-                placeholder="Type or select…"
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <datalist id="lvl2-options">
-                {LVL2_OPTIONS.map(v => <option key={v} value={v} />)}
-              </datalist>
+              {addingNew ? (
+                <div className="space-y-2">
+                  <input
+                    autoFocus
+                    value={newSourceValue}
+                    onChange={e => setNewSourceValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddSource(); if (e.key === 'Escape') { setAddingNew(false); setNewSourceValue(''); setAddingStatus('idle') } }}
+                    placeholder="New source name…"
+                    className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddSource}
+                      disabled={addingStatus === 'saving' || !newSourceValue.trim()}
+                      className="flex-1 bg-blue-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {addingStatus === 'saving' ? 'Saving to Zoho…' : 'Add to Zoho'}
+                    </button>
+                    <button
+                      onClick={() => { setAddingNew(false); setNewSourceValue(''); setAddingStatus('idle') }}
+                      className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 rounded-lg border border-slate-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {addingStatus === 'error' && (
+                    <p className="text-xs text-red-600">Failed to add. Try again.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <select
+                    value={lvl2Source}
+                    onChange={e => setLvl2Source(e.target.value)}
+                    disabled={lvl2Loading}
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    <option value="">{lvl2Loading ? 'Loading…' : '— None —'}</option>
+                    {lvl2Options.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <button
+                    onClick={() => setAddingNew(true)}
+                    title="Add new Lvl 2 Source to Zoho"
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-400 text-lg leading-none transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

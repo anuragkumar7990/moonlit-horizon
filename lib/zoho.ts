@@ -280,6 +280,48 @@ export async function convertLead(leadId: string): Promise<{
   }
 }
 
+const LVL2_FIELD_ID = '1321968000000748250'
+
+export async function getLvl2SourceValues(): Promise<string[]> {
+  const token = await getAccessToken()
+  const res = await fetch(`${BASE_URL}/settings/fields/${LVL2_FIELD_ID}?module=Leads`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    cache: 'no-store',
+  })
+  const data = await res.json() as { fields?: { pick_list_values: { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }[] }[] }
+  const field = data.fields?.[0]
+  if (!field) return []
+  return field.pick_list_values
+    .filter(v => v.actual_value !== '-None-')
+    .map(v => v.actual_value)
+}
+
+export async function addLvl2SourceValue(value: string): Promise<void> {
+  const token = await getAccessToken()
+  // Fetch current pick_list_values so we can append without overwriting
+  const getRes = await fetch(`${BASE_URL}/settings/fields/${LVL2_FIELD_ID}?module=Leads`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    cache: 'no-store',
+  })
+  const getData = await getRes.json() as { fields?: { pick_list_values: { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }[] }[] }
+  const existing = getData.fields?.[0]?.pick_list_values ?? []
+  const putRes = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
+    method: 'PUT',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: [{
+        id: LVL2_FIELD_ID,
+        pick_list_values: [
+          ...existing,
+          { display_value: value, actual_value: value, sequence_number: existing.length + 1 },
+        ],
+      }],
+    }),
+  })
+  const result = await putRes.json() as { status?: string; message?: string }
+  if (result.status === 'error') throw new Error(result.message ?? JSON.stringify(result))
+}
+
 export async function createDeal(payload: {
   accountId: string
   accountName: string
