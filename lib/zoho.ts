@@ -23,7 +23,8 @@ async function zohoGet(path: string): Promise<unknown> {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
     cache: 'no-store',
   })
-  return res.json()
+  const text = await res.text()
+  return text ? JSON.parse(text) : {}
 }
 
 export async function getDeals(): Promise<ZohoDeal[]> {
