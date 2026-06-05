@@ -93,8 +93,8 @@ export async function POST(req: NextRequest) {
   if (!isDefinitelyContact) {
     const lead = await getLeadById(resolvedId)
     if (lead) {
-      console.log(`[webhook/zoho-call] Converting Lead ${resolvedId} to Contact+Account`)
-      const converted = await convertLead(resolvedId)
+      console.log(`[webhook/zoho-call] Converting Lead ${resolvedId} to Contact+Account (company="${lead.company}")`)
+      const converted = await convertLead(resolvedId, lead.company || undefined)
       if (!converted) {
         return NextResponse.json({ error: `Failed to convert Lead ${resolvedId}` }, { status: 500 })
       }

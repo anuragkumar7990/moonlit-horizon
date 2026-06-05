@@ -110,7 +110,7 @@ export async function createLeads(leads: {
 
 export async function getLeadById(id: string): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string } | null> {
   try {
-    const data = await zohoGet(`/Leads/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Company`) as { data?: Record<string, unknown>[] }
+    const data = await zohoGet(`/Leads/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Company,Company_Name`) as { data?: Record<string, unknown>[] }
     const l = data.data?.[0]
     if (!l) return null
     return {
@@ -119,7 +119,7 @@ export async function getLeadById(id: string): Promise<{ id: string; firstName: 
       lastName: String(l.Last_Name ?? ''),
       email: String(l.Email ?? ''),
       phone: String(l.Phone ?? l.Mobile ?? ''),
-      company: String(l.Company ?? ''),
+      company: String(l.Company ?? l.Company_Name ?? ''),
     }
   } catch { return null }
 }
@@ -169,7 +169,7 @@ export async function getCallById(id: string): Promise<{
   }
 }
 
-export async function convertLead(leadId: string): Promise<{
+export async function convertLead(leadId: string, accountName?: string): Promise<{
   contactId: string
   accountId: string
   contactName?: string
@@ -184,13 +184,15 @@ export async function convertLead(leadId: string): Promise<{
         overwrite: true,
         notify_lead_owner: false,
         notify_new_entity_owner: false,
-        Accounts: {},
+        Accounts: accountName ? { Account_Name: accountName } : {},
         Contacts: {},
-        Deals: null,
       }]
     }),
   })
-  const data = await res.json() as { data?: { Contacts?: { id: string; name?: string }; Accounts?: { id: string; name?: string } }[] }
+  const text = await res.text()
+  console.log(`[convertLead] status=${res.status} body=${text}`)
+  if (!text) return null
+  const data = JSON.parse(text) as { data?: { Contacts?: { id: string; name?: string }; Accounts?: { id: string; name?: string } }[] }
   const record = data.data?.[0]
   if (!record?.Contacts?.id || !record?.Accounts?.id) return null
   return {
