@@ -91,9 +91,17 @@ function clean(val: string): string {
   return t
 }
 
-// Rule 4: normalise phone
+// Rule 4: normalise phone (handles scientific notation from Excel, e.g. 9.1967811E+9)
 function normalisePhone(val: string): string | undefined {
-  const digits = val.replace(/\D/g, '')
+  const trimmed = val.trim()
+  if (!trimmed) return undefined
+  let normalized = trimmed
+  if (/^[\d.]+[eE][+\-]?\d+$/.test(trimmed)) {
+    const num = Math.round(parseFloat(trimmed))
+    if (isNaN(num)) return undefined
+    normalized = num.toString()
+  }
+  const digits = normalized.replace(/\D/g, '')
   if (!digits) return undefined
   return digits.length > 10 ? `+${digits}` : digits
 }
