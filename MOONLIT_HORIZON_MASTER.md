@@ -470,144 +470,229 @@ Every created and updated lead is logged to the `Prospects` tab:
 ### Overview
 The current Sales Pipeline homepage will be replaced by a full Mission Control Dashboard. It will be the single source of truth for the entire business — pulling from Zoho CRM, Google Sheets, and payment systems.
 
-### The 5 Views
-The dashboard opens to **Overall Business View** by default. A selector at the top lets you switch between:
-
-| View | Focus |
-|---|---|
-| **Overall Business** | All modules, full picture — the default opening view |
-| **Anurag's View** | Strategic metrics, payments, funnel health |
-| **Mahesh's View** | TBD based on Mahesh's role |
-| **Ashutosh's View** | TBD based on Ashutosh's role |
-| **Tanishq's View** | SDR-focused — calls, meetings booked, pipeline |
-
-Each view picks specific modules and filters from the 7 core modules below.
+The dashboard is backed by a **multi-agent AI system** (running on the existing Hostinger VPS via OpenClaw) that actively manages each module. Commands flow in through Discord `#sales-ops`; each agent team posts its outputs to a dedicated Discord channel.
 
 ---
 
-### Module 1 — Calling Tracker
+### Agent Architecture
 
-**Purpose**: Track all outbound/inbound calls from Zoho CRM, surface them on the dashboard, and sync to Google Sheets.
+```
+                    ┌─────────────────────────────┐
+                    │   MOONLIT HORIZON            │
+                    │   (Master Orchestrator)      │
+                    │   Listens on: #sales-ops     │
+                    └────────────┬────────────────┘
+                                 │ routes to
+          ┌──────────┬───────────┼───────────┬──────────┬──────────┬──────────┐
+          ▼          ▼           ▼           ▼          ▼          ▼          ▼
+     Calling      Meetings    Emails      Funnel      P0s       Stats    Payments
+      Team         Team        Team        Team       Team       Team      Team
+          │          │           │           │          │          │          │
+    #calls-log  #meetings-log #email-log #funnel    #p0-tasks   #stats   #payments
+```
 
-**Data flow**: Zoho CRM Calls module → Dashboard → Google Sheets
+**Platform**: OpenClaw on Hostinger VPS (no additional cost — already running)
 
-**What it will show**:
+**Discord channel structure**:
+| Channel | Purpose |
+|---|---|
+| `#sales-ops` | All commands in — the only place you talk to the system |
+| `#calls-log` | Calling Team outputs — call logs, summaries, daily tally |
+| `#meetings-log` | Meetings Team outputs — booking confirmations, follow-up reminders |
+| `#email-log` | Emails Team outputs — new thread alerts, draft suggestions |
+| `#funnel-updates` | Funnel Team outputs — deal stage changes, stale deal alerts |
+| `#p0-tasks` | P0 Team outputs — today's critical tasks, completions |
+| `#stats` | Stats Team outputs — daily/weekly digest |
+| `#payments` | Payments Team outputs — invoice sent, payment received, overdue alerts |
+
+---
+
+### Master Agent — Moonlit Horizon
+
+**Role**: Single entry point for all AI interactions. Interprets commands from `#sales-ops`, decides which sub-agent team(s) to engage, and handles cross-module queries.
+
+**Capabilities**:
+- Route any command to the right team ("log a call with Wabtec" → Calling Team)
+- Answer cross-module questions ("what's the status on Zoomcar?" → queries Meetings + Funnel + Emails simultaneously and summarises)
+- Produce daily morning briefings (pushes to `#sales-ops` at 9am IST)
+- Produce weekly digest (pushes to `#stats` every Monday)
+- Handle ambiguous commands and ask for clarification
+
+**Example commands** (all typed in `#sales-ops`):
+```
+/mh status Wabtec
+/mh briefing
+/mh book meeting
+/mh log call
+/mh p0 today
+/mh funnel
+```
+
+---
+
+### Sub-Agent Team 1 — Calling Team
+
+**Agents**:
+1. **Call Logger** — logs a new call from Discord command into Zoho CRM + `Calls` Sheets tab
+2. **Call Monitor** — polls Zoho Calls module every 30 min, catches calls logged directly in Zoho, syncs to Sheets
+3. **Call Summariser** — parses call notes/outcomes, generates a 1-line summary, posts to `#calls-log`
+
+**Discord output channel**: `#calls-log`
+
+**Data flow**: Discord command / Zoho CRM Calls → Google Sheets `Calls` tab → Dashboard
+
+**Dashboard module**: Calling Tracker
 - Total calls today / this week
 - Calls by outcome (Connected, No Answer, Callback Requested, etc.)
-- Calls per SDR (Tanishq and others)
-- Timeline of recent calls with account name, contact, duration, outcome, notes
-- Calls linked to deals/accounts
+- Calls per team member
+- Timeline of recent calls — account, contact, duration, outcome, notes
 
-**Implementation plan**:
-- New Zoho function: `getCalls()` — queries Calls module with COQL
-- New Sheets tab: `Calls` — append on each call logged
-- New API route: `GET /api/calls`
-- New dashboard module component: `CallingTracker`
+**New Sheets tab**: `Calls` — Date, Account, Contact, SDR, Duration, Outcome, Notes, Zoho Call ID
 
 ---
 
-### Module 2 — Meetings
+### Sub-Agent Team 2 — Meetings Team
 
-**Purpose**: Full view of all past and upcoming meetings, connected to Zoho deals and Circleback notes.
+**Agents** (2 already built, 1 new):
+1. **Meeting Booking Agent** ✅ — Discord /book flow → Calendar + Zoho Deal + Sheets + confirmation
+2. **Notes Summarisation Agent** ✅ — Circleback → Sheets `Notes` tab
+3. **Follow-up Reminder Agent** 🆕 — 24h after a meeting with no follow-up logged → pings assigned SDR in `#meetings-log`
 
-**What it will show**:
-- Upcoming meetings this week (already partially built on homepage)
+**Discord output channel**: `#meetings-log`
+
+**Dashboard module**: Meetings
+- Upcoming meetings this week
 - Past meetings with notes status (notes received / pending)
 - Meeting funnel: Booked → Attended → Follow-up Sent → Proposal Sent
-- Meetings per account, per week
-
-**Current state**: Meetings tab in Sheets is populated by OpenClaw. MeetingTimeline component exists per client. Moving this to a global meetings view across all accounts.
+- Global view across all accounts
 
 ---
 
-### Module 3 — Emails
+### Sub-Agent Team 3 — Emails Team
 
-**Purpose**: See all email threads with prospects and clients in one place.
+**Agents** (1 already built, 1 new):
+1. **Communications Tracker Agent** ✅ — Gmail + Discord threads → `Communications` Sheets tab
+2. **Email Draft Agent** 🆕 — on command, drafts a follow-up email for a given account based on meeting notes and deal stage; posts draft to `#email-log` for review before sending
 
-**Data flow**: Gmail (via Communications Tracker Agent) → `Communications` tab in Sheets → Dashboard
+**Discord output channel**: `#email-log`
 
-**What it will show**:
+**Dashboard module**: Emails
 - Recent email threads per account
-- Filter by: account, date range, source (Gmail vs Discord)
-- Unread/unactioned threads flagged
-- Quick reply or note-to-self capability
-
-**Note**: The Communications Tracker Agent already logs Gmail threads to Sheets. This module surfaces them properly.
+- Filter by account, date range, source (Gmail / Discord)
+- Unactioned threads flagged
 
 ---
 
-### Module 4 — Funnel
+### Sub-Agent Team 4 — Funnel Team
 
-**Purpose**: Visual sales funnel showing deal progression from Prospect → Contacted → Meeting Booked → Proposal → Closed.
+**Agents**:
+1. **Funnel Monitor** — polls Zoho Deals every hour, detects stage changes, posts updates to `#funnel-updates`
+2. **Stale Deal Alerter** — flags deals with no activity for 7+ days; posts alert to `#funnel-updates` tagging the deal owner
+3. **Funnel Reporter** — on command or weekly, posts full funnel summary to `#funnel-updates`
+
+**Discord output channel**: `#funnel-updates`
 
 **Data flow**: Zoho CRM Leads + Deals → Dashboard
 
-**What it will show**:
+**Dashboard module**: Funnel
 - Count and value at each stage
 - Drop-off rates between stages
 - Average time in each stage
-- Deals at risk (no activity in N days)
-- Filter by: date range, source (Webinar, Events, Cold Outreach, etc.)
+- Deals at risk highlighted
+- Filter by source (Webinar, Events, Cold Outreach, etc.)
 
 ---
 
-### Module 5 — P0 Tasks
+### Sub-Agent Team 5 — P0 Team
 
-**Purpose**: A lightweight task tracker for the most critical actions that need to happen today.
+**Agents**:
+1. **P0 Generator** — runs every morning at 8:30am IST; auto-creates P0 tasks from: meetings with no follow-up, proposals overdue, payments pending; posts to `#p0-tasks`
+2. **P0 Notifier** — tags assigned person on their P0 in `#p0-tasks`; re-pings at 2pm if still open
+3. **P0 Closer** — listens for "done" / "mark complete" replies in `#p0-tasks`; updates task status in Sheets
 
-**What it will show**:
-- Auto-generated P0s from: meetings with no follow-up sent, proposals overdue, payments pending
-- Manual P0s that can be added from the dashboard
-- Assigned to: Anurag / Tanishq / Ashutosh / Mahesh
-- Completed today vs pending
-- Each P0 links to the relevant Zoho deal or contact
+**Discord output channel**: `#p0-tasks`
 
-**Implementation**: Likely a separate `Tasks` tab in Sheets or a lightweight Zoho Tasks API integration.
+**Dashboard module**: P0 Tasks
+- Today's P0s with assignee and linked deal/contact
+- Completed today vs still open
+- Auto-generated vs manually added
+
+**New Sheets tab**: `Tasks` — Date, Task, Assigned To, Linked Deal, Status, Completed At
 
 ---
 
-### Module 6 — Stats
+### Sub-Agent Team 6 — Stats Team
 
-**Purpose**: The numbers that matter — business health at a glance.
+**Agents**:
+1. **Daily Stats Agent** — posts a morning metrics snapshot to `#stats` at 9am IST
+2. **Weekly Digest Agent** — every Monday 9am, posts full weekly report to `#stats`
+3. **On-demand Stats Agent** — responds to `/mh stats` command with current numbers
 
-**What it will show**:
+**Discord output channel**: `#stats`
+
+**Dashboard module**: Stats
 - Revenue this month vs last month vs target
-- Leads added this month (by source)
+- Leads added by source
 - Conversion rate: Leads → Meetings → Proposals → Closed
-- Average deal size
-- Win rate
-- Top sources by conversion (Webinar vs Events vs Cold Outreach)
-- Team performance: calls/meetings/deals per person
+- Average deal size, win rate
+- Team performance per person
 
 ---
 
-### Module 7 — Payments and Invoices
+### Sub-Agent Team 7 — Payments Team
 
-**Purpose**: Track what's been invoiced, what's been paid, and what's overdue.
+**Agents**:
+1. **Invoice Tracker** — monitors `Payments` Sheets tab for status changes; posts to `#payments` when invoice sent or payment received
+2. **Overdue Alerter** — daily check for invoices past due date; tags Anurag in `#payments`
 
-**Data flow**: TBD — likely manual Google Sheet input or Zoho Books/Razorpay integration
+**Discord output channel**: `#payments`
 
-**What it will show**:
-- Total invoiced this month
-- Total received this month
-- Outstanding (overdue) amounts
+**Data source**: TBD — `Payments` tab in Google Sheets (manual entry to start), with Zoho Books or Razorpay integration later
+
+**Dashboard module**: Payments and Invoices
+- Total invoiced / received / outstanding this month
 - Per-deal payment status
-- Invoice list with: client, amount, date, status (Draft / Sent / Paid / Overdue)
+- Invoice list: client, amount, date, status (Draft / Sent / Paid / Overdue)
+
+**New Sheets tab**: `Payments` — Date, Account, Deal, Amount, Invoice Date, Due Date, Status, Notes
+
+---
+
+### The 5 Dashboard Views
+
+The dashboard opens to **Overall Business View** by default. A view selector at the top switches context without changing the URL.
+
+| View | Modules shown | Primary audience |
+|---|---|---|
+| **Overall Business** | All 7 modules, full picture | Opening default |
+| **Anurag's View** | Funnel + Stats + Payments + P0s | Strategic oversight |
+| **Mahesh's View** | TBD | TBD |
+| **Ashutosh's View** | TBD | TBD |
+| **Tanishq's View** | Calling + Meetings + P0s assigned to Tanishq | SDR daily ops |
 
 ---
 
 ### Build Sequence
 
-The Mission Control Dashboard will be built in this order:
+**Phase 1 — Dashboard UI**
+1. View selector component (5 views)
+2. Module 2: Meetings — global view (extends existing code)
+3. Module 4: Funnel — Zoho Deals data already accessible
+4. Module 6: Stats — aggregates existing data
+5. Module 1: Calling Tracker — new Zoho Calls integration + Sheets tab
+6. Module 3: Emails — surfaces existing Communications data
+7. Module 5: P0 Tasks — new Tasks Sheets tab
+8. Module 7: Payments — new Payments Sheets tab
 
-1. **View selector** — top-level UI component to switch between the 5 views
-2. **Module 2 (Meetings)** — extends existing code, lowest lift
-3. **Module 4 (Funnel)** — Zoho Deals + Leads data already accessible
-4. **Module 6 (Stats)** — aggregates what's already being tracked
-5. **Module 1 (Calling Tracker)** — new Zoho Calls integration + Sheets tab
-6. **Module 3 (Emails)** — surfaces existing Communications data
-7. **Module 5 (P0 Tasks)** — new lightweight task layer
-8. **Module 7 (Payments)** — last, pending decision on data source
+**Phase 2 — Agent Layer (OpenClaw)**
+1. Moonlit Horizon master agent
+2. Calling Team agents (Call Logger, Call Monitor, Call Summariser)
+3. Meetings Team: Follow-up Reminder Agent (other 2 already built)
+4. Emails Team: Email Draft Agent (Comms Tracker already built)
+5. Funnel Team agents
+6. P0 Team agents
+7. Stats Team agents
+8. Payments Team agents
 
 ---
 
