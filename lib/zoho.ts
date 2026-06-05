@@ -64,6 +64,118 @@ export async function getZohoAccounts(): Promise<ZohoAccount[]> {
   }))
 }
 
+export async function createLeads(leads: {
+  firstName: string
+  lastName: string
+  company: string
+  email: string
+  phone?: string
+  designation?: string
+}[]): Promise<{
+  results: { row: number; status: 'created' | 'skipped' | 'error'; id?: string; reason?: string }[]
+}> {
+  const token = await getAccessToken()
+  const data = leads.map(l => ({
+    First_Name: l.firstName || undefined,
+    Last_Name: l.lastName,
+    Company: l.company || undefined,
+    Email: l.email,
+    Mobile: l.phone || undefined,
+    Designation: l.designation || undefined,
+    Lead_Source: 'Internal Community Data',
+    Lead_Status: 'Not Contacted',
+  }))
+  const res = await fetch(`${BASE_URL}/Leads`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data, trigger: [] }),
+  })
+  const json = await res.json() as { data?: { code: string; status: string; details?: { id: string }; message?: string }[] }
+  const results = (json.data ?? []).map((r, i) => {
+    if (r.status === 'success' || r.code === 'SUCCESS') {
+      return { row: i + 1, status: 'created' as const, id: r.details?.id }
+    } else if (r.code === 'DUPLICATE_DATA') {
+      return { row: i + 1, status: 'skipped' as const, reason: 'Already exists in Zoho' }
+    } else {
+      return { row: i + 1, status: 'error' as const, reason: r.message ?? r.code }
+    }
+  })
+  return { results }
+}
+
+export async function getContactById(id: string): Promise<ZohoContact | null> {
+  const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Name`) as { data?: Record<string, unknown>[] }
+  const c = data.data?.[0]
+  if (!c) return null
+  return {
+    id: String(c.id ?? ''),
+    firstName: String(c.First_Name ?? ''),
+    lastName: String(c.Last_Name ?? ''),
+    email: String(c.Email ?? ''),
+    phone: String(c.Phone ?? c.Mobile ?? ''),
+    accountName: typeof c.Account_Name === 'object' && c.Account_Name !== null
+      ? String((c.Account_Name as Record<string, unknown>).name ?? '')
+      : String(c.Account_Name ?? ''),
+  }
+}
+
+export async function getCallById(id: string): Promise<{
+  id: string
+  callResult: string
+  proposedMeetingTime: string
+  whoId: { id: string; module: string; name: string } | null
+  whatId: { id: string; module: string; name: string } | null
+} | null> {
+  const data = await zohoGet(`/Calls/${id}`) as { data?: Record<string, unknown>[] }
+  const c = data.data?.[0]
+  if (!c) return null
+  const whoId = c.Who_Id && typeof c.Who_Id === 'object'
+    ? c.Who_Id as { id: string; module: string; name: string }
+    : null
+  const whatId = c.What_Id && typeof c.What_Id === 'object'
+    ? c.What_Id as { id: string; module: string; name: string }
+    : null
+  return {
+    id: String(c.id ?? ''),
+    callResult: String(c.Call_Result ?? ''),
+    proposedMeetingTime: String(c.Proposed_Meeting_Time ?? ''),
+    whoId,
+    whatId,
+  }
+}
+
+export async function convertLead(leadId: string): Promise<{
+  contactId: string
+  accountId: string
+  contactName?: string
+  accountName?: string
+} | null> {
+  const token = await getAccessToken()
+  const res = await fetch(`${BASE_URL}/Leads/${leadId}/actions/convert`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      data: [{
+        overwrite: true,
+        notify_lead_owner: false,
+        notify_new_entity_owner: false,
+        Accounts: {},
+        Contacts: {},
+        Deals: null,
+      }]
+    }),
+  })
+  const data = await res.json() as { data?: { Contacts?: { id: string; name?: string }; Accounts?: { id: string; name?: string } }[] }
+  const record = data.data?.[0]
+  if (!record?.Contacts?.id || !record?.Accounts?.id) return null
+  return {
+    contactId: record.Contacts.id,
+    contactName: record.Contacts.name,
+    accountId: record.Accounts.id,
+    accountName: record.Accounts.name,
+  }
+}
+
 export async function createDeal(payload: {
   accountId: string
   accountName: string

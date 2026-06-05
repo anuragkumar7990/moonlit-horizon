@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <div className="flex items-center gap-4">
             <a href="/" className="text-sm text-slate-600 hover:text-slate-900 font-medium">Dashboard</a>
+            <a href="/upload" className="text-sm text-slate-600 hover:text-slate-900 font-medium">Upload Prospects</a>
             <a href="/book" className="text-sm bg-blue-600 text-white px-4 py-1.5 rounded-full hover:bg-blue-700 font-medium transition-colors">
               + Book Meeting
             </a>
