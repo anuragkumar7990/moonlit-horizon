@@ -100,7 +100,7 @@ export function buildCallsData(
 
   const tDial = getTarget(targets, 'Calls Dialled')
   const tConn = getTarget(targets, 'Calls Connected')
-  const tMtg  = getTarget(targets, 'Meetings Booked')
+  const tMtg  = getTarget(targets, 'L1 Meetings Booked')
 
   return {
     weekly:  { dialled: wD, connected: wC, meetingsBooked: wMtg },
@@ -278,7 +278,7 @@ export function buildTanishqMetrics(
 
   const tDial = getTarget(targets, 'Calls Dialled')
   const tConn = getTarget(targets, 'Calls Connected')
-  const tMtg  = getTarget(targets, 'Meetings Booked')
+  const tMtg  = getTarget(targets, 'L1 Meetings Booked')
 
   return {
     daily: {
