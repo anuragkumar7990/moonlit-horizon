@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import type { Meeting, Note, Communication, Account } from './types'
+import type { Meeting, Note, Communication, Account, Call, Target } from './types'
 
 const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID!
 
@@ -42,12 +42,41 @@ export async function getMeetings(): Promise<Meeting[]> {
 }
 
 export async function getNotes(): Promise<Note[]> {
-  return readSheet<Note>('Notes!A:E', (r) => ({
-    meetingId: r[0] ?? '',
+  return readSheet<Note>('Notes!A:F', (r) => ({
+    meetingId:   r[0] ?? '',
     accountName: r[1] ?? '',
-    summary: r[2] ?? '',
+    summary:     r[2] ?? '',
     actionables: r[3] ?? '',
-    createdAt: r[4] ?? '',
+    assignedTo:  r[4] ?? '',
+    createdAt:   r[5] ?? '',
+  }))
+}
+
+export async function getCalls(): Promise<Call[]> {
+  return readSheet<Call>('Calls!A:N', (r) => ({
+    date:               r[0]  ?? '',
+    time:               r[1]  ?? '',
+    account:            r[2]  ?? '',
+    contactName:        r[3]  ?? '',
+    contactPhone:       r[4]  ?? '',
+    sdr:                r[5]  ?? '',
+    duration:           r[6]  ?? '',
+    outcome:            r[7]  ?? '',
+    notes:              r[8]  ?? '',
+    zohoCallId:         r[9]  ?? '',
+    followUpDate:       r[10] ?? '',
+    recordingLink:      r[11] ?? '',
+    transcriptSummary:  r[12] ?? '',
+    autoTags:           r[13] ?? '',
+  }))
+}
+
+export async function getTargets(): Promise<Target[]> {
+  return readSheet<Target>('Targets!A:D', (r) => ({
+    month:        r[0] ?? '',
+    metricName:   r[1] ?? '',
+    targetValue:  Number(r[2] ?? 0),
+    actualValue:  Number(r[3] ?? 0),
   }))
 }
 

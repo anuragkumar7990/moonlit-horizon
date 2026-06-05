@@ -1,4 +1,4 @@
-import type { ZohoDeal, ZohoContact, ZohoAccount } from './types'
+import type { ZohoDeal, ZohoContact, ZohoAccount, LeadCounts } from './types'
 
 const BASE_URL = 'https://www.zohoapis.in/crm/v3'
 
@@ -301,6 +301,26 @@ export async function addTagsToLead(leadId: string, tags: string[]): Promise<voi
     method: 'POST',
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
   })
+}
+
+export async function getLeadsByStatus(): Promise<LeadCounts> {
+  try {
+    const data = await zohoGet('/Leads?fields=Lead_Status,Tag,Converted__s&per_page=200') as { data?: Record<string, unknown>[] }
+    const leads = (data.data ?? []).filter(l => !l.Converted__s)
+    let hot = 0, warm = 0, cold = 0
+    for (const lead of leads) {
+      const tags = Array.isArray(lead.Tag)
+        ? (lead.Tag as Record<string, unknown>[]).map(t => String(t.name ?? '').toLowerCase())
+        : []
+      const status = String(lead.Lead_Status ?? '').toLowerCase()
+      if (tags.includes('hot')) hot++
+      else if (tags.includes('warm') || status === 'contacted') warm++
+      else cold++
+    }
+    return { hot, warm, cold, total: leads.length }
+  } catch {
+    return { hot: 0, warm: 0, cold: 0, total: 0 }
+  }
 }
 
 type PickListValue = { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }

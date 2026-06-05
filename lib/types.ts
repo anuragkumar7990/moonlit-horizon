@@ -16,7 +16,55 @@ export interface Note {
   accountName: string
   summary: string
   actionables: string
+  assignedTo: string
   createdAt: string
+}
+
+export interface Call {
+  date: string
+  time: string
+  account: string
+  contactName: string
+  contactPhone: string
+  sdr: string
+  duration: string
+  outcome: string
+  notes: string
+  zohoCallId: string
+  followUpDate: string
+  recordingLink: string
+  transcriptSummary: string
+  autoTags: string
+}
+
+export interface Target {
+  month: string
+  metricName: string
+  targetValue: number
+  actualValue: number
+}
+
+export interface LeadCounts {
+  hot: number
+  warm: number
+  cold: number
+  total: number
+}
+
+export interface FunnelStage {
+  stage: string
+  count: number
+  amount: number
+}
+
+export interface WeeklyPoint {
+  week: string
+  dialled: number
+  connected: number
+  l1Booked: number
+  l1Conducted: number
+  connectionRate: number
+  bookingRate: number
 }
 
 export interface Communication {
