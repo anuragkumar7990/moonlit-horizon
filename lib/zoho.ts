@@ -2,7 +2,11 @@ import type { ZohoDeal, ZohoContact, ZohoAccount } from './types'
 
 const BASE_URL = 'https://www.zohoapis.in/crm/v3'
 
+let _tokenCache: { token: string; expiresAt: number } | null = null
+
 async function getAccessToken(): Promise<string> {
+  if (_tokenCache && Date.now() < _tokenCache.expiresAt) return _tokenCache.token
+
   const params = new URLSearchParams({
     refresh_token: process.env.ZOHO_REFRESH_TOKEN!,
     client_id: process.env.ZOHO_CLIENT_ID!,
@@ -14,7 +18,8 @@ async function getAccessToken(): Promise<string> {
   })
   const data = await res.json()
   if (!data.access_token) throw new Error(`Zoho token refresh failed: ${JSON.stringify(data)}`)
-  return data.access_token as string
+  _tokenCache = { token: data.access_token as string, expiresAt: Date.now() + 55 * 60 * 1000 }
+  return _tokenCache.token
 }
 
 async function zohoGet(path: string): Promise<unknown> {
