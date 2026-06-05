@@ -110,7 +110,8 @@ function cleanCity(val: string): string | undefined {
 
 function attendanceToStatus(val: string): string {
   const t = val.trim().toLowerCase()
-  if (t === 'attended') return 'Contacted'
+  const contacted = ['attended', 'yes', 'true', '1', 'going', 'checked in', 'checkedin', 'check-in', 'approved', 'attended webinar']
+  if (contacted.includes(t)) return 'Contacted'
   return 'Not Contacted'
 }
 
@@ -135,15 +136,15 @@ export async function POST(req: NextRequest) {
     // Detect column keys
     const firstNameKey    = findKey(headers, ['firstname', 'first name', 'first_name'])
     const lastNameKey     = findKey(headers, ['lastname', 'last name', 'last_name'])
-    const nameKey         = findKey(headers, ['name', 'fullname', 'full name'])
-    const companyKey      = findKey(headers, ['company', 'organization', 'organisation', 'account', 'companyname', 'company name'])
-    const personalEmailKey = findKey(headers, ['email', 'emailaddress', 'email address', 'e-mail'])
+    const nameKey         = findKey(headers, ['name', 'fullname', 'full name', 'attendee', 'participant'])
+    const companyKey      = findKey(headers, ['company', 'organization', 'organisation', 'account', 'companyname', 'company name', 'employer', 'org'])
+    const personalEmailKey = findKey(headers, ['email', 'emailaddress', 'email address', 'e-mail', 'contactemail', 'contact email'])
     const workEmailKey    = findWorkEmailKey(headers)
-    const phoneKey        = findKey(headers, ['phone_number', 'phone', 'mobile', 'phonenumber', 'phone number', 'contact number'])
-    const designationKey  = findKey(headers, ['designation', 'title', 'role', 'jobtitle', 'job title', 'position'])
+    const phoneKey        = findKey(headers, ['phone_number', 'phone', 'mobile', 'phonenumber', 'phone number', 'contact number', 'contactphone', 'contact phone', 'cell', 'cell phone', 'telephone', 'work phone'])
+    const designationKey  = findKey(headers, ['designation', 'title', 'role', 'jobtitle', 'job title', 'position', 'job role', 'seniority'])
     const priorityKey     = findKey(headers, ['priority'])
-    const cityKey         = findKey(headers, ['city'])
-    const attendanceKey   = findKey(headers, ['attendance'])
+    const cityKey         = findKey(headers, ['city', 'location'])
+    const attendanceKey   = findKey(headers, ['attendance', 'checkedin', 'checked in', 'check in', 'checkin', 'ticketstatus', 'ticket status', 'registrationstatus', 'registration status', 'going', 'status'])
 
     if (!personalEmailKey && !workEmailKey) {
       return NextResponse.json({

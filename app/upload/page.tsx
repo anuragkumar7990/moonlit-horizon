@@ -21,7 +21,7 @@ interface UploadResponse {
   error?: string
 }
 
-const LVL1_OPTIONS = ['Webinar', 'Events', 'Email', 'Referrals', 'Internal Community Data']
+const LVL1_OPTIONS = ['Webinar', 'Events', 'Email', 'Cold Outreach', 'Referrals', 'Internal Community Data']
 
 function parseCSVPreview(text: string): { headers: string[]; rows: string[][] } {
   const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 6)
@@ -368,12 +368,12 @@ export default function UploadPage() {
               ['First Name', 'firstname, first_name'],
               ['Last Name', 'lastname, last_name'],
               ['Company', 'company, organization, organisation'],
-              ['Email *', 'email — personal; also detects any "Work Email" column'],
+              ['Email *', 'email, emailaddress, contact email — personal; also detects any "Work Email" column'],
               ['Work Email', 'any header containing "work" + "email" — preferred over personal'],
-              ['Phone', 'phone_number, phone, mobile'],
-              ['Designation', 'designation, title, role, position'],
-              ['City', 'city'],
-              ['Attendance', 'attendance — Attended → Contacted, else Not Contacted'],
+              ['Phone', 'phone_number, phone, mobile, contact phone, cell, telephone'],
+              ['Designation', 'designation, title, role, job title, position, seniority'],
+              ['City', 'city, location'],
+              ['Attendance', 'attendance, checked in, ticket status, going — Yes/True/Going/Attended → Contacted'],
               ['Priority', 'priority — rows with "Skip" are excluded entirely'],
             ].map(([field, variants]) => (
               <div key={field} className="flex gap-2">
