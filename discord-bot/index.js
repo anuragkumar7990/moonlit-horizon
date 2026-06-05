@@ -17,7 +17,6 @@ async function vercelGet(path) {
 // Parse "YYYY-MM-DD HH:MM" as IST
 function parseIST(str) {
   const clean = str.trim()
-  // Accept YYYY-MM-DD HH:MM or YYYY-MM-DDTHH:MM
   const normalised = clean.replace('T', ' ')
   const m = normalised.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/)
   if (!m) return null
@@ -61,14 +60,33 @@ client.on('interactionCreate', async interaction => {
           }))
         return interaction.respond(choices)
       }
+
+      if (focused.name === 'prospect') {
+        const leads = await vercelGet('/api/leads')
+        const query = focused.value.toLowerCase()
+        const choices = leads
+          .filter(l => {
+            const full = `${l.firstName} ${l.lastName}`.toLowerCase()
+            const company = (l.company || '').toLowerCase()
+            return full.includes(query) || company.includes(query) || (l.email || '').toLowerCase().includes(query)
+          })
+          .slice(0, 25)
+          .map(l => ({
+            name: `${l.firstName} ${l.lastName}${l.company ? ' — ' + l.company : ''}`.trim(),
+            value: l.id,
+          }))
+        return interaction.respond(choices)
+      }
     } catch (err) {
       console.error('Autocomplete error:', err)
       return interaction.respond([])
     }
   }
 
+  if (!interaction.isChatInputCommand()) return
+
   // ── /book command ───────────────────────────────────────────────
-  if (interaction.isChatInputCommand() && interaction.commandName === 'book') {
+  if (interaction.commandName === 'book') {
     await interaction.deferReply({ ephemeral: true })
 
     const accountId   = interaction.options.getString('account', true)
@@ -120,12 +138,9 @@ client.on('interactionCreate', async interaction => {
       }
 
       const data = await res.json()
-
       const typeLabel = meetingType === 'L1' ? 'L1 — Discovery' : 'L2+ — Next Steps'
       const dateFormatted = new Date(meetingTime).toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
       })
 
       await interaction.editReply(
@@ -139,6 +154,56 @@ client.on('interactionCreate', async interaction => {
       )
     } catch (err) {
       console.error('/book error:', err)
+      await interaction.editReply(`❌ Unexpected error: ${err.message}`)
+    }
+  }
+
+  // ── /book-prospect command ──────────────────────────────────────
+  if (interaction.commandName === 'book-prospect') {
+    await interaction.deferReply({ ephemeral: true })
+
+    const leadId      = interaction.options.getString('prospect', true)
+    const timeRaw     = interaction.options.getString('time', true)
+    const meetingType = interaction.options.getString('type', true)
+
+    const meetingTime = parseIST(timeRaw)
+    if (!meetingTime) {
+      return interaction.editReply(
+        '❌ Invalid time format. Use `YYYY-MM-DD HH:MM` in IST, e.g. `2026-06-10 14:00`'
+      )
+    }
+
+    try {
+      const res = await fetch(`${VERCEL_URL}/api/book-prospect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: BASIC_AUTH,
+        },
+        body: JSON.stringify({ leadId, meetingTime, meetingType }),
+      })
+
+      if (!res.ok) {
+        const err = await res.text()
+        return interaction.editReply(`❌ Booking failed: ${err}`)
+      }
+
+      const data = await res.json()
+      const typeLabel = meetingType === 'L1' ? 'L1 — Discovery' : 'L2+ — Next Steps'
+      const dateFormatted = new Date(meetingTime).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
+      })
+
+      await interaction.editReply(
+        `✅ **Meeting booked!**\n` +
+        `**Prospect converted to Contact + Account**\n` +
+        `**Type:** ${typeLabel}\n` +
+        `**Time (IST):** ${dateFormatted}\n` +
+        `**G-Meet:** ${data.gMeetLink || '_(link in calendar invite)_'}\n` +
+        `**Deal:** ${data.dealId ? `Created in Zoho CRM` : data.dealError ? `❌ ${data.dealError}` : 'Skipped'}`
+      )
+    } catch (err) {
+      console.error('/book-prospect error:', err)
       await interaction.editReply(`❌ Unexpected error: ${err.message}`)
     }
   }
