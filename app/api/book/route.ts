@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       : `${accountName} <> The Test Tribe | Training - Next Steps`
 
     const startTime = new Date(meetingTime)
-    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000) // 1 hour
+    const endTime = new Date(startTime.getTime() + 30 * 60 * 1000) // 30 minutes
 
     const auth = getGoogleAuth()
     const calendar = google.calendar({ version: 'v3', auth })
