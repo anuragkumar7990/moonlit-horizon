@@ -1,10 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { convertLead, getContactById, getZohoAccounts } from '@/lib/zoho'
+import { convertLead, getContactById, getZohoAccounts, getCallById } from '@/lib/zoho'
 import { bookMeeting } from '@/lib/booking'
 
 export const dynamic = 'force-dynamic'
 
 const WEBHOOK_SECRET = process.env.DASHBOARD_PASSWORD ?? 'thetesttribe'
+
+// Extract call ID from any format Zoho may send:
+// - form-encoded body: callId=123
+// - JSON body: { callId: "123" } or { data: { Calls: [{ id: "123" }] } }
+// - URL query param: ?callId=123
+async function extractCallId(req: NextRequest): Promise<string | null> {
+  // 1. Try URL query param (when Zoho Body=None, params go in URL)
+  const fromUrl = req.nextUrl.searchParams.get('callId') ?? req.nextUrl.searchParams.get('id')
+  if (fromUrl) return fromUrl
+
+  const contentType = req.headers.get('content-type') ?? ''
+
+  // 2. Form-encoded body (Zoho Body=x-www-form-urlencoded with module params)
+  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+    try {
+      const form = await req.formData()
+      return form.get('callId')?.toString() ?? form.get('id')?.toString() ?? null
+    } catch { /* fall through */ }
+  }
+
+  // 3. JSON body
+  try {
+    const text = await req.text()
+    if (!text) return null
+    const body = JSON.parse(text) as Record<string, unknown>
+    if (body.callId) return String(body.callId)
+    if (body.id) return String(body.id)
+    // nested: { data: { Calls: [{ id }] } }
+    const calls = (body?.data as Record<string, unknown>)?.Calls
+    if (Array.isArray(calls) && calls[0]?.id) return String(calls[0].id)
+  } catch { /* fall through */ }
+
+  return null
+}
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-webhook-secret')
@@ -13,60 +47,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let body: unknown
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  const callId = await extractCallId(req)
+  if (!callId) {
+    return NextResponse.json({ error: 'Could not extract Call ID from request. Check module parameter setup in Zoho.' }, { status: 400 })
   }
 
-  // Zoho sends the payload in various shapes depending on workflow config.
-  // We try to extract the first Call record from any of them.
-  let callData: Record<string, unknown> | null = null
-  const b = body as Record<string, unknown>
+  console.log(`[webhook/zoho-call] Received callId=${callId}`)
 
-  if (b?.data && typeof b.data === 'object') {
-    const d = b.data as Record<string, unknown>
-    if (Array.isArray(d?.Calls) && d.Calls.length > 0) {
-      callData = d.Calls[0] as Record<string, unknown>
-    }
-  }
-  if (!callData && Array.isArray(b?.Calls) && (b.Calls as unknown[]).length > 0) {
-    callData = (b.Calls as Record<string, unknown>[])[0]
-  }
-  if (!callData && Array.isArray(body)) {
-    const first = (body as Record<string, unknown>[])[0]
-    if (first?.Calls) callData = first.Calls as Record<string, unknown>
+  const call = await getCallById(callId)
+  if (!call) {
+    return NextResponse.json({ error: `Call ${callId} not found in Zoho` }, { status: 404 })
   }
 
-  if (!callData) {
-    console.error('[webhook/zoho-call] Unrecognised payload:', JSON.stringify(body))
-    return NextResponse.json({ error: 'Could not parse Call data from payload' }, { status: 400 })
+  if (call.callResult !== 'Meeting Scheduled') {
+    return NextResponse.json({ ok: true, skipped: `Call_Result is "${call.callResult}" — nothing to do` })
   }
 
-  const callResult = String(callData.Call_Result ?? '')
-  if (callResult !== 'Meeting Scheduled') {
-    return NextResponse.json({ ok: true, skipped: `Call_Result is "${callResult}" — nothing to do` })
-  }
-
-  const proposedTime = String(callData.Proposed_Meeting_Time ?? '').trim()
+  const proposedTime = call.proposedMeetingTime.trim()
   if (!proposedTime || proposedTime === 'null') {
     return NextResponse.json({
-      error: 'Proposed_Meeting_Time is empty. SDR must set the proposed meeting time before saving.',
+      error: 'Proposed_Meeting_Time is empty. SDR must set the proposed meeting time field before saving the call.',
     }, { status: 400 })
   }
 
-  const whoIdRaw = callData.Who_Id as { id?: string; module?: string; name?: string } | null
-  if (!whoIdRaw?.id) {
+  if (!call.whoId?.id) {
     return NextResponse.json({ error: 'Call has no linked Contact or Lead (Who_Id missing)' }, { status: 400 })
   }
 
-  let contactId = whoIdRaw.id
+  let contactId = call.whoId.id
   let accountId = ''
   let accountName = ''
 
-  // If the call is linked to a Lead, convert it first
-  if (whoIdRaw.module === 'Leads') {
+  if (call.whoId.module === 'Leads') {
     console.log(`[webhook/zoho-call] Converting Lead ${contactId} to Contact+Account`)
     const converted = await convertLead(contactId)
     if (!converted) {
@@ -75,7 +87,7 @@ export async function POST(req: NextRequest) {
     contactId = converted.contactId
     accountId = converted.accountId
     accountName = converted.accountName ?? ''
-    console.log(`[webhook/zoho-call] Lead converted → Contact ${contactId}, Account ${accountId}`)
+    console.log(`[webhook/zoho-call] Converted → Contact ${contactId}, Account ${accountId}`)
   }
 
   const contact = await getContactById(contactId)
@@ -88,29 +100,24 @@ export async function POST(req: NextRequest) {
     }, { status: 400 })
   }
 
-  // Resolve Account if not already set from Lead conversion
   if (!accountId) {
-    const whatId = callData.What_Id as { id?: string; module?: string; name?: string } | null
-    if (whatId?.id && whatId.module === 'Accounts') {
-      accountId = whatId.id
-      accountName = whatId.name ?? contact.accountName
+    if (call.whatId?.id && call.whatId.module === 'Accounts') {
+      accountId = call.whatId.id
+      accountName = call.whatId.name ?? contact.accountName
     } else if (contact.accountName) {
       const accounts = await getZohoAccounts()
       const found = accounts.find(a => a.accountName === contact.accountName)
-      if (found) {
-        accountId = found.id
-        accountName = found.accountName
-      }
+      if (found) { accountId = found.id; accountName = found.accountName }
     }
   }
 
   if (!accountId) {
     return NextResponse.json({
-      error: `Could not resolve an Account for contact ${contact.firstName} ${contact.lastName}. Link the call to an Account or make sure the contact has an Account in Zoho.`,
+      error: `Could not resolve Account for ${contact.firstName} ${contact.lastName}. Ensure the contact is linked to an Account in Zoho.`,
     }, { status: 400 })
   }
 
-  console.log(`[webhook/zoho-call] Booking meeting for ${accountName} / ${contact.email} at ${proposedTime}`)
+  console.log(`[webhook/zoho-call] Booking: ${accountName} / ${contact.email} at ${proposedTime}`)
 
   const result = await bookMeeting({
     accountId,
