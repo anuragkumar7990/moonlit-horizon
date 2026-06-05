@@ -214,12 +214,12 @@ export async function convertLead(leadId: string): Promise<{
   if (!text) return null
   const data = JSON.parse(text) as { data?: { Contacts?: { id: string; name?: string }; Accounts?: { id: string; name?: string } }[] }
   const record = data.data?.[0]
-  if (!record?.Contacts?.id || !record?.Accounts?.id) return null
+  if (!record?.Contacts?.id) return null
   return {
     contactId: record.Contacts.id,
     contactName: record.Contacts.name,
-    accountId: record.Accounts.id,
-    accountName: record.Accounts.name,
+    accountId: record.Accounts?.id ?? '',
+    accountName: record.Accounts?.name,
   }
 }
 
