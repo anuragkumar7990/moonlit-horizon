@@ -70,3 +70,52 @@ export async function getAccounts(): Promise<Account[]> {
     lastActivity: r[4] ?? '',
   }))
 }
+
+const PROSPECTS_HEADERS = ['Date', 'Email', 'First Name', 'Last Name', 'Company', 'Designation', 'City', 'Phone', 'Lvl 1 Source', 'Lvl 2 Source', 'Priority', 'Status']
+
+export async function appendProspectRows(rows: {
+  date: string
+  email: string
+  firstName: string
+  lastName: string
+  company: string
+  designation?: string
+  city?: string
+  phone?: string
+  lvl1Source?: string
+  lvl2Source?: string
+  priority?: string
+  status: 'created' | 'updated'
+}[]): Promise<void> {
+  if (rows.length === 0) return
+  const sheets = getSheets()
+
+  // Create "Prospects" tab with headers if it doesn't exist yet
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Prospects')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Prospects' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Prospects!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [PROSPECTS_HEADERS] },
+    })
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Prospects!A:L',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: rows.map(r => [
+        r.date, r.email, r.firstName, r.lastName, r.company ?? '',
+        r.designation ?? '', r.city ?? '', r.phone ?? '',
+        r.lvl1Source ?? '', r.lvl2Source ?? '', r.priority ?? '', r.status,
+      ]),
+    },
+  })
+}

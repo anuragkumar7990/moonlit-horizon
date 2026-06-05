@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLeads, findLeadByEmail, addTagsToLead } from '@/lib/zoho'
+import { appendProspectRows } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
@@ -283,6 +284,32 @@ export async function POST(req: NextRequest) {
     const updated  = preResults.filter(r => r.status === 'updated').length
     const excluded = preResults.filter(r => r.status === 'excluded').length
     const errors   = preResults.filter(r => r.status === 'error').length
+
+    // Write created + updated leads to Google Sheets (Prospects tab)
+    const uploadDate = new Date().toISOString().slice(0, 10)
+    const sheetRows = preResults
+      .map((r, i) => {
+        if (r.status !== 'created' && r.status !== 'updated') return null
+        const leadIdx = pendingIndices.indexOf(i)
+        if (leadIdx < 0) return null
+        const l = leads[leadIdx]
+        return {
+          date: uploadDate,
+          email: l.email,
+          firstName: l.firstName,
+          lastName: l.lastName,
+          company: l.company,
+          designation: l.designation,
+          city: l.city,
+          phone: l.phone,
+          lvl1Source: l.lvl1Source,
+          lvl2Source: l.lvl2Source,
+          priority: l.priority,
+          status: r.status as 'created' | 'updated',
+        }
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+    await appendProspectRows(sheetRows).catch(err => console.error('[Sheets] appendProspectRows failed:', err))
 
     return NextResponse.json({
       ok: true,
