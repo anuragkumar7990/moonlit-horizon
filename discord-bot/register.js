@@ -295,6 +295,45 @@ const mhCommand = new SlashCommandBuilder()
               .setAutocomplete(true)
           )
       )
+      .addSubcommand(sub =>
+        sub
+          .setName('note')
+          .setDescription('Append a manual note to an account')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Client account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('text')
+              .setDescription('Note to append (timestamped automatically)')
+              .setRequired(true)
+          )
+      )
+      .addSubcommand(sub =>
+        sub
+          .setName('status')
+          .setDescription('Update the deal status for an account')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Client account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('status')
+              .setDescription('New status')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Won — training delivered',                value: 'Won'    },
+                { name: 'Active — pricing/scheduling agreed',      value: 'Active' },
+                { name: 'Warm — interested, follow-ups ongoing',   value: 'Warm'   },
+                { name: 'Cold — blocked by budget/approval',       value: 'Cold'   },
+                { name: 'Dead — no fit or ghosted',                value: 'Dead'   },
+              )
+          )
+      )
   )
   .addSubcommandGroup(group =>
     group

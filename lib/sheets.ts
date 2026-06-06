@@ -675,7 +675,9 @@ export async function getTopicCoverage(): Promise<TopicCoverageEntry[]> {
 }
 
 // ── Account Intelligence sheet ───────────────────────────────────────────────
-// Columns: Account | Updated At | Meeting Count | Last Meeting | Status | Summary | Next Action
+// Columns A:K — Account | Updated At | Meeting Count | Last Meeting | Status |
+//               Email Intelligence | Circleback Intelligence | Call Intelligence |
+//               Manual Notes | Cumulative Summary | Next Action
 
 export interface AccountIntelligence {
   account: string
@@ -683,24 +685,49 @@ export interface AccountIntelligence {
   meetingCount: number
   lastMeeting: string
   status: 'Won' | 'Active' | 'Warm' | 'Cold' | 'Dead'
-  summary: string
+  emailIntelligence: string
+  circlebakIntelligence: string
+  callIntelligence: string
+  manualNotes: string
+  cumulativeSummary: string
   nextAction: string
 }
 
-const ACCOUNT_INTEL_HEADERS = ['Account', 'Updated At', 'Meeting Count', 'Last Meeting', 'Status', 'Summary', 'Next Action']
+const ACCOUNT_INTEL_HEADERS = [
+  'Account', 'Updated At', 'Meeting Count', 'Last Meeting', 'Status',
+  'Email Intelligence', 'Circleback Intelligence', 'Call Intelligence',
+  'Manual Notes', 'Cumulative Summary', 'Next Action',
+]
+
+function istNowSheets(): string {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  return `${ist.toISOString().slice(0, 10)} ${ist.toISOString().slice(11, 16)}`
+}
 
 export async function getAccountIntelligence(): Promise<AccountIntelligence[]> {
   try {
-    return readSheet<AccountIntelligence>('Account Intelligence!A:G', (r) => ({
-      account:      r[0] ?? '',
-      updatedAt:    r[1] ?? '',
-      meetingCount: parseInt(r[2] ?? '0', 10) || 0,
-      lastMeeting:  r[3] ?? '',
-      status:       (r[4] as AccountIntelligence['status']) ?? 'Cold',
-      summary:      r[5] ?? '',
-      nextAction:   r[6] ?? '',
+    return readSheet<AccountIntelligence>('Account Intelligence!A:K', (r) => ({
+      account:               r[0]  ?? '',
+      updatedAt:             r[1]  ?? '',
+      meetingCount:          parseInt(r[2] ?? '0', 10) || 0,
+      lastMeeting:           r[3]  ?? '',
+      status:                (r[4] as AccountIntelligence['status']) ?? 'Cold',
+      emailIntelligence:     r[5]  ?? '',
+      circlebakIntelligence: r[6]  ?? '',
+      callIntelligence:      r[7]  ?? '',
+      manualNotes:           r[8]  ?? '',
+      cumulativeSummary:     r[9]  ?? '',
+      nextAction:            r[10] ?? '',
     }))
   } catch { return [] }
+}
+
+async function findAccountRow(account: string, range: string): Promise<number> {
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range })
+  const rows = res.data.values ?? []
+  const norm = (s: string) => s.toLowerCase().trim()
+  return rows.findIndex((r, i) => i > 0 && norm(r[0] ?? '') === norm(account))
 }
 
 export async function upsertAccountIntelligence(intel: AccountIntelligence): Promise<void> {
@@ -721,31 +748,108 @@ export async function upsertAccountIntelligence(intel: AccountIntelligence): Pro
     })
   }
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: 'Account Intelligence!A:G',
-  })
-  const rows = res.data.values ?? []
-  const normalise = (s: string) => s.toLowerCase().trim()
-  const rowIdx = rows.findIndex((r, i) => i > 0 && normalise(r[0]) === normalise(intel.account))
-
-  const row = [intel.account, intel.updatedAt, intel.meetingCount, intel.lastMeeting, intel.status, intel.summary, intel.nextAction]
+  const rowIdx = await findAccountRow(intel.account, 'Account Intelligence!A:A')
+  const row = [
+    intel.account, intel.updatedAt, intel.meetingCount, intel.lastMeeting, intel.status,
+    intel.emailIntelligence, intel.circlebakIntelligence, intel.callIntelligence,
+    intel.manualNotes, intel.cumulativeSummary, intel.nextAction,
+  ]
 
   if (rowIdx !== -1) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `Account Intelligence!A${rowIdx + 1}:G${rowIdx + 1}`,
+      range: `Account Intelligence!A${rowIdx + 1}:K${rowIdx + 1}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [row] },
     })
   } else {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Account Intelligence!A:G',
+      range: 'Account Intelligence!A:K',
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [row] },
     })
   }
+}
+
+export async function appendManualNote(account: string, note: string): Promise<string> {
+  const sheets = getSheets()
+  const ts = istNowSheets()
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Account Intelligence!A:I',
+  })
+  const rows = res.data.values ?? []
+  const norm = (s: string) => s.toLowerCase().trim()
+  const rowIdx = rows.findIndex((r, i) => i > 0 && norm(r[0] ?? '') === norm(account))
+  if (rowIdx === -1) throw new Error(`Account not found in Account Intelligence: ${account}`)
+
+  const existing = rows[rowIdx][8] ?? ''
+  const updated = existing ? `${existing}\n[${ts} IST] ${note}` : `[${ts} IST] ${note}`
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Account Intelligence!I${rowIdx + 1}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[updated]] },
+  })
+
+  return updated
+}
+
+export async function updateAccountStatus(
+  account: string,
+  status: AccountIntelligence['status']
+): Promise<void> {
+  const sheets = getSheets()
+  const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
+  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Account Intelligence!E${rowIdx + 1}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[status]] },
+  })
+}
+
+export async function updateEmailIntelligence(account: string, emailIntelligence: string): Promise<void> {
+  const sheets = getSheets()
+  const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
+  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `Account Intelligence!B${rowIdx + 1}`, values: [[istNowSheets()]] },
+        { range: `Account Intelligence!F${rowIdx + 1}`, values: [[emailIntelligence]] },
+      ],
+    },
+  })
+}
+
+export async function updateCumulativeInSheet(
+  account: string,
+  cumulativeSummary: string,
+  nextAction: string
+): Promise<void> {
+  const sheets = getSheets()
+  const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
+  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `Account Intelligence!B${rowIdx + 1}`,      values: [[istNowSheets()]] },
+        { range: `Account Intelligence!J${rowIdx + 1}:K${rowIdx + 1}`, values: [[cumulativeSummary, nextAction]] },
+      ],
+    },
+  })
 }
 
 // ── Notes append ─────────────────────────────────────────────────────────────

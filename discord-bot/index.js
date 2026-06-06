@@ -1057,10 +1057,11 @@ client.on('interactionCreate', async interaction => {
         }
 
         const statusEmoji = { Won: '✅', Active: '🔥', Warm: '🟡', Cold: '🔵', Dead: '❌' }
+        const summary = item.cumulativeSummary || item.circlebakIntelligence || item.summary || '—'
         const lines = [
           `${statusEmoji[item.status] ?? '⚪'} **${item.account}** — ${item.status}`,
           ``,
-          item.summary,
+          summary,
           ``,
           item.nextAction ? `**→ Next:** ${item.nextAction}` : null,
           `_${item.meetingCount} meeting${item.meetingCount !== 1 ? 's' : ''} · last: ${item.lastMeeting?.slice(0, 10) ?? '—'} · updated: ${item.updatedAt?.slice(0, 10) ?? '—'}_`,
@@ -1084,15 +1085,60 @@ client.on('interactionCreate', async interaction => {
         const data = await vercelPost('/api/account-intel/refresh', { account })
         const item = data.intel
         const statusEmoji = { Won: '✅', Active: '🔥', Warm: '🟡', Cold: '🔵', Dead: '❌' }
+        const summary = item.cumulativeSummary || item.circlebakIntelligence || '—'
         const lines = [
           `${statusEmoji[item.status] ?? '⚪'} **${item.account}** intel refreshed`,
           ``,
-          item.summary,
+          summary,
           item.nextAction ? `**→ Next:** ${item.nextAction}` : null,
         ].filter(Boolean).join('\n')
         await interaction.editReply(lines)
       } catch (err) {
         console.error('/mh intel refresh error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh intel note ──────────────────────────────────────────────
+    if (group === 'intel' && sub === 'note') {
+      await interaction.deferReply({ ephemeral: true })
+      const accountVal = interaction.options.getString('account', true)
+      const text       = interaction.options.getString('text', true)
+      const account    = cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal
+
+      try {
+        const data = await vercelPost('/api/account-intel/note', { account, note: text })
+        const lines = [
+          `📝 **Note added to ${account}**`,
+          `> ${text}`,
+          ``,
+          data.cumulativeSummary ? `**Updated summary:** ${data.cumulativeSummary}` : null,
+          data.nextAction ? `**→ Next:** ${data.nextAction}` : null,
+        ].filter(Boolean).join('\n')
+        await interaction.editReply(lines)
+      } catch (err) {
+        console.error('/mh intel note error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh intel status ────────────────────────────────────────────
+    if (group === 'intel' && sub === 'status') {
+      await interaction.deferReply({ ephemeral: true })
+      const accountVal = interaction.options.getString('account', true)
+      const status     = interaction.options.getString('status', true)
+      const account    = cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal
+
+      try {
+        await vercelPost('/api/account-intel/status', { account, status })
+        const statusEmoji = { Won: '✅', Active: '🔥', Warm: '🟡', Cold: '🔵', Dead: '❌' }
+        await interaction.editReply(
+          `${statusEmoji[status] ?? '⚪'} **${account}** status updated to **${status}**\n_Dashboard will reflect within 60 seconds._`
+        )
+      } catch (err) {
+        console.error('/mh intel status error:', err)
         await interaction.editReply(`❌ Failed: ${err.message}`)
       }
       return

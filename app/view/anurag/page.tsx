@@ -1,5 +1,6 @@
 import { format, parseISO, isAfter } from 'date-fns'
 import { getMeetings, getTasks, getPayments, getObjectives, getAccountIntelligence } from '@/lib/sheets'
+import { AccountIntelPanel } from '@/components/AccountIntelPanel'
 import { getDeals } from '@/lib/zoho'
 import { buildFunnel, buildTodaysMeetings } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
@@ -59,12 +60,6 @@ export default async function AnuragPage() {
   const payments   = paymentsRes.status   === 'fulfilled' ? paymentsRes.value   : []
   const objectives = objectivesRes.status === 'fulfilled' ? objectivesRes.value : []
   const allIntel   = intelRes.status      === 'fulfilled' ? intelRes.value      : []
-
-  // Sort intel: Active first, then Won, Warm, Cold, Dead
-  const STATUS_ORDER: Record<string, number> = { Active: 0, Won: 1, Warm: 2, Cold: 3, Dead: 4 }
-  const sortedIntel = [...allIntel].sort((a, b) =>
-    (STATUS_ORDER[a.status] ?? 5) - (STATUS_ORDER[b.status] ?? 5)
-  )
 
   const funnel        = buildFunnel(deals)
   const todayMeetings = buildTodaysMeetings(meetings)
@@ -261,53 +256,18 @@ export default async function AnuragPage() {
         <div className="flex items-center justify-between mb-4">
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">
             Account Intelligence
-            {sortedIntel.length > 0 && (
-              <span className="text-mh-muted ml-2">{sortedIntel.length} accounts</span>
+            {allIntel.length > 0 && (
+              <span className="text-mh-muted ml-2">{allIntel.length} accounts</span>
             )}
           </p>
         </div>
 
-        {sortedIntel.length === 0 ? (
+        {allIntel.length === 0 ? (
           <p className="text-mh-muted text-sm italic">
             No intel yet. Use <span className="text-mh-text font-medium">/mh intel refresh</span> in Discord to generate.
           </p>
         ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-            {sortedIntel.map(item => {
-              const statusStyle: Record<string, string> = {
-                Won:    'bg-green-500/15 text-green-400',
-                Active: 'bg-mh-vermillion/15 text-mh-vermillion',
-                Warm:   'bg-mh-gold/15 text-mh-gold',
-                Cold:   'bg-mh-surface border border-mh-border text-mh-muted',
-                Dead:   'bg-mh-surface border border-mh-border text-mh-muted opacity-50',
-              }
-              return (
-                <div
-                  key={item.account}
-                  className={`p-3 rounded-lg border ${item.status === 'Dead' ? 'opacity-40' : ''} bg-mh-surface2 border-mh-border`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-mh-text">{item.account}</p>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${statusStyle[item.status] ?? statusStyle['Cold']}`}>
-                          {item.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-mh-muted leading-relaxed">{item.summary}</p>
-                      {item.nextAction && (
-                        <p className="text-[10px] text-mh-vermillion mt-1.5 font-medium">→ {item.nextAction}</p>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[10px] text-mh-border">{item.meetingCount}m</p>
-                      <p className="text-[10px] text-mh-border">{item.lastMeeting?.slice(0, 10) ?? ''}</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <AccountIntelPanel intel={allIntel} />
         )}
       </div>
 
