@@ -558,9 +558,10 @@ function buildBriefingMessage(data) {
   if (hotDeals.length > 0) {
     lines.push('', `**🔥 Hot Pipeline (${hotDeals.length} deals)**`)
     hotDeals.slice(0, 6).forEach(d => {
+      const name = d.accountName || d.dealName || '—'
       const amt = d.amount >= 100000 ? `₹${(d.amount / 100000).toFixed(1)}L` : d.amount > 0 ? `₹${d.amount.toLocaleString('en-IN')}` : ''
       const amtStr = amt ? ` · ${amt}` : ''
-      lines.push(`• **${d.accountName}** — ${d.stage}${amtStr}`)
+      lines.push(`• **${name}** — ${d.stage}${amtStr}`)
     })
   }
 

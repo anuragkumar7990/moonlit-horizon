@@ -57,10 +57,10 @@ export async function GET() {
   const hotDeals = deals
     .filter(d => HOT_STAGES.has((d.stage || '').toLowerCase()))
     .map(d => ({
-      dealName:   d.dealName,
-      accountName: d.accountName,
-      stage:      d.stage,
-      amount:     d.amount ? Number(d.amount) : 0,
+      dealName:    d.dealName,
+      accountName: d.accountName || d.dealName,
+      stage:       d.stage,
+      amount:      d.amount ? Number(d.amount) : 0,
     }))
     .sort((a, b) => b.amount - a.amount)
 
