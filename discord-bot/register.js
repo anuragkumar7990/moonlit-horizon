@@ -129,6 +129,39 @@ const mhCommand = new SlashCommandBuilder()
   )
   .addSubcommandGroup(group =>
     group
+      .setName('targets')
+      .setDescription('Monthly target management')
+      .addSubcommand(sub =>
+        sub
+          .setName('set')
+          .setDescription('Set a monthly target for a metric')
+          .addStringOption(opt =>
+            opt.setName('metric')
+              .setDescription('Which metric to set')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Calls Dialled',         value: 'Calls Dialled'         },
+                { name: 'Calls Connected',        value: 'Calls Connected'       },
+                { name: 'Meetings Booked',        value: 'Meetings Booked'       },
+                { name: 'L1 Meetings Conducted',  value: 'L1 Meetings Conducted' },
+                { name: 'L2 Meetings Conducted',  value: 'L2 Meetings Conducted' },
+              )
+          )
+          .addIntegerOption(opt =>
+            opt.setName('value')
+              .setDescription('Monthly target number')
+              .setRequired(true)
+              .setMinValue(1)
+          )
+      )
+      .addSubcommand(sub =>
+        sub
+          .setName('view')
+          .setDescription('View current month\'s targets and actuals')
+      )
+  )
+  .addSubcommandGroup(group =>
+    group
       .setName('log')
       .setDescription('Log sales activity')
       .addSubcommand(sub =>

@@ -280,6 +280,52 @@ export async function appendProspectRows(rows: {
   })
 }
 
+// ── Targets sheet ────────────────────────────────────────────────────────────
+
+const TARGETS_HEADERS = ['Month', 'Metric Name', 'Target Value', 'Actual Value']
+
+export async function upsertTarget(month: string, metricName: string, targetValue: number): Promise<void> {
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Targets')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Targets' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Targets!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [TARGETS_HEADERS] },
+    })
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Targets!A:D',
+  })
+  const rows = res.data.values ?? []
+  const rowIdx = rows.findIndex((r, i) => i > 0 && r[0] === month && r[1] === metricName)
+
+  if (rowIdx !== -1) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `Targets!C${rowIdx + 1}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[targetValue]] },
+    })
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Targets!A:D',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[month, metricName, targetValue, 0]] },
+    })
+  }
+}
+
 // ── Summaries sheet ──────────────────────────────────────────────────────────
 // Columns: Week Of | Generated At | Summary
 

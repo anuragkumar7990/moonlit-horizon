@@ -335,6 +335,131 @@ async function postDailyDigest() {
   }
 }
 
+async function updatePinnedTargets() {
+  const channel = client.channels.cache.find(c => c.name === 'targets')
+  if (!channel) return
+
+  const data = await vercelGet('/api/targets')
+  const now = new Date()
+  const monthLabel = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' })
+
+  const fmtTarget = (metric) => {
+    const t = data.targets.find(t => t.metric === metric)
+    return t?.target ? `**${t.target}**` : '—'
+  }
+
+  const lines = [
+    `📊 **Monthly Targets — ${monthLabel}**`,
+    '',
+    'Use `/mh targets set` to update any metric.',
+    '',
+    '**📞 Calling**',
+    `• Calls Dialled: ${fmtTarget('Calls Dialled')}`,
+    `• Calls Connected: ${fmtTarget('Calls Connected')}`,
+    `• Meetings Booked: ${fmtTarget('Meetings Booked')}`,
+    '',
+    '**📅 Meetings**',
+    `• L1 Meetings Conducted: ${fmtTarget('L1 Meetings Conducted')}`,
+    `• L2 Meetings Conducted: ${fmtTarget('L2 Meetings Conducted')}`,
+    '',
+    '_This message is pinned for the month._',
+  ]
+  const newContent = lines.join('\n')
+
+  // Find existing pinned bot message and edit it, or post a new one and pin it
+  const pinned = await channel.messages.fetchPinned()
+  const existing = pinned.find(m => m.author.id === client.user.id)
+  if (existing) {
+    await existing.edit(newContent)
+  } else {
+    const msg = await channel.send(newContent)
+    await msg.pin()
+  }
+}
+
+async function postTargetsRequest() {
+  try {
+    const channel = client.channels.cache.find(c => c.name === 'targets')
+    if (!channel) {
+      console.error('[targets] #targets channel not found')
+      return
+    }
+
+    // Unpin previous bot messages in #targets
+    try {
+      const pinned = await channel.messages.fetchPinned()
+      for (const [, m] of pinned) {
+        if (m.author.id === client.user.id) await m.unpin()
+      }
+    } catch { /* non-fatal */ }
+
+    const data = await vercelGet('/api/targets').catch(() => ({ targets: [] }))
+    const now = new Date()
+    const monthLabel = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' })
+
+    const fmtTarget = (metric) => {
+      const t = data.targets.find(t => t.metric === metric)
+      return t?.target ? `**${t.target}**` : '—'
+    }
+
+    const lines = [
+      `📊 **Monthly Targets — ${monthLabel}**`,
+      '',
+      'Please set your targets using `/mh targets set`',
+      '',
+      '**📞 Calling**',
+      `• Calls Dialled: ${fmtTarget('Calls Dialled')}`,
+      `• Calls Connected: ${fmtTarget('Calls Connected')}`,
+      `• Meetings Booked: ${fmtTarget('Meetings Booked')}`,
+      '',
+      '**📅 Meetings**',
+      `• L1 Meetings Conducted: ${fmtTarget('L1 Meetings Conducted')}`,
+      `• L2 Meetings Conducted: ${fmtTarget('L2 Meetings Conducted')}`,
+      '',
+      '_This message will be pinned for the month._',
+    ]
+
+    const msg = await channel.send(lines.join('\n'))
+    await msg.pin()
+    console.log('[targets] Monthly targets request posted and pinned to #targets')
+  } catch (err) {
+    console.error('[targets] Failed to post targets request:', err.message)
+  }
+}
+
+async function postEndOfMonthReview() {
+  try {
+    const statsChannel = client.channels.cache.find(c => c.name === 'stats')
+    if (!statsChannel) {
+      console.error('[targets] #stats channel not found for end-of-month review')
+      return
+    }
+
+    const data = await vercelGet('/api/targets')
+    const now = new Date()
+    const monthLabel = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' })
+
+    const bar = (actual, target) => {
+      if (!target) return `**${actual}** _(no target set)_`
+      const pct = Math.round((actual / target) * 100)
+      const emoji = pct >= 100 ? '🟢' : pct >= 70 ? '🟡' : '🔴'
+      return `**${actual}** / ${target} ${emoji} ${pct}%`
+    }
+
+    const lines = [`📊 **End-of-Month Review — ${monthLabel}**`, '']
+    for (const t of data.targets) {
+      lines.push(`• **${t.metric}:** ${bar(t.actual, t.target)}`)
+    }
+    lines.push('', "_Next month's targets will be posted in #targets shortly._")
+
+    const chunks = splitIntoChunks(lines.join('\n'))
+    for (const chunk of chunks) await statsChannel.send(chunk)
+    console.log('[targets] End-of-month review posted to #stats')
+  } catch (err) {
+    console.error('[targets] Failed to post end-of-month review:', err.message)
+  }
+}
+
 async function postWeeklySummary() {
   try {
     const data = await vercelPost('/api/weekly-summary', {})
@@ -383,8 +508,26 @@ client.on('clientReady', () => {
     postWeeklySummary()
   }, { timezone: 'UTC' })
 
+  // Monthly targets form — 1st of month at 7:00am IST = 1:30am UTC
+  cron.schedule('30 1 1 * *', () => {
+    console.log('[cron] Firing monthly targets request...')
+    postTargetsRequest()
+  }, { timezone: 'UTC' })
+
+  // End-of-month review — daily check at 6:00pm IST = 12:30pm UTC; fires when tomorrow is the 1st
+  cron.schedule('30 12 * * *', () => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    if (tomorrow.getDate() === 1) {
+      console.log('[cron] Firing end-of-month review...')
+      postEndOfMonthReview()
+    }
+  }, { timezone: 'UTC' })
+
   console.log('📅 P0 tasks scheduled for 8:30am IST (3:00am UTC)')
   console.log('📅 Daily digest scheduled for 9:00am IST (3:30am UTC)')
+  console.log('📅 Monthly targets form scheduled for 7:00am IST on 1st of each month')
+  console.log('📅 End-of-month review check scheduled daily at 6:00pm IST')
 })
 
 client.on('interactionCreate', async interaction => {
@@ -727,6 +870,48 @@ client.on('interactionCreate', async interaction => {
         await interaction.editReply('✅ Weekly summary posted to #stats')
       } catch (err) {
         console.error('mh stats weekly error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh targets set ─────────────────────────────────────────────
+    if (group === 'targets' && sub === 'set') {
+      await interaction.deferReply({ ephemeral: true })
+      const metric = interaction.options.getString('metric', true)
+      const value  = interaction.options.getInteger('value', true)
+
+      try {
+        await vercelPost('/api/targets', { metricName: metric, targetValue: value })
+
+        // Refresh the pinned message in #targets
+        updatePinnedTargets().catch(err => console.error('[targets] Pin update failed:', err.message))
+
+        await interaction.editReply(`✅ **Target set:** ${metric} = **${value}** for this month`)
+      } catch (err) {
+        console.error('/mh targets set error:', err)
+        await interaction.editReply(`❌ Failed to set target: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh targets view ────────────────────────────────────────────
+    if (group === 'targets' && sub === 'view') {
+      await interaction.deferReply({ ephemeral: true })
+      try {
+        const data = await vercelGet('/api/targets')
+        const now = new Date()
+        const monthLabel = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'long', year: 'numeric' })
+
+        const lines = [`📊 **Targets — ${monthLabel}**`, '']
+        for (const t of data.targets) {
+          const pctStr = t.pct != null ? ` _(${t.pct}% of target)_` : ''
+          const targetStr = t.target ? `${t.target}` : '—'
+          lines.push(`• **${t.metric}:** ${t.actual} / ${targetStr}${pctStr}`)
+        }
+        await interaction.editReply(lines.join('\n'))
+      } catch (err) {
+        console.error('/mh targets view error:', err)
         await interaction.editReply(`❌ Failed: ${err.message}`)
       }
       return
