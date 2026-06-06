@@ -198,6 +198,14 @@ export async function appendTaskRows(rows: {
   })
 }
 
+export async function clearTasksSheet(): Promise<void> {
+  const sheets = getSheets()
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Tasks!A2:G',
+  })
+}
+
 export async function updateTaskStatus(linkedDeal: string, status: 'Done' | 'Open'): Promise<void> {
   const sheets = getSheets()
   const res = await sheets.spreadsheets.values.get({

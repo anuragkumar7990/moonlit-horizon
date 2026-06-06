@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO, differenceInHours, differenceInDays, isPast } from 'date-fns'
-import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows } from '@/lib/sheets'
+import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows, clearTasksSheet } from '@/lib/sheets'
 import { getDeals } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
@@ -203,11 +203,7 @@ export async function GET() {
 
 // DELETE — wipe all Tasks sheet data rows (test utility, keeps header)
 export async function DELETE() {
-  const sheets = getSheets()
-  await sheets.spreadsheets.values.clear({
-    spreadsheetId: SPREADSHEET_ID,
-    range: 'Tasks!A2:G',
-  })
+  await clearTasksSheet()
   return NextResponse.json({ ok: true })
 }
 
