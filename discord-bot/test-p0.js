@@ -19,8 +19,19 @@ function buildP0Message(data) {
   const noNotes          = tasks.filter(t => t.category === 'no-notes')
   const overdueClosing   = tasks.filter(t => t.category === 'overdue-closing')
   const overdueCallbacks = tasks.filter(t => t.category === 'overdue-callback')
+  const staleDeals       = tasks.filter(t => t.category === 'stale-deal')
 
   const lines = [`⚠️ **P0 Tasks — ${dateStr}** (${tasks.length} item${tasks.length !== 1 ? 's' : ''})`]
+
+  if (staleDeals.length > 0) {
+    lines.push('', `🔥 **Active deals needing attention (${staleDeals.length})**`)
+    staleDeals.forEach(t => lines.push(`• **${t.task}** — _${t.detail}_`))
+  }
+
+  if (overdueCallbacks.length > 0) {
+    lines.push('', `📞 **Overdue callbacks (${overdueCallbacks.length})**`)
+    overdueCallbacks.forEach(t => lines.push(`• **${t.task.replace('Overdue callback: ', '')}** — _${t.detail}_`))
+  }
 
   if (noNotes.length > 0) {
     lines.push('', `📝 **Meetings without notes (${noNotes.length})**`)
@@ -30,11 +41,6 @@ function buildP0Message(data) {
   if (overdueClosing.length > 0) {
     lines.push('', `📅 **Overdue closing dates (${overdueClosing.length})**`)
     overdueClosing.forEach(t => lines.push(`• **${t.task.replace('Closing date overdue: ', '')}** — _${t.detail}_`))
-  }
-
-  if (overdueCallbacks.length > 0) {
-    lines.push('', `📞 **Overdue callbacks (${overdueCallbacks.length})**`)
-    overdueCallbacks.forEach(t => lines.push(`• **${t.task.replace('Overdue callback: ', '')}** — _${t.detail}_`))
   }
 
   return lines.join('\n')
