@@ -1,7 +1,7 @@
 import { getCalls, getMeetings, getTargets, getLatestSummary } from '@/lib/sheets'
 import { getDeals, getZohoCalls } from '@/lib/zoho'
 import { buildCallsData, buildMeetingsData, buildFunnel, buildLeadCounts, buildWeeklyTrend, mergeCallSources } from '@/lib/dashboard'
-import MasterTrackerGrid from '@/components/MasterTrackerGrid'
+import HomeTabs from '@/components/HomeTabs'
 
 export const revalidate = 60
 
@@ -25,13 +25,14 @@ export default async function HomePage() {
   const allCalls = mergeCallSources(calls, zohoCalls)
 
   return (
-    <MasterTrackerGrid
+    <HomeTabs
       callsData={buildCallsData(allCalls, meetings, targets)}
       meetingsData={buildMeetingsData(meetings, targets)}
       leads={buildLeadCounts(deals)}
       funnel={buildFunnel(deals)}
       weeklyTrend={buildWeeklyTrend(allCalls, meetings)}
       weeklySummary={summary?.summary ?? null}
+      rawCalls={allCalls}
     />
   )
 }
