@@ -1,6 +1,6 @@
 # Moonlit Horizon — Handover Document
-**Last updated:** 2026-06-08  
-**Latest commit:** `e06fb79` (main)  
+**Last updated:** 2026-06-08 (session 2)  
+**Latest commit:** `7161ae6` (main)  
 **Live URL:** https://moonlit-horizon.vercel.app  
 **VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
 **Repo:** github.com/anuragkumar7990/moonlit-horizon
@@ -19,6 +19,40 @@
 | **Phase 3 — Supply Module** | ✅ Complete | Trainer pipeline, roster, topic coverage on Ashutosh view |
 | **Phase 4 — Account Intelligence** | ✅ Complete | Email/Circleback/Call/Notes intel, Cumulative Summary, Last Contact Date, event-driven triggers |
 | **Phase 5 — Contact Intelligence** | ✅ Complete | 2,372 contacts from DCT v1, Zoho-matched, historical meetings backfilled |
+| **Phase 5b — Gmail Push** | ✅ Complete | Gmail Watch API + Pub/Sub → auto Email Intel on new emails |
+
+---
+
+## 2. Session Summary (2026-06-08, session 2)
+
+### Gmail Push Notifications — Live E2E Automation
+Email Intelligence (col F of Account Intelligence sheet) now updates automatically when a new email arrives in Gmail matching the `The Test Tribe <> AccountName` subject pattern.
+
+**Architecture:**
+- Gmail Watch API registered on `anurag@thetesttribe.com` inbox → publishes to GCP Pub/Sub topic `moonlit-gmail-notifications`
+- Pub/Sub push subscription → `POST /api/intel-triggers/gmail` (excluded from Basic Auth middleware)
+- Handler decodes notification → fetches Gmail history delta since last cursor → extracts account from subject → calls `syncEmailIntel(account)` → updates col F + Cumulative Summary
+- `historyId` cursor persisted in `Config` Sheets tab (row 1: `gmail_history_id`)
+- Watch expires every 7 days — Vercel cron renews it every Monday 2am UTC (`/api/intel-triggers/gmail/renew`)
+
+**Subject format supported:**
+- `The Test Tribe <> AccountName`
+- `The Test Tribe <> AccountName - descriptor`
+- `The Test Tribe <> AccountName | descriptor`
+
+**New files:**
+- `app/api/intel-triggers/gmail/route.ts` — Pub/Sub push receiver
+- `app/api/intel-triggers/gmail/renew/route.ts` — weekly watch renewal
+- `scripts/register-gmail-watch.js` — one-time watch registration
+- `vercel.json` — Vercel cron config (Monday 2am UTC renewal)
+
+**Middleware update:** `api/intel-triggers/gmail` excluded from Basic Auth (same as `api/webhook/`) so Pub/Sub can POST without credentials.
+
+**GCP setup (already done):**
+- Project: `moonlit-horizon`
+- Topic: `projects/moonlit-horizon/topics/moonlit-gmail-notifications`
+- Subscription: `moonlit-gmail-push` (push → Vercel endpoint)
+- Publisher grant: `gmail-api-push@system.gserviceaccount.com` has Pub/Sub Publisher role
 
 ---
 
@@ -359,7 +393,7 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 
 | Issue | Severity | Action |
 |---|---|---|
-| Gmail intel trigger is still pull-based | High | Set up Gmail Watch API + Google Cloud Pub/Sub → `/api/intel-triggers/gmail` |
+| Gmail intel trigger is still pull-based | ✅ Fixed | Gmail Watch API + Pub/Sub live — auto-triggers on new inbox emails |
 | No retry logic on Zoho 429 rate limit | Medium | Add exponential backoff in `lib/zoho.ts` `zohoGet()` |
 | Sheets write failures are silent (only `console.error`) | Low | Add Discord alert to `#sales-ops` on failure |
 | Contact Intelligence Notes Summary (col W) is blank | Medium | Run AI enrichment pass using call history JSON |
@@ -377,14 +411,8 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 
 ## 7. Next Steps (Priority Order)
 
-### Priority 1 — Gmail Push Notifications (Email Intel auto-trigger)
-**Effort**: 2–3 hours  
-Set up `POST /api/intel-triggers/gmail`:
-1. Create a Google Cloud Pub/Sub topic
-2. Call `gmail.users.watch()` on `anurag@thetesttribe.com` pointing to the topic
-3. Create a Pub/Sub push subscription → Vercel endpoint
-4. Set up weekly cron (Vercel Cron) to renew the watch (expires every 7 days)
-5. Handler: decode the notification, find changed thread, extract account from subject, call `syncEmailIntel()`
+### ~~Priority 1 — Gmail Push Notifications~~ ✅ Done (2026-06-08)
+Completed. See Session Summary 2026-06-08 session 2 for full details.
 
 ### Priority 2 — Contact Intelligence Dashboard Panel
 **Effort**: Full session  
@@ -480,7 +508,7 @@ Contents: 30 scored trainers (Tier 1 = 70+, Tier 2 = 50–69, Tier 3 = <50), top
 
 | Decision | Status |
 |---|---|
-| Gmail push notifications (auto Email Intel) | Next priority — needs Google Cloud Pub/Sub setup |
+| Gmail push notifications (auto Email Intel) | ✅ Done — Gmail Watch API + Pub/Sub live |
 | Contact Intelligence dashboard panel | After Gmail push — shows call history per contact |
 | Objective auto-population | Not built — Priority 3 |
 | Payment mark-as-received | Not built — Priority 4 |
