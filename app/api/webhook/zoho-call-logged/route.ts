@@ -98,9 +98,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!accountName) {
-    console.warn(`[webhook/zoho-call-logged] Could not resolve account name for callId=${callId}`)
-    return NextResponse.json({ error: 'Could not resolve account name' }, { status: 400 })
+  // Fallback chain: email domain → contact name → skip Account Intel but still write Sheets + Contact Intel
+  if (!accountName && email) {
+    accountName = email.split('@')[1] ?? ''
+    console.log(`[webhook/zoho-call-logged] No company set — using email domain "${accountName}" for callId=${callId}`)
+  }
+  if (!accountName) accountName = contactName
+
+  if (!accountName && !email) {
+    console.warn(`[webhook/zoho-call-logged] No contact, email, or company — cannot process callId=${callId}`)
+    return NextResponse.json({ error: 'Could not resolve any contact or account' }, { status: 400 })
   }
 
   const { date, time } = parseZohoDateTime(call.callStartTime)
