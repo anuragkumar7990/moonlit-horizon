@@ -81,8 +81,10 @@ async function saveHistoryId(historyId: string) {
 function extractAccountFromSubject(subject: string): string | null {
   const m = subject.match(/The Test Tribe\s*<>\s*(.+)/i)
   if (!m) return null
-  // Strip trailing parentheticals like "(RIL)"
-  return m[1].replace(/\s*\(.*?\)\s*$/, '').trim()
+  return m[1]
+    .replace(/\s*\(.*?\)\s*$/, '')  // strip trailing "(RIL)" etc
+    .split(/\s*[-–|]\s*/)[0]        // take only part before " - " or " | "
+    .trim()
 }
 
 // ── Gmail thread fetcher (reuses logic from sync-gmail-intel.js) ──────────────
