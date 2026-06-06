@@ -154,7 +154,7 @@ async function postDailyDigest() {
   }
 }
 
-client.on('ready', () => {
+client.on('clientReady', () => {
   console.log(`✅ Logged in as ${client.user.tag}`)
   refreshCache()
   setInterval(refreshCache, 5 * 60 * 1000)
