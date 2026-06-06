@@ -1,6 +1,6 @@
 # Moonlit Horizon — Handover Document
-**Last updated:** 2026-06-07  
-**Latest commit:** `79566b2` (main)  
+**Last updated:** 2026-06-08  
+**Latest commit:** `e06fb79` (main)  
 **Live URL:** https://moonlit-horizon.vercel.app  
 **VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
 **Repo:** github.com/anuragkumar7990/moonlit-horizon
@@ -22,7 +22,53 @@
 
 ---
 
-## 2. Session Summary (2026-06-07)
+## 2. Session Summary (2026-06-08)
+
+### Zoho Call Webhook — Live E2E Automation
+Full pipeline now fires automatically whenever any call is logged in Zoho CRM (by Tanishq or anyone).
+
+**New endpoint: `POST /api/webhook/zoho-call-logged`**
+
+Triggered by a Zoho CRM Workflow Rule (Setup → Workflow Rules → "Automation for Calls"):
+- **Trigger**: Outgoing call logged or modified
+- **Condition**: All calls
+- **Action**: Instant webhook → `https://moonlit-horizon.vercel.app/api/webhook/zoho-call-logged?secret=thetesttribe`
+- **Module Parameter**: `id` = `Calls - ID` (sends Call record ID as form field)
+
+**What the webhook does (in order):**
+1. Fetches full call details from Zoho (`getCallById`) — date, time, duration, outcome, notes, owner name
+2. Resolves lead or contact:
+   - Lead calls: `$se_module=Leads`, lead is in `What_Id` (NOT `Who_Id` — Zoho quirk)
+   - Contact calls: `$se_module=Contacts`, contact is in `Who_Id`
+3. Resolves account/company name:
+   - From `lead.company` or `contact.accountName` if set
+   - Fallback: infers from email domain (`ptc.com` → `PTC`, `indusface.com` → `Indusface`, ≤4 chars → uppercase)
+   - Free providers (gmail, yahoo, etc.) → `#Unknown`
+4. If company was inferred (not `#Unknown`): writes it back to Zoho Lead `Company` + `Company_Name` field (so future calls resolve directly)
+5. Deduplication: checks if Zoho Call ID already in Sheets col J — if yes, skips Sheets write (prevents double-write when Discord `/mh log call` already wrote the row)
+6. Writes row to Sheets **Calls** tab: date, time, account, contact name, SDR (Zoho owner), duration, outcome, notes, Zoho Call ID
+7. Fires `syncCallIntel(account, date)` → regenerates **Account Intelligence** col H (Call Intel) + Last Contact Date + Cumulative Summary
+8. Fires `upsertContactIntelRow(email, ...)` → updates **Contact Intelligence**: Total Calls, Calls Connected, Connection Rate %, Last Call Date, Last Call Outcome, Call History JSON (col U)
+
+**Key Zoho discovery**: For Lead-linked calls, Zoho puts the Lead in `What_Id` and leaves `Who_Id` null. `$se_module` field determines the type. This is opposite to Contact calls where the contact is in `Who_Id`.
+
+**Deduplication — Discord `/mh log call` path:**
+- `createZohoCall` now returns the Zoho Call ID (`Promise<string | null>`, was `Promise<void>`)
+- `appendCallRow` now returns the sheet row number written (`Promise<number>`, was `Promise<void>`)
+- After Discord logs a call, the Zoho Call ID is written back to col J of that Sheets row
+- When the Zoho webhook fires for the same call, it finds the ID in col J and skips the duplicate Sheets write — but still refreshes Account Intel and Contact Intel
+
+**Changes to existing files:**
+- `lib/zoho.ts`: `getCallById` extended to return `callStartTime`, `callDuration`, `description`, `ownerName`; `createZohoCall` returns call ID; new `updateLeadCompany(leadId, company)`
+- `lib/sheets.ts`: `appendCallRow` returns row number, accepts optional `duration` + `zohoCallId`; new `updateCallRowZohoId`, `callExistsInSheetByZohoId`, `upsertContactIntelRow`
+- `app/api/log-call/route.ts`: writes Zoho Call ID back to Sheets col J after `createZohoCall` resolves
+
+**Calls tab column reference (A–N):**
+`Date | Time | Account | Contact Name | Contact Phone | SDR | Duration | Outcome | Notes | Zoho Call ID | Follow-up Date | Recording Drive Link | Transcript Summary | Auto Tags`
+
+---
+
+## 3. Session Summary (2026-06-07)
 
 ### Account Intelligence — Gmail Sync
 - `scripts/sync-gmail-intel.js` syncs Gmail threads for all 177 accounts in the Account Intelligence sheet
@@ -185,6 +231,7 @@ All files in `../CRM/`:
 | `/api/account-intel/status` | POST | Update deal status field |
 | `/api/account-intel/last-contact` | POST | Set Last Contact Date |
 | `/api/intel-triggers/call` | POST | Triggered after call logged → refresh Call Intel + cumulative |
+| `/api/webhook/zoho-call-logged` | POST | Zoho Workflow Rule webhook → write Calls tab + refresh Call Intel + update Contact Intelligence |
 
 ---
 
@@ -209,11 +256,17 @@ moonlit-horizon/
 ├── lib/
 │   ├── zoho.ts                         Zoho OAuth + getDeals/Contacts/Accounts/Calls/createCall
 │   │                                   + getAllLeadsForScoring/addTagToLeads/removeTagFromLeads
+│   │                                   + getCallById (extended: callStartTime/Duration/description/owner)
+│   │                                   + createZohoCall (now returns Zoho Call ID)
+│   │                                   + updateLeadCompany (writes Company/Company_Name to Lead)
 │   ├── sheets.ts                       Google Sheets read/write (all tabs)
 │   │                                   Exports: getMeetings, getNotes, getCalls, getTargets,
 │   │                                   getTasks, getProspects, getPayments, getObjectives,
 │   │                                   getTrainerPipeline, getTrainerRoster, getTopicCoverage,
-│   │                                   appendCallRow, appendTaskRows, appendPaymentRow,
+│   │                                   appendCallRow (returns row number, accepts duration+zohoCallId),
+│   │                                   updateCallRowZohoId, callExistsInSheetByZohoId,
+│   │                                   upsertContactIntelRow,
+│   │                                   appendTaskRows, appendPaymentRow,
 │   │                                   appendNoteRow, upsertTarget, upsertObjective,
 │   │                                   updateMeetingConducted, saveSummary, getLatestSummary
 │   ├── dashboard.ts                    Pure aggregation functions
@@ -316,11 +369,9 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 
 ## 6. Immediate Action Items
 
-1. **VPS Discord bot**: `git pull && pm2 restart moonlit-bot` to get call intel trigger live
-2. **Test intel triggers**: Log a call via `/mh log call` → verify Account Intelligence updates in sheet within ~30s
-3. **Gmail push setup**: Configure Gmail Watch API + Cloud Pub/Sub for auto email intel updates
-4. **Contact Intelligence enrichment**: Run Notes Summary AI pass for the 2,372 contacts
-5. **Review never-called-prospects.csv** (278 rows) — push to Zoho Leads when ready for next calling campaign
+1. **Gmail push setup**: Configure Gmail Watch API + Cloud Pub/Sub for auto email intel updates
+2. **Contact Intelligence enrichment**: Run Notes Summary AI pass for the 2,372 contacts
+3. **Review never-called-prospects.csv** (278 rows) — push to Zoho Leads when ready for next calling campaign
 
 ---
 
@@ -351,9 +402,8 @@ Auto-fill Calls Dialled, L1 Conducted, Deals Won from existing data sources.
 **Effort**: 1 hour  
 `/mh payment received <account>` → updates Payments sheet status to Received.
 
-### Priority 5 — Zoho Call Webhook
-**Effort**: 2 hours  
-Configure Zoho CRM Workflow → Webhook → fires `POST /api/intel-triggers/call` when a Call activity is created in Zoho. This covers calls logged directly in Zoho CRM (not via Discord).
+### ~~Priority 5 — Zoho Call Webhook~~ ✅ Done (2026-06-08)
+Completed. See Session Summary 2026-06-08 for full details.
 
 ---
 
@@ -363,7 +413,7 @@ Configure Zoho CRM Workflow → Webhook → fires `POST /api/intel-triggers/call
 |---|---|---|
 | Meetings | `/api/book`, `/api/book-prospect`, `scripts/push-historical-meetings.js` | Dashboard, P0 tasks, briefing |
 | Notes | `/api/circleback-sync` | P0 tasks, `generateAndSaveIntel()` |
-| Calls | `/api/log-call` | Dashboard, Call Intelligence, P0 tasks |
+| Calls | `/api/log-call` (Discord), `/api/webhook/zoho-call-logged` (Zoho) | Dashboard, Call Intelligence, P0 tasks, Contact Intelligence |
 | Targets | `/api/targets` | Dashboard, weekly summary |
 | Tasks | `/api/p0-tasks` | Bot autocomplete, Anurag/Ashutosh views |
 | Summaries | `/api/weekly-summary` | Homepage, Mahesh view |
