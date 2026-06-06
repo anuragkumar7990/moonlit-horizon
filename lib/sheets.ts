@@ -279,3 +279,54 @@ export async function appendProspectRows(rows: {
     },
   })
 }
+
+// ── Summaries sheet ──────────────────────────────────────────────────────────
+// Columns: Week Of | Generated At | Summary
+
+export interface Summary {
+  weekOf: string
+  generatedAt: string
+  summary: string
+}
+
+export async function getLatestSummary(): Promise<Summary | null> {
+  try {
+    const rows = await readSheet<Summary>('Summaries!A:C', (r) => ({
+      weekOf: r[0] ?? '',
+      generatedAt: r[1] ?? '',
+      summary: r[2] ?? '',
+    }))
+    if (rows.length === 0) return null
+    return rows[rows.length - 1]
+  } catch { return null }
+}
+
+export async function saveSummary(weekOf: string, summary: string): Promise<void> {
+  const sheets = getSheets()
+  const now = new Date()
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const generatedAt = `${ist.toISOString().slice(0, 10)} ${ist.toISOString().slice(11, 16)}`
+
+  // Ensure Summaries tab exists
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Summaries')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Summaries' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Summaries!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [['Week Of', 'Generated At', 'Summary']] },
+    })
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Summaries!A:C',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[weekOf, generatedAt, summary]] },
+  })
+}

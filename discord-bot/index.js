@@ -335,6 +335,31 @@ async function postDailyDigest() {
   }
 }
 
+async function postWeeklySummary() {
+  try {
+    const data = await vercelPost('/api/weekly-summary', {})
+    const statsChannel = client.channels.cache.find(c => c.name === 'stats')
+    if (!statsChannel) {
+      console.error('[weekly] #stats channel not found')
+      return
+    }
+    const lines = [
+      `📊 **Weekly Summary — ${data.weekOf}**`,
+      '',
+      data.summary,
+      '',
+      `_Calls: ${data.stats.dialled} dialled · ${data.stats.connected} connected · ${data.stats.connectRate}% rate_`,
+      `_Meetings: ${data.stats.l1Conducted} L1 · ${data.stats.l2Conducted} L2 conducted_`,
+      `_Pipeline: ${data.stats.hotDeals} hot · ${data.stats.warmDeals} warm_`,
+    ]
+    const chunks = splitIntoChunks(lines.join('\n'))
+    for (const chunk of chunks) await statsChannel.send(chunk)
+    console.log('[weekly] Weekly summary posted to #stats')
+  } catch (err) {
+    console.error('[weekly] Failed to post weekly summary:', err.message)
+  }
+}
+
 client.on('clientReady', () => {
   console.log(`✅ Logged in as ${client.user.tag}`)
   refreshCache()
@@ -350,6 +375,12 @@ client.on('clientReady', () => {
   cron.schedule('30 3 * * *', () => {
     console.log('[cron] Firing daily digest...')
     postDailyDigest()
+  }, { timezone: 'UTC' })
+
+  // Weekly summary at 9:00am IST on Sunday = 3:30am UTC Sunday
+  cron.schedule('30 3 * * 0', () => {
+    console.log('[cron] Firing weekly summary...')
+    postWeeklySummary()
   }, { timezone: 'UTC' })
 
   console.log('📅 P0 tasks scheduled for 8:30am IST (3:00am UTC)')
@@ -671,6 +702,32 @@ client.on('interactionCreate', async interaction => {
       } catch (err) {
         console.error('/mh p0 add error:', err)
         await interaction.editReply(`❌ Failed to add task: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh stats weekly ────────────────────────────────────────
+    if (group === 'stats' && sub === 'weekly') {
+      await interaction.deferReply({ ephemeral: true })
+      try {
+        const data = await vercelPost('/api/weekly-summary', {})
+        const statsChannel = interaction.client.channels.cache.find(c => c.name === 'stats')
+        if (!statsChannel) return interaction.editReply('❌ #stats channel not found.')
+        const lines = [
+          `📊 **Weekly Summary — ${data.weekOf}**`,
+          '',
+          data.summary,
+          '',
+          `_Calls: ${data.stats.dialled} dialled · ${data.stats.connected} connected · ${data.stats.connectRate}% rate_`,
+          `_Meetings: ${data.stats.l1Conducted} L1 · ${data.stats.l2Conducted} L2 conducted_`,
+          `_Pipeline: ${data.stats.hotDeals} hot · ${data.stats.warmDeals} warm_`,
+        ]
+        const chunks = splitIntoChunks(lines.join('\n'))
+        for (const chunk of chunks) await statsChannel.send(chunk)
+        await interaction.editReply('✅ Weekly summary posted to #stats')
+      } catch (err) {
+        console.error('mh stats weekly error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
       }
       return
     }

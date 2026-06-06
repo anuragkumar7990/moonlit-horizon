@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.101.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "googleapis": "^144.0.0",

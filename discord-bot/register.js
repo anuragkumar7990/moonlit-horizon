@@ -119,6 +119,16 @@ const mhCommand = new SlashCommandBuilder()
   )
   .addSubcommandGroup(group =>
     group
+      .setName('stats')
+      .setDescription('Reports and summaries')
+      .addSubcommand(sub =>
+        sub
+          .setName('weekly')
+          .setDescription('Generate and post this week\'s LLM summary to #stats')
+      )
+  )
+  .addSubcommandGroup(group =>
+    group
       .setName('log')
       .setDescription('Log sales activity')
       .addSubcommand(sub =>
