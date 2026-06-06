@@ -1042,6 +1042,49 @@ client.on('interactionCreate', async interaction => {
       return
     }
 
+    // ── /mh log payment ─────────────────────────────────────────────
+    if (group === 'log' && sub === 'payment') {
+      await interaction.deferReply({ ephemeral: true })
+
+      const accountVal  = interaction.options.getString('account', true)
+      const amount      = interaction.options.getInteger('amount', true)
+      const invoiceDate = interaction.options.getString('invoice_date', true)
+      const dueDate     = interaction.options.getString('due_date', true)
+      const deal        = interaction.options.getString('deal')  ?? ''
+      const notes       = interaction.options.getString('notes') ?? ''
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+        return interaction.editReply('❌ Dates must be in `YYYY-MM-DD` format, e.g. `2026-06-20`')
+      }
+
+      const account = cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal
+
+      try {
+        await vercelPost('/api/log-payment', { account, deal, amount, invoiceDate, dueDate, notes })
+
+        const fmtAmt = amount >= 100000
+          ? `₹${(amount / 100000).toFixed(2)}L`
+          : `₹${amount.toLocaleString('en-IN')}`
+
+        const lines = [
+          `💰 **Payment logged**`,
+          `**Account:** ${account}`,
+          deal ? `**Deal:** ${deal}` : null,
+          `**Amount:** ${fmtAmt}`,
+          `**Invoice date:** ${invoiceDate}`,
+          `**Due date:** ${dueDate}`,
+          notes ? `**Notes:** ${notes}` : null,
+          `_Status set to Invoiced. Update manually in Sheets when received._`,
+        ].filter(Boolean).join('\n')
+
+        await interaction.editReply(lines)
+      } catch (err) {
+        console.error('/mh log payment error:', err)
+        await interaction.editReply(`❌ Failed to log payment: ${err.message}`)
+      }
+      return
+    }
+
     if (group === 'log' && sub === 'call') {
       await interaction.deferReply()
 

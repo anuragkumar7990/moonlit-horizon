@@ -231,6 +231,43 @@ const mhCommand = new SlashCommandBuilder()
               .setRequired(false)
           )
       )
+      .addSubcommand(sub =>
+        sub
+          .setName('payment')
+          .setDescription('Log an invoice / payment for a client deal')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Client account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addIntegerOption(opt =>
+            opt.setName('amount')
+              .setDescription('Invoice amount in INR (without GST)')
+              .setRequired(true)
+              .setMinValue(1)
+          )
+          .addStringOption(opt =>
+            opt.setName('invoice_date')
+              .setDescription('Invoice date — YYYY-MM-DD (e.g. 2026-06-06)')
+              .setRequired(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('due_date')
+              .setDescription('Payment due date — YYYY-MM-DD (e.g. 2026-06-20)')
+              .setRequired(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('deal')
+              .setDescription('Deal / training description (optional)')
+              .setRequired(false)
+          )
+          .addStringOption(opt =>
+            opt.setName('notes')
+              .setDescription('Any additional notes (optional)')
+              .setRequired(false)
+          )
+      )
   )
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)

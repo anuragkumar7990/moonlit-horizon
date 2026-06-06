@@ -3,6 +3,9 @@ import type { Meeting, Note, Communication, Account, Call, Target, Task } from '
 
 const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID!
 
+const TRAINER_OUTREACH_SHEET_ID = '1Xol3kb_5GDxS-Su-fAs1tIvTSLfGahNXWHv0MKUOY9I'
+const TRAINER_SUPPLY_SHEET_ID   = '1R8FqcifveekYZsaS3taHARaQAo3CjZ0FqdHnNOcZg2U'
+
 function getAuth() {
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -421,4 +424,252 @@ export async function saveSummary(weekOf: string, summary: string): Promise<void
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[weekOf, generatedAt, summary]] },
   })
+}
+
+// ── Payments sheet ───────────────────────────────────────────────────────────
+// Columns: Date | Account | Deal | Amount | Invoice Date | Due Date | Status | Notes
+
+export interface Payment {
+  date: string
+  account: string
+  deal: string
+  amount: number
+  invoiceDate: string
+  dueDate: string
+  status: 'Invoiced' | 'Received' | 'Partial' | 'Overdue'
+  notes: string
+}
+
+const PAYMENTS_HEADERS = ['Date', 'Account', 'Deal', 'Amount', 'Invoice Date', 'Due Date', 'Status', 'Notes']
+
+export async function getPayments(): Promise<Payment[]> {
+  try {
+    return readSheet<Payment>('Payments!A:H', (r) => ({
+      date:        r[0] ?? '',
+      account:     r[1] ?? '',
+      deal:        r[2] ?? '',
+      amount:      parseInt(r[3] ?? '0', 10) || 0,
+      invoiceDate: r[4] ?? '',
+      dueDate:     r[5] ?? '',
+      status:      (r[6] as Payment['status']) ?? 'Invoiced',
+      notes:       r[7] ?? '',
+    }))
+  } catch { return [] }
+}
+
+export async function appendPaymentRow(row: {
+  account: string
+  deal: string
+  amount: number
+  invoiceDate: string
+  dueDate: string
+  notes?: string
+}): Promise<void> {
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Payments')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Payments' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Payments!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [PAYMENTS_HEADERS] },
+    })
+  }
+
+  const now = new Date()
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const date = ist.toISOString().slice(0, 10)
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Payments!A:H',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[date, row.account, row.deal, row.amount, row.invoiceDate, row.dueDate, 'Invoiced', row.notes ?? '']],
+    },
+  })
+}
+
+// ── Trainer Supply (external sheets) ────────────────────────────────────────
+
+async function readRawSheet(spreadsheetId: string, range: string): Promise<string[][]> {
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range })
+  return (res.data.values ?? []).map(r => r.map((c: unknown) => String(c ?? '')))
+}
+
+export interface TrainerPipelineSummary {
+  outreachTotal: number
+  connected: number
+  formFilled: number
+  emailSent: number
+  whatsappSent: number
+  meetingBooked: number
+  meetingConducted: number
+  sampleTaken: number
+  onboarded: number
+}
+
+export async function getTrainerPipeline(): Promise<TrainerPipelineSummary> {
+  const empty: TrainerPipelineSummary = {
+    outreachTotal: 0, connected: 0, formFilled: 0,
+    emailSent: 0, whatsappSent: 0, meetingBooked: 0,
+    meetingConducted: 0, sampleTaken: 0, onboarded: 0,
+  }
+  try {
+    const rows = await readRawSheet(TRAINER_OUTREACH_SHEET_ID, 'A:H')
+    let formFilled = 0
+    let outreachTotal = 0
+    let connected = 0
+    const seenNames = new Set<string>()
+
+    for (const row of rows) {
+      const col0 = row[0].trim()
+      const col2 = row[2].trim().toLowerCase()
+      const col3 = row[3].trim()
+
+      // Form response row: col A is "DD/MM/YYYY HH:MM:SS"
+      if (/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(col0)) {
+        if (!col2.startsWith('test@') && !col2.includes('@123')) formFilled++
+      }
+
+      // Outreach tracker row: col D is exactly TRUE or FALSE; col A is a trainer name
+      if ((col3 === 'TRUE' || col3 === 'FALSE') && col0 && col0 !== 'Name' && col0 !== 'Connection Status') {
+        const key = col0.toLowerCase()
+        if (!seenNames.has(key)) {
+          seenNames.add(key)
+          outreachTotal++
+          if (col3 === 'TRUE') connected++
+        }
+      }
+    }
+
+    return { ...empty, outreachTotal, connected, formFilled }
+  } catch { return empty }
+}
+
+export interface TrainerRosterEntry {
+  name: string
+  profileDetails: string
+  tier: 'Tier-1' | 'Tier-2' | 'Tier-3'
+  score: number
+  skills: string[]
+}
+
+export async function getTrainerRoster(): Promise<TrainerRosterEntry[]> {
+  try {
+    const rows = await readRawSheet(TRAINER_SUPPLY_SHEET_ID, 'A:L')
+
+    // Find trainer profiles table: col0='Trainer Name', col2='Tier', col3='Total Score'
+    let profilesStart = -1
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0].trim() === 'Trainer Name' && rows[i][2].trim() === 'Tier' && rows[i][3].trim() === 'Total Score') {
+        profilesStart = i + 1
+        break
+      }
+    }
+    if (profilesStart === -1) return []
+
+    const trainers: TrainerRosterEntry[] = []
+    for (let i = profilesStart; i < rows.length; i++) {
+      const name = rows[i][0].trim()
+      if (!name || name === 'Trainer Name') break
+      const tier = rows[i][2].trim() as 'Tier-1' | 'Tier-2' | 'Tier-3'
+      if (!['Tier-1', 'Tier-2', 'Tier-3'].includes(tier)) continue
+      trainers.push({
+        name,
+        profileDetails: rows[i][1].trim(),
+        tier,
+        score: parseInt(rows[i][3], 10) || 0,
+        skills: [],
+      })
+    }
+
+    // Find trainer-skill table: col0='Trainer Name', col1='Skill Name'
+    let skillsStart = -1
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0].trim() === 'Trainer Name' && rows[i][1].trim() === 'Skill Name') {
+        skillsStart = i + 1
+        break
+      }
+    }
+    if (skillsStart !== -1) {
+      const skillMap = new Map<string, string[]>()
+      for (let i = skillsStart; i < rows.length; i++) {
+        const trainerName = rows[i][0].trim()
+        const skill = rows[i][1].trim()
+        if (!trainerName || !skill || trainerName === 'Trainer Name') continue
+        if (!skillMap.has(trainerName)) skillMap.set(trainerName, [])
+        skillMap.get(trainerName)!.push(skill)
+      }
+      for (const t of trainers) t.skills = skillMap.get(t.name) ?? []
+    }
+
+    return trainers
+  } catch { return [] }
+}
+
+export interface TopicCoverageEntry {
+  topic: string
+  category: string
+  trainers: string[]
+  tier1Price: number
+  tier2Price: number
+  tier3Price: number
+}
+
+export async function getTopicCoverage(): Promise<TopicCoverageEntry[]> {
+  try {
+    const rows = await readRawSheet(TRAINER_SUPPLY_SHEET_ID, 'A:J')
+    const parsePrice = (s: string) => parseInt(s.replace(/[₹,\s]/g, ''), 10) || 0
+
+    // Customer pricing table: col3 = 'Price Range' (not 'Category Scale Range')
+    const pricingMap = new Map<string, { t1: number; t2: number; t3: number }>()
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][3].trim() === 'Price Range') {
+        for (let j = i + 1; j < rows.length; j++) {
+          const topic = rows[j][0].trim()
+          if (!topic || rows[j][3].trim() === 'Category Scale Range') break
+          pricingMap.set(topic, {
+            t1: parsePrice(rows[j][4]),
+            t2: parsePrice(rows[j][5]),
+            t3: parsePrice(rows[j][6]),
+          })
+        }
+        break
+      }
+    }
+
+    // Topic → trainer ranking table: col2 = 'Trainer 1'
+    let topicStart = -1
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0].trim() === 'Topic' && rows[i][2].trim() === 'Trainer 1') {
+        topicStart = i + 1
+        break
+      }
+    }
+    if (topicStart === -1) return []
+
+    const coverage: TopicCoverageEntry[] = []
+    for (let i = topicStart; i < rows.length; i++) {
+      const topic = rows[i][0].trim()
+      if (!topic || rows[i][2].trim() === 'Trainer 1') break
+      const pricing = pricingMap.get(topic) ?? { t1: 0, t2: 0, t3: 0 }
+      coverage.push({
+        topic,
+        category: rows[i][1].trim(),
+        trainers: rows[i].slice(2).map(t => t.trim()).filter(Boolean),
+        tier1Price: pricing.t1,
+        tier2Price: pricing.t2,
+        tier3Price: pricing.t3,
+      })
+    }
+    return coverage
+  } catch { return [] }
 }

@@ -1,5 +1,5 @@
 import { getDeals } from '@/lib/zoho'
-import { getTasks, getProspects } from '@/lib/sheets'
+import { getTasks, getProspects, getTrainerPipeline, getTrainerRoster, getTopicCoverage } from '@/lib/sheets'
 import { buildFunnel, buildLeadCounts } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
 import FunnelColumn from '@/components/FunnelColumn'
@@ -9,12 +9,18 @@ export const revalidate = 60
 const WEEKLY_CALL_CAPACITY = 250
 
 export default async function AshutoshPage() {
-  const [dealsRes, tasksRes, prospectsRes] = await Promise.allSettled([
-    getDeals(), getTasks(), getProspects(),
+  const [dealsRes, tasksRes, prospectsRes, pipelineRes, rosterRes, coverageRes] = await Promise.allSettled([
+    getDeals(), getTasks(), getProspects(), getTrainerPipeline(), getTrainerRoster(), getTopicCoverage(),
   ])
-  const deals     = dealsRes.status     === 'fulfilled' ? dealsRes.value     : []
-  const allTasks  = tasksRes.status     === 'fulfilled' ? tasksRes.value     : []
+  const deals    = dealsRes.status    === 'fulfilled' ? dealsRes.value    : []
+  const allTasks = tasksRes.status    === 'fulfilled' ? tasksRes.value    : []
   const prospects = prospectsRes.status === 'fulfilled' ? prospectsRes.value : []
+  const pipeline  = pipelineRes.status  === 'fulfilled' ? pipelineRes.value  : {
+    outreachTotal: 0, connected: 0, formFilled: 0, emailSent: 0,
+    whatsappSent: 0, meetingBooked: 0, meetingConducted: 0, sampleTaken: 0, onboarded: 0,
+  }
+  const roster   = rosterRes.status   === 'fulfilled' ? rosterRes.value   : []
+  const coverage = coverageRes.status === 'fulfilled' ? coverageRes.value : []
 
   const funnel    = buildFunnel(deals)
   const leads     = buildLeadCounts(deals)
@@ -32,6 +38,15 @@ export default async function AshutoshPage() {
   const sourceBreakdown = Array.from(sourceMap.entries())
     .map(([source, count]) => ({ source, count, weeks: count / WEEKLY_CALL_CAPACITY }))
     .sort((a, b) => b.count - a.count)
+
+  // Trainer roster stats
+  const tier1Count = roster.filter(t => t.tier === 'Tier-1').length
+  const tier2Count = roster.filter(t => t.tier === 'Tier-2').length
+  const tier3Count = roster.filter(t => t.tier === 'Tier-3').length
+  const topTrainers = [...roster].sort((a, b) => b.score - a.score).slice(0, 8)
+
+  // Build a name→tier map for the topic coverage best-tier lookup
+  const trainerTierMap = new Map(roster.map(t => [t.name, t.tier]))
 
   return (
     <div>
@@ -77,7 +92,6 @@ export default async function AshutoshPage() {
             <p className="text-mh-muted text-sm italic">No prospects in stock — upload to the Prospects tab.</p>
           ) : (
             <>
-              {/* Headline numbers */}
               <div className="flex items-end gap-4 mb-4">
                 <div>
                   <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">Total Stock</p>
@@ -91,7 +105,6 @@ export default async function AshutoshPage() {
                 </div>
               </div>
 
-              {/* Per-source breakdown */}
               <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-2">By Source</p>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {sourceBreakdown.map(({ source, count, weeks }) => (
@@ -141,10 +154,7 @@ export default async function AshutoshPage() {
           ) : (
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {openTasks.map((t, i) => (
-                <div
-                  key={i}
-                  className="p-3 rounded-lg bg-mh-surface2 border border-mh-border"
-                >
+                <div key={i} className="p-3 rounded-lg bg-mh-surface2 border border-mh-border">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm text-mh-text leading-snug flex-1">{t.task}</p>
                     <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${
@@ -169,13 +179,143 @@ export default async function AshutoshPage() {
       </div>
 
       {/* Row 3: Objectives */}
-      <div className="card">
+      <div className="card mb-4">
         <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Objective Progress</p>
         <p className="text-mh-muted text-sm italic leading-relaxed">
           Objective tracking live in Phase 2b — updated via{' '}
           <span className="text-mh-text">/objective update</span> in Discord.
           Covers: Lead Generation, Calling, Meetings, Lead Conversion, Trainer Supply, Revenue, Team Capacity.
         </p>
+      </div>
+
+      {/* Row 4: Trainer Supply */}
+      <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Trainer Supply</p>
+      <div className="grid grid-cols-[200px_220px_1fr] gap-4">
+
+        {/* Outreach Pipeline */}
+        <div className="card">
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Outreach Pipeline</p>
+          <div className="flex items-end gap-4 mb-4">
+            <div>
+              <p className="text-[10px] text-mh-muted uppercase tracking-widest">Prospects</p>
+              <p className="text-2xl font-semibold text-mh-text mt-0.5">{pipeline.outreachTotal}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-mh-muted uppercase tracking-widest">Connected</p>
+              <p className="text-2xl font-semibold text-mh-text mt-0.5">{pipeline.connected}</p>
+            </div>
+          </div>
+          <div className="border-t border-mh-border pt-3 space-y-2">
+            {([
+              ['Form Filled',     pipeline.formFilled],
+              ['Email Sent',      pipeline.emailSent],
+              ['WhatsApp Sent',   pipeline.whatsappSent],
+              ['Meeting Booked',  pipeline.meetingBooked],
+              ['Conducted',       pipeline.meetingConducted],
+              ['Sample Taken',    pipeline.sampleTaken],
+              ['Onboarded',       pipeline.onboarded],
+            ] as [string, number][]).map(([label, val]) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-xs text-mh-muted">{label}</span>
+                <span className={`text-xs font-semibold tabular-nums ${val > 0 ? 'text-mh-text' : 'text-mh-border'}`}>
+                  {val}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Trainer Roster */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">Trainer Roster</p>
+            <span className="text-[10px] text-mh-muted">{roster.length} scored</span>
+          </div>
+
+          {/* Tier breakdown bars */}
+          <div className="space-y-2 mb-4">
+            {([
+              ['Tier-1', tier1Count, 'text-mh-gold',       'bg-mh-gold'],
+              ['Tier-2', tier2Count, 'text-mh-vermillion', 'bg-mh-vermillion'],
+              ['Tier-3', tier3Count, 'text-mh-muted',      'bg-mh-muted'],
+            ] as [string, number, string, string][]).map(([tier, count, textCls, barCls]) => (
+              <div key={tier} className="flex items-center gap-2">
+                <span className={`text-[10px] font-semibold w-12 shrink-0 ${textCls}`}>{tier}</span>
+                <div className="flex-1 h-1.5 bg-mh-surface2 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${barCls}`}
+                    style={{ width: roster.length ? `${(count / roster.length) * 100}%` : '0%' }}
+                  />
+                </div>
+                <span className="text-xs text-mh-text w-4 text-right shrink-0">{count}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Top trainers by score */}
+          <div className="border-t border-mh-border pt-3 space-y-2 max-h-52 overflow-y-auto">
+            {topTrainers.map(t => (
+              <div key={t.name} className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-mh-text leading-tight">{t.name}</p>
+                  {t.skills.length > 0 && (
+                    <p className="text-[10px] text-mh-muted truncate">{t.skills.slice(0, 2).join(' · ')}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`text-[10px] font-semibold ${
+                    t.tier === 'Tier-1' ? 'text-mh-gold' : t.tier === 'Tier-2' ? 'text-mh-vermillion' : 'text-mh-muted'
+                  }`}>{t.tier}</span>
+                  <span className="text-[10px] text-mh-border">{t.score}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Topic Coverage */}
+        <div className="card">
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Topic Coverage</p>
+          {coverage.length === 0 ? (
+            <p className="text-mh-muted text-sm italic">No topic data available.</p>
+          ) : (
+            <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
+              {coverage.map(t => {
+                const bestTier = t.trainers.length === 0
+                  ? null
+                  : trainerTierMap.get(t.trainers[0]) ?? null
+                return (
+                  <div key={t.topic} className="flex items-center justify-between py-1.5 border-b border-mh-border last:border-0">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs text-mh-text">{t.topic}</span>
+                      <span className="text-[10px] text-mh-muted ml-2">{t.category}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-3">
+                      {t.trainers.length === 0 ? (
+                        <span className="text-[10px] text-red-500 font-semibold">⚠ No trainers</span>
+                      ) : (
+                        <>
+                          <span className="text-[10px] text-mh-muted">{t.trainers.length}T</span>
+                          {bestTier && (
+                            <span className={`text-[10px] font-semibold w-12 text-right ${
+                              bestTier === 'Tier-1' ? 'text-mh-gold' : bestTier === 'Tier-2' ? 'text-mh-vermillion' : 'text-mh-muted'
+                            }`}>{bestTier}</span>
+                          )}
+                          {t.tier1Price > 0 && (
+                            <span className="text-[10px] text-mh-muted w-14 text-right">
+                              ₹{(t.tier1Price / 1000).toFixed(0)}k/hr
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )
