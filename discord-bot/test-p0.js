@@ -4,6 +4,20 @@ const { Client, GatewayIntentBits } = require('discord.js')
 const VERCEL_URL = process.env.VERCEL_URL
 const BASIC_AUTH = 'Basic ' + Buffer.from(':' + process.env.DASHBOARD_PASSWORD).toString('base64')
 
+const STAGE_GROUP = {
+  'negotiation':               'followup',
+  'payment pending':           'followup',
+  'discovery call conducted':  'outline',
+  'outline meeting conducted': 'proposal',
+}
+
+function dealLine(n, t) {
+  const contact = t.contactName || '—'
+  const account = t.accountName || '—'
+  const topic   = t.dealName    || ''
+  return `${n}. ${contact}, ${account} _(${t.stage})_${topic ? ' — ' + topic : ''}`
+}
+
 function buildP0Message(data) {
   const { tasks } = data
 
@@ -16,31 +30,51 @@ function buildP0Message(data) {
     return `✅ **P0 Tasks — ${dateStr}**\n\nNo P0 tasks today. Clean slate!`
   }
 
-  const noNotes          = tasks.filter(t => t.category === 'no-notes')
-  const overdueClosing   = tasks.filter(t => t.category === 'overdue-closing')
-  const overdueCallbacks = tasks.filter(t => t.category === 'overdue-callback')
-  const staleDeals       = tasks.filter(t => t.category === 'stale-deal')
+  const stale    = tasks.filter(t => t.category === 'stale-deal')
+  const callback = tasks.filter(t => t.category === 'overdue-callback')
+  const noNotes  = tasks.filter(t => t.category === 'no-notes')
+  const overdue  = tasks.filter(t => t.category === 'overdue-closing')
+  const others   = tasks.filter(t => t.category === 'other')
+
+  const followup = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'followup')
+  const outline  = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'outline')
+  const proposal = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'proposal')
 
   const lines = [`⚠️ **P0 Tasks — ${dateStr}** (${tasks.length} item${tasks.length !== 1 ? 's' : ''})`]
 
-  if (staleDeals.length > 0) {
-    lines.push('', `🔥 **Active deals needing attention (${staleDeals.length})**`)
-    staleDeals.forEach(t => lines.push(`• **${t.task}** — _${t.detail}_`))
+  if (followup.length > 0) {
+    lines.push('', `**📞 Follow-up calls to be made (${followup.length})**`)
+    followup.forEach((t, i) => lines.push(dealLine(i + 1, t)))
   }
 
-  if (overdueCallbacks.length > 0) {
-    lines.push('', `📞 **Overdue callbacks (${overdueCallbacks.length})**`)
-    overdueCallbacks.forEach(t => lines.push(`• **${t.task.replace('Overdue callback: ', '')}** — _${t.detail}_`))
+  if (outline.length > 0) {
+    lines.push('', `**📋 Outlines to be sent (${outline.length})**`)
+    outline.forEach((t, i) => lines.push(dealLine(i + 1, t)))
+  }
+
+  if (proposal.length > 0) {
+    lines.push('', `**📄 Proposals to be sent (${proposal.length})**`)
+    proposal.forEach((t, i) => lines.push(dealLine(i + 1, t)))
+  }
+
+  if (others.length > 0) {
+    lines.push('', `**🗂️ Others (${others.length})**`)
+    others.forEach((t, i) => lines.push(`${i + 1}. ${t.task}${t.detail ? ' — _' + t.detail + '_' : ''}`))
+  }
+
+  if (callback.length > 0) {
+    lines.push('', `**🔁 Overdue callbacks (${callback.length})**`)
+    callback.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Overdue callback: ', '')} — _${t.detail}_`))
   }
 
   if (noNotes.length > 0) {
-    lines.push('', `📝 **Meetings without notes (${noNotes.length})**`)
-    noNotes.forEach(t => lines.push(`• **${t.task.replace('Add follow-up notes for ', '')}** — _${t.detail}_`))
+    lines.push('', `**📝 Meeting notes pending (${noNotes.length})**`)
+    noNotes.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Add follow-up notes for ', '')} — _${t.detail}_`))
   }
 
-  if (overdueClosing.length > 0) {
-    lines.push('', `📅 **Overdue closing dates (${overdueClosing.length})**`)
-    overdueClosing.forEach(t => lines.push(`• **${t.task.replace('Closing date overdue: ', '')}** — _${t.detail}_`))
+  if (overdue.length > 0) {
+    lines.push('', `**📅 Overdue closing dates (${overdue.length})**`)
+    overdue.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Closing date overdue: ', '')} — _${t.detail}_`))
   }
 
   return lines.join('\n')

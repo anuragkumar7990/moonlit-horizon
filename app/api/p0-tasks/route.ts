@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO, differenceInHours, differenceInDays, isPast } from 'date-fns'
 import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows } from '@/lib/sheets'
 import { getDeals } from '@/lib/zoho'
@@ -22,6 +22,11 @@ interface P0Task {
   detail: string
   linkedDeal: string
   assignedTo: string
+  // stale-deal fields — populated for deal-based tasks
+  contactName?: string
+  accountName?: string
+  stage?: string
+  dealName?: string
 }
 
 export async function GET() {
@@ -165,11 +170,15 @@ export async function GET() {
       : ''
 
     newTasks.push({
-      category:   'stale-deal',
-      task:       `${rule.taskPrefix}: ${displayName}`,
-      detail:     `${d.stage} · ${staleSuffix}${closingInfo}`,
-      linkedDeal: key,
-      assignedTo: rule.assignedTo,
+      category:    'stale-deal',
+      task:        `${rule.taskPrefix}: ${displayName}`,
+      detail:      `${d.stage} · ${staleSuffix}${closingInfo}`,
+      linkedDeal:  key,
+      assignedTo:  rule.assignedTo,
+      contactName: d.contactName || '',
+      accountName: displayName,
+      stage:       d.stage,
+      dealName:    d.dealName || '',
     })
   }
 
@@ -190,4 +199,24 @@ export async function GET() {
     newCount: newTasks.length,
     tasks:    newTasks,
   })
+}
+
+// POST — add a manual "Other" P0 task
+export async function POST(req: NextRequest) {
+  const { task, detail, assignedTo } = await req.json()
+  if (!task) return NextResponse.json({ error: 'task is required' }, { status: 400 })
+
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const key   = `other:${today}:${task.toLowerCase().slice(0, 40)}`
+
+  await appendTaskRows([{
+    date:       today,
+    task,
+    type:       'P0',
+    assignedTo: assignedTo || 'Anurag',
+    linkedDeal: key,
+    status:     'Open',
+  }])
+
+  return NextResponse.json({ ok: true, task, detail: detail || '', assignedTo: assignedTo || 'Anurag' })
 }

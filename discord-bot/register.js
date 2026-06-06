@@ -60,6 +60,37 @@ const mhCommand = new SlashCommandBuilder()
   .setDescription('Moonlit Horizon — sales ops commands')
   .addSubcommandGroup(group =>
     group
+      .setName('p0')
+      .setDescription('P0 task management')
+      .addSubcommand(sub =>
+        sub
+          .setName('add')
+          .setDescription('Add a manual P0 task to today\'s list')
+          .addStringOption(opt =>
+            opt.setName('task')
+              .setDescription('What needs to be done')
+              .setRequired(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('detail')
+              .setDescription('Additional context (account, deadline, etc.)')
+              .setRequired(false)
+          )
+          .addStringOption(opt =>
+            opt.setName('assigned_to')
+              .setDescription('Who should action this')
+              .setRequired(false)
+              .addChoices(
+                { name: 'Anurag',   value: 'Anurag'   },
+                { name: 'Tanishq',  value: 'Tanishq'  },
+                { name: 'Ashutosh', value: 'Ashutosh' },
+                { name: 'Mahesh',   value: 'Mahesh'   },
+              )
+          )
+      )
+  )
+  .addSubcommandGroup(group =>
+    group
       .setName('log')
       .setDescription('Log sales activity')
       .addSubcommand(sub =>
