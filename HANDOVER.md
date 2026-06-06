@@ -1,6 +1,6 @@
 # Moonlit Horizon — Handover Document
 **Last updated:** 2026-06-06  
-**Latest commit:** `0b66e40` (main)  
+**Latest commit:** `957c3ef` (main)  
 **Live URL:** https://moonlit-horizon.vercel.app  
 **VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
 **Repo:** github.com/anuragkumar7990/moonlit-horizon
@@ -175,6 +175,13 @@ Tags top 250 with `#top250` in Zoho; removes tag from leads that fell out. Zero 
 | Dead code in `lib/zoho.ts`: `scoreLeadForDashboard()`, `getLeadsByStatus()` | Low | Safe to delete |
 | pm2 restart count = 39 | Low | Non-critical; stale interaction timeouts |
 | Zoho deals — some contacts unlinked (show `—` in P0) | Low | Link contacts to deals in Zoho CRM |
+
+---
+
+## 5b. Post-Session Fixes (same session)
+
+- `/mh briefing` was posting to `#sales-ops` which doesn't exist — fixed to `#general`
+- Hot Pipeline in briefing showed blank account names for deals with no Account linked in Zoho — fixed to fall back to Deal Name. Root fix: link accounts to those deals in Zoho CRM.
 
 ---
 
