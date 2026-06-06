@@ -145,7 +145,7 @@ function buildDigestMessage(data) {
 const STAGE_GROUP = {
   'negotiation':               'followup',
   'payment pending':           'followup',
-  'discovery call conducted':  'outline',
+  'discovery call conducted':  'l2-meeting',
   'outline meeting conducted': 'proposal',
 }
 
@@ -186,9 +186,9 @@ function buildP0Message(data) {
   const overdue  = tasks.filter(t => t.category === 'overdue-closing')
   const others   = tasks.filter(t => t.category === 'other')
 
-  const followup = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'followup')
-  const outline  = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'outline')
-  const proposal = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'proposal')
+  const followup  = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'followup')
+  const l2meeting = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'l2-meeting')
+  const proposal  = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'proposal')
 
   const lines = [`⚠️ **P0 Tasks — ${dateStr}** (${tasks.length} item${tasks.length !== 1 ? 's' : ''})`]
 
@@ -197,9 +197,9 @@ function buildP0Message(data) {
     followup.forEach((t, i) => lines.push(dealLine(i + 1, t)))
   }
 
-  if (outline.length > 0) {
-    lines.push('', `**📋 Outlines to be sent (${outline.length}) — Anurag**`)
-    outline.forEach((t, i) => lines.push(dealLine(i + 1, t)))
+  if (l2meeting.length > 0) {
+    lines.push('', `**📋 Outline meetings to book (${l2meeting.length}) — Anurag**`)
+    l2meeting.forEach((t, i) => lines.push(dealLine(i + 1, t)))
   }
 
   if (proposal.length > 0) {
