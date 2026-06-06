@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import type { Meeting, Note, Communication, Account, Call, Target } from './types'
+import type { Meeting, Note, Communication, Account, Call, Target, Task } from './types'
 
 const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID!
 
@@ -144,6 +144,56 @@ export async function appendCallRow(row: {
         row.sdr, '', row.outcome, row.notes, '',
         row.followUpDate, '', '', '',
       ]],
+    },
+  })
+}
+
+const TASKS_HEADERS = ['Date', 'Task', 'Type', 'Assigned To', 'Linked Deal', 'Status', 'Completed At']
+
+export async function getTasks(): Promise<Task[]> {
+  return readSheet<Task>('Tasks!A:G', (r) => ({
+    date:        r[0] ?? '',
+    task:        r[1] ?? '',
+    type:        (r[2] as 'P0' | 'Objective') ?? 'P0',
+    assignedTo:  r[3] ?? '',
+    linkedDeal:  r[4] ?? '',
+    status:      r[5] ?? '',
+    completedAt: r[6] ?? '',
+  }))
+}
+
+export async function appendTaskRows(rows: {
+  date: string
+  task: string
+  type: 'P0' | 'Objective'
+  assignedTo: string
+  linkedDeal: string
+  status: string
+}[]): Promise<void> {
+  if (rows.length === 0) return
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Tasks')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Tasks' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Tasks!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [TASKS_HEADERS] },
+    })
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Tasks!A:G',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: rows.map(r => [r.date, r.task, r.type, r.assignedTo, r.linkedDeal, r.status, '']),
     },
   })
 }

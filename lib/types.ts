@@ -113,3 +113,13 @@ export interface ZohoAccount {
   id: string
   accountName: string
 }
+
+export interface Task {
+  date: string
+  task: string
+  type: 'P0' | 'Objective'
+  assignedTo: string
+  linkedDeal: string
+  status: string
+  completedAt: string
+}

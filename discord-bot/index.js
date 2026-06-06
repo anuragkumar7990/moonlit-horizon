@@ -138,6 +138,59 @@ function buildDigestMessage(data) {
   return lines.join('\n')
 }
 
+// ── P0 Task Generator formatter ──────────────────────────────────
+function buildP0Message(data) {
+  const { tasks, newCount } = data
+
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  })
+
+  if (!tasks || tasks.length === 0) {
+    return `✅ **P0 Tasks — ${dateStr}**\n\nNo P0 tasks today. Clean slate!`
+  }
+
+  const noNotes        = tasks.filter(t => t.category === 'no-notes')
+  const overdueClosing = tasks.filter(t => t.category === 'overdue-closing')
+  const overdueCallbacks = tasks.filter(t => t.category === 'overdue-callback')
+
+  const lines = [`⚠️ **P0 Tasks — ${dateStr}** (${tasks.length} item${tasks.length !== 1 ? 's' : ''})`]
+
+  if (noNotes.length > 0) {
+    lines.push('', `📝 **Meetings without notes (${noNotes.length})**`)
+    noNotes.forEach(t => lines.push(`• **${t.task.replace('Add follow-up notes for ', '')}** — _${t.detail}_`))
+  }
+
+  if (overdueClosing.length > 0) {
+    lines.push('', `📅 **Overdue closing dates (${overdueClosing.length})**`)
+    overdueClosing.forEach(t => lines.push(`• **${t.task.replace('Closing date overdue: ', '')}** — _${t.detail}_`))
+  }
+
+  if (overdueCallbacks.length > 0) {
+    lines.push('', `📞 **Overdue callbacks (${overdueCallbacks.length})**`)
+    overdueCallbacks.forEach(t => lines.push(`• **${t.task.replace('Overdue callback: ', '')}** — _${t.detail}_`))
+  }
+
+  return lines.join('\n')
+}
+
+async function postP0Tasks() {
+  try {
+    const data = await vercelGet('/api/p0-tasks')
+    const message = buildP0Message(data)
+    const channel = client.channels.cache.find(c => c.name === 'p0-tasks')
+    if (!channel) {
+      console.error('[p0] #p0-tasks channel not found')
+      return
+    }
+    await channel.send(message)
+    console.log(`[p0] Posted ${data.newCount} P0 tasks to #p0-tasks`)
+  } catch (err) {
+    console.error('[p0] Failed to post P0 tasks:', err.message)
+  }
+}
+
 async function postDailyDigest() {
   try {
     const data = await vercelGet('/api/stats-digest')
@@ -159,12 +212,19 @@ client.on('clientReady', () => {
   refreshCache()
   setInterval(refreshCache, 5 * 60 * 1000)
 
+  // P0 task generator at 8:30am IST = 3:00am UTC
+  cron.schedule('0 3 * * *', () => {
+    console.log('[cron] Firing P0 task generator...')
+    postP0Tasks()
+  }, { timezone: 'UTC' })
+
   // Daily digest at 9:00am IST = 3:30am UTC
   cron.schedule('30 3 * * *', () => {
     console.log('[cron] Firing daily digest...')
     postDailyDigest()
   }, { timezone: 'UTC' })
 
+  console.log('📅 P0 tasks scheduled for 8:30am IST (3:00am UTC)')
   console.log('📅 Daily digest scheduled for 9:00am IST (3:30am UTC)')
 })
 
