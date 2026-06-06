@@ -136,12 +136,17 @@ export async function GET() {
     if (recentlyFlagged(key, rule.repeatDays)) continue
 
     // Check last call for this account
-    const lastCall = lastCallByAccount.get(d.accountName.toLowerCase())
+    const lastCall =
+      lastCallByAccount.get(d.accountName.toLowerCase()) ??
+      lastCallByAccount.get(d.contactName.toLowerCase()) ??
+      lastCallByAccount.get(d.dealName.toLowerCase())
     const daysSinceCall = lastCall
       ? differenceInDays(new Date(), parseISO(lastCall))
       : Infinity
 
     if (daysSinceCall < rule.staleDays) continue
+
+    const displayName = d.accountName || d.contactName || d.dealName || 'Unknown'
 
     const staleSuffix = lastCall
       ? `last call ${differenceInDays(new Date(), parseISO(lastCall))}d ago`
@@ -161,7 +166,7 @@ export async function GET() {
 
     newTasks.push({
       category:   'stale-deal',
-      task:       `${rule.taskPrefix}: ${d.accountName}`,
+      task:       `${rule.taskPrefix}: ${displayName}`,
       detail:     `${d.stage} · ${staleSuffix}${closingInfo}`,
       linkedDeal: key,
       assignedTo: rule.assignedTo,
