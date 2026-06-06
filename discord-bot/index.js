@@ -230,6 +230,61 @@ function buildP0Message(data) {
   return lines.join('\n')
 }
 
+function buildSummaryMessage(tasks) {
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  })
+
+  if (!tasks || tasks.length === 0) {
+    return `✅ **P0 Summary — ${dateStr}**\n\nNo open P0 tasks. Clean slate!`
+  }
+
+  const followup  = tasks.filter(t => /^(Follow up on deal|Chase payment):/i.test(t.task))
+  const l2meeting = tasks.filter(t => /^Book L2 meeting:/i.test(t.task))
+  const proposal  = tasks.filter(t => /^Send proposal:/i.test(t.task))
+  const callback  = tasks.filter(t => /^Overdue callback:/i.test(t.task))
+  const noNotes   = tasks.filter(t => /^Add follow-up notes/i.test(t.task))
+  const overdue   = tasks.filter(t => /^Closing date overdue:/i.test(t.task))
+  const flagged   = new Set([...followup, ...l2meeting, ...proposal, ...callback, ...noNotes, ...overdue])
+  const others    = tasks.filter(t => !flagged.has(t))
+
+  const accountFrom = t => t.task.replace(/^[^:]+:\s*/, '')
+
+  const lines = [`📋 **P0 Summary — ${dateStr}** (${tasks.length} open)`]
+
+  if (followup.length > 0) {
+    lines.push('', `**📞 Follow-up calls (${followup.length}) — Tanishq**`)
+    followup.forEach((t, i) => lines.push(`${i + 1}. ${accountFrom(t)}`))
+  }
+  if (l2meeting.length > 0) {
+    lines.push('', `**📋 Outline meetings to book (${l2meeting.length}) — Anurag**`)
+    l2meeting.forEach((t, i) => lines.push(`${i + 1}. ${accountFrom(t)}`))
+  }
+  if (proposal.length > 0) {
+    lines.push('', `**📄 Proposals to be sent (${proposal.length}) — Anurag**`)
+    proposal.forEach((t, i) => lines.push(`${i + 1}. ${accountFrom(t)}`))
+  }
+  if (others.length > 0) {
+    lines.push('', `**🗂️ Others (${others.length})**`)
+    others.forEach((t, i) => lines.push(`${i + 1}. ${t.task}`))
+  }
+  if (callback.length > 0) {
+    lines.push('', `**🔁 Overdue callbacks (${callback.length}) — Tanishq**`)
+    callback.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Overdue callback: ', '')}`))
+  }
+  if (noNotes.length > 0) {
+    lines.push('', `**📝 Meeting notes pending (${noNotes.length}) — Tanishq**`)
+    noNotes.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Add follow-up notes for ', '')}`))
+  }
+  if (overdue.length > 0) {
+    lines.push('', `**📅 Overdue closing dates (${overdue.length}) — Anurag**`)
+    overdue.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Closing date overdue: ', '')}`))
+  }
+
+  return lines.join('\n')
+}
+
 function splitIntoChunks(text, limit = 1900) {
   const lines = text.split('\n')
   const chunks = []
@@ -566,6 +621,24 @@ client.on('interactionCreate', async interaction => {
       } catch (err) {
         console.error('/mh p0 done error:', err)
         await interaction.editReply(`❌ Failed to update task: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh p0 today ────────────────────────────────────────────
+    if (group === 'p0' && sub === 'today') {
+      await interaction.deferReply({ ephemeral: true })
+      try {
+        const data = await vercelGet('/api/p0-tasks/open')
+        const msg = buildSummaryMessage(data.tasks)
+        const ch = interaction.client.channels.cache.find(c => c.name === 'p0-tasks')
+        if (!ch) return interaction.editReply('❌ #p0-tasks channel not found.')
+        const chunks = splitIntoChunks(msg)
+        for (const chunk of chunks) await ch.send(chunk)
+        await interaction.editReply(`✅ Posted to #p0-tasks (${data.tasks.length} open task${data.tasks.length !== 1 ? 's' : ''})`)
+      } catch (err) {
+        console.error('mh p0 today error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
       }
       return
     }

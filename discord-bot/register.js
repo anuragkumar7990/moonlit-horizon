@@ -111,6 +111,11 @@ const mhCommand = new SlashCommandBuilder()
               .setAutocomplete(true)
           )
       )
+      .addSubcommand(sub =>
+        sub
+          .setName('today')
+          .setDescription('Re-post today\'s open P0 tasks to #p0-tasks')
+      )
   )
   .addSubcommandGroup(group =>
     group
