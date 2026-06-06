@@ -1,4 +1,5 @@
 import { getDeals } from '@/lib/zoho'
+import { getTasks } from '@/lib/sheets'
 import { buildFunnel, buildLeadCounts } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
 import FunnelColumn from '@/components/FunnelColumn'
@@ -6,11 +7,13 @@ import FunnelColumn from '@/components/FunnelColumn'
 export const revalidate = 60
 
 export default async function AshutoshPage() {
-  const dealsRes = await Promise.allSettled([getDeals()])
-  const deals = dealsRes[0].status === 'fulfilled' ? dealsRes[0].value : []
+  const [dealsRes, tasksRes] = await Promise.allSettled([getDeals(), getTasks()])
+  const deals    = dealsRes.status  === 'fulfilled' ? dealsRes.value  : []
+  const allTasks = tasksRes.status  === 'fulfilled' ? tasksRes.value  : []
 
-  const funnel = buildFunnel(deals)
-  const leads  = buildLeadCounts(deals)
+  const funnel    = buildFunnel(deals)
+  const leads     = buildLeadCounts(deals)
+  const openTasks = allTasks.filter(t => t.status === 'Open')
 
   const SOURCES = [
     'Events (Webinars + Conferences)',
@@ -88,11 +91,41 @@ export default async function AshutoshPage() {
           </p>
         </div>
         <div className="card">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Pending Tasks</p>
-          <p className="text-mh-muted text-sm italic leading-relaxed">
-            Open tasks for Ashutosh, Anurag, and Tanishq will populate from the{' '}
-            <span className="text-mh-text">Tasks</span> tab once the P0 Agent is live (Phase 2).
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">
+            Pending Tasks
+            {openTasks.length > 0 && (
+              <span className="text-mh-vermillion ml-2">{openTasks.length}</span>
+            )}
           </p>
+          {openTasks.length === 0 ? (
+            <p className="text-mh-muted text-sm italic">No open tasks</p>
+          ) : (
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {openTasks.map((t, i) => (
+                <div
+                  key={i}
+                  className="p-3 rounded-lg bg-mh-surface2 border border-mh-border"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm text-mh-text leading-snug flex-1">{t.task}</p>
+                    <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                      t.type === 'P0' ? 'bg-mh-vermillion/15 text-mh-vermillion' : 'bg-mh-surface border border-mh-border text-mh-muted'
+                    }`}>
+                      {t.type}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    {t.assignedTo && (
+                      <span className="text-[10px] text-mh-muted uppercase tracking-widest">{t.assignedTo}</span>
+                    )}
+                    {t.linkedDeal && (
+                      <span className="text-[10px] text-mh-muted truncate">{t.linkedDeal}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
