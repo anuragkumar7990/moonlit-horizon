@@ -1,25 +1,31 @@
-import { getCalls, getMeetings, getTargets } from '@/lib/sheets'
-import { getDeals } from '@/lib/zoho'
-import { buildCallsData, buildMeetingsData, buildFunnel, buildLeadCounts } from '@/lib/dashboard'
+import { getCalls, getMeetings, getTargets, getLatestSummary } from '@/lib/sheets'
+import { getDeals, getZohoCalls } from '@/lib/zoho'
+import { buildCallsData, buildMeetingsData, buildFunnel, buildLeadCounts, mergeCallSources } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
 import FunnelColumn from '@/components/FunnelColumn'
 
 export const revalidate = 60
 
 export default async function MaheshPage() {
-  const [callsRes, meetingsRes, dealsRes, targetsRes] = await Promise.allSettled([
+  const [callsRes, meetingsRes, dealsRes, targetsRes, zohoCallsRes, summaryRes] = await Promise.allSettled([
     getCalls(),
     getMeetings(),
     getDeals(),
     getTargets(),
+    getZohoCalls(),
+    getLatestSummary(),
   ])
 
-  const calls    = callsRes.status    === 'fulfilled' ? callsRes.value    : []
-  const meetings = meetingsRes.status === 'fulfilled' ? meetingsRes.value : []
-  const deals    = dealsRes.status    === 'fulfilled' ? dealsRes.value    : []
-  const targets  = targetsRes.status  === 'fulfilled' ? targetsRes.value  : []
+  const calls      = callsRes.status      === 'fulfilled' ? callsRes.value      : []
+  const meetings   = meetingsRes.status   === 'fulfilled' ? meetingsRes.value   : []
+  const deals      = dealsRes.status      === 'fulfilled' ? dealsRes.value      : []
+  const targets    = targetsRes.status    === 'fulfilled' ? targetsRes.value    : []
+  const zohoCalls  = zohoCallsRes.status  === 'fulfilled' ? zohoCallsRes.value  : []
+  const summary    = summaryRes.status    === 'fulfilled' ? summaryRes.value    : null
 
-  const callsData    = buildCallsData(calls, meetings, targets)
+  const allCalls = mergeCallSources(calls, zohoCalls)
+
+  const callsData    = buildCallsData(allCalls, meetings, targets)
   const meetingsData = buildMeetingsData(meetings, targets)
   const funnel       = buildFunnel(deals)
   const leads        = buildLeadCounts(deals)
@@ -105,15 +111,22 @@ export default async function MaheshPage() {
         </div>
       </div>
 
-      {/* Summary + Reports */}
+      {/* Weekly summary + Reports */}
       <div className="grid grid-cols-2 gap-4">
         <div className="card">
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Weekly Summary</p>
-          <p className="text-mh-muted text-sm italic leading-relaxed">
-            LLM-generated summary arrives in Phase 2 — covers target deviations,
-            what went well, what didn&apos;t, payment status, and next week&apos;s priorities.
-            Posted to <span className="text-mh-text">#stats</span> every Monday 9am IST.
-          </p>
+          {summary?.summary ? (
+            <div className="space-y-2">
+              {summary.summary.split('\n').filter(l => l.trim()).map((line, i) => (
+                <p key={i} className="text-sm text-mh-text leading-relaxed">{line}</p>
+              ))}
+              <p className="text-[10px] text-mh-muted mt-3">Week of {summary.weekOf}</p>
+            </div>
+          ) : (
+            <p className="text-mh-muted text-sm italic leading-relaxed">
+              No summary yet — use <span className="text-mh-text">/mh stats weekly</span> in Discord to generate one.
+            </p>
+          )}
         </div>
         <div className="card">
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Reports</p>
@@ -121,7 +134,7 @@ export default async function MaheshPage() {
             <p className="text-sm text-mh-muted italic">Weekly PDF — auto-generated every Sunday</p>
             <p className="text-sm text-mh-muted italic">Monthly PDF — auto-generated on the 1st</p>
             <p className="text-xs text-mh-muted mt-3">
-              Download links will appear here once report generation is live (Phase 2).
+              Download links will appear here once report generation is live.
             </p>
           </div>
         </div>

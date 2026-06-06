@@ -10,11 +10,12 @@ import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 type Period = 'weekly' | 'monthly'
 
 interface Props {
-  callsData:    CallsColumnData
-  meetingsData: MeetingsColumnData
-  leads:        LeadCounts
-  funnel:       FunnelData
-  weeklyTrend:  WeeklyPoint[]
+  callsData:      CallsColumnData
+  meetingsData:   MeetingsColumnData
+  leads:          LeadCounts
+  funnel:         FunnelData
+  weeklyTrend:    WeeklyPoint[]
+  weeklySummary?: string | null
 }
 
 function Divider() {
@@ -29,7 +30,7 @@ function ColHeader({ children }: { children: string }) {
   )
 }
 
-export default function MasterTrackerGrid({ callsData, meetingsData, leads, funnel, weeklyTrend }: Props) {
+export default function MasterTrackerGrid({ callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary }: Props) {
   const [period, setPeriod] = useState<Period>('weekly')
 
   const calls        = callsData[period]
@@ -123,25 +124,23 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         </div>
       </div>
 
-      {/* Weekly + Monthly summary placeholders */}
-      <div className="grid grid-cols-2 gap-4 mt-4">
+      {/* Weekly summary */}
+      <div className="mt-4">
         <div className="card">
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">
             Weekly Summary
           </p>
-          <p className="text-mh-muted text-sm italic leading-relaxed">
-            LLM-generated summary coming in Phase 2 — 5 bullets covering what went well,
-            what didn&apos;t, objective progress, notable lead movements, and next week&apos;s focus.
-          </p>
-        </div>
-        <div className="card">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">
-            Monthly Summary
-          </p>
-          <p className="text-mh-muted text-sm italic leading-relaxed">
-            LLM-generated monthly summary posted to <span className="text-mh-text">#stats</span> on
-            the 1st of each month. Download link for PDF report will appear here.
-          </p>
+          {weeklySummary ? (
+            <div className="space-y-2">
+              {weeklySummary.split('\n').filter(l => l.trim()).map((line, i) => (
+                <p key={i} className="text-sm text-mh-text leading-relaxed">{line}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-mh-muted text-sm italic leading-relaxed">
+              No summary yet — use <span className="text-mh-text">/mh stats weekly</span> in Discord to generate one.
+            </p>
+          )}
         </div>
       </div>
     </div>

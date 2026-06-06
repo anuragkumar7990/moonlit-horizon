@@ -5,6 +5,32 @@ import {
 } from 'date-fns'
 import type { Call, Meeting, ZohoDeal, Target, FunnelStage, FunnelData, LeadCounts, WeeklyPoint } from './types'
 
+// ── Call source merger ────────────────────────────────────────────────────────
+// Zoho is primary source; Sheet calls supplement (dedup by date+account).
+
+export function mergeCallSources(
+  sheetCalls: Call[],
+  zohoCalls: { id: string; date: string; accountName: string; contactName: string; outcome: string }[],
+): Call[] {
+  const seen = new Set<string>()
+  const result: Call[] = []
+  for (const c of zohoCalls) {
+    const key = `${c.date}:${c.accountName.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push({
+      date: c.date, time: '', account: c.accountName, contactName: c.contactName,
+      contactPhone: '', sdr: '', duration: '', outcome: c.outcome, notes: '',
+      zohoCallId: c.id, followUpDate: '', recordingLink: '', transcriptSummary: '', autoTags: '',
+    })
+  }
+  for (const c of sheetCalls) {
+    const key = `${c.date}:${c.account.toLowerCase()}`
+    if (!seen.has(key)) result.push(c)
+  }
+  return result
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const NOT_CONNECTED = new Set([
@@ -100,7 +126,7 @@ export function buildCallsData(
 
   const tDial = getTarget(targets, 'Calls Dialled')
   const tConn = getTarget(targets, 'Calls Connected')
-  const tMtg  = getTarget(targets, 'L1 Meetings Booked')
+  const tMtg  = getTarget(targets, 'Meetings Booked')
 
   return {
     weekly:  { dialled: wD, connected: wC, meetingsBooked: wMtg },
@@ -144,7 +170,7 @@ export function buildMeetingsData(
     }
   }
 
-  const tL1B = getTarget(targets, 'L1 Meetings Booked')
+  const tL1B = getTarget(targets, 'Meetings Booked')
   const tL1C = getTarget(targets, 'L1 Meetings Conducted')
   const tL2C = getTarget(targets, 'L2 Meetings Conducted')
 
@@ -278,7 +304,7 @@ export function buildTanishqMetrics(
 
   const tDial = getTarget(targets, 'Calls Dialled')
   const tConn = getTarget(targets, 'Calls Connected')
-  const tMtg  = getTarget(targets, 'L1 Meetings Booked')
+  const tMtg  = getTarget(targets, 'Meetings Booked')
 
   return {
     daily: {

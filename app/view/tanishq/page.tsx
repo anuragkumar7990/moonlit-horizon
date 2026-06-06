@@ -1,20 +1,25 @@
 import { getCalls, getMeetings, getTargets } from '@/lib/sheets'
-import { buildTanishqMetrics, buildTodaysMeetings, buildFollowUps } from '@/lib/dashboard'
+import { getZohoCalls } from '@/lib/zoho'
+import { buildTanishqMetrics, buildTodaysMeetings, buildFollowUps, mergeCallSources } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
 import TanishqDashboard from '@/components/TanishqDashboard'
 
 export const revalidate = 60
 
 export default async function TanishqPage() {
-  const [callsRes, meetingsRes, targetsRes] = await Promise.allSettled([
+  const [callsRes, meetingsRes, targetsRes, zohoCallsRes] = await Promise.allSettled([
     getCalls(),
     getMeetings(),
     getTargets(),
+    getZohoCalls(),
   ])
 
-  const calls    = callsRes.status    === 'fulfilled' ? callsRes.value    : []
-  const meetings = meetingsRes.status === 'fulfilled' ? meetingsRes.value : []
-  const targets  = targetsRes.status  === 'fulfilled' ? targetsRes.value  : []
+  const calls     = callsRes.status     === 'fulfilled' ? callsRes.value     : []
+  const meetings  = meetingsRes.status  === 'fulfilled' ? meetingsRes.value  : []
+  const targets   = targetsRes.status   === 'fulfilled' ? targetsRes.value   : []
+  const zohoCalls = zohoCallsRes.status === 'fulfilled' ? zohoCallsRes.value : []
+
+  const allCalls = mergeCallSources(calls, zohoCalls)
 
   return (
     <div>
@@ -22,7 +27,7 @@ export default async function TanishqPage() {
         <PersonSelector />
       </div>
       <TanishqDashboard
-        metrics={buildTanishqMetrics(calls, meetings, targets)}
+        metrics={buildTanishqMetrics(allCalls, meetings, targets)}
         todaysMeetings={buildTodaysMeetings(meetings)}
         followUps={buildFollowUps(calls)}
       />
