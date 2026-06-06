@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO, differenceInHours, differenceInDays, isPast } from 'date-fns'
-import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows, clearTasksSheet } from '@/lib/sheets'
+import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows, clearTasksSheet, getContactIntelFollowUps } from '@/lib/sheets'
 import { getDeals, getZohoCalls } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +17,7 @@ const STAGE_RULES = [
 ] as const
 
 interface P0Task {
-  category: 'no-notes' | 'overdue-closing' | 'overdue-callback' | 'stale-deal' | 'other'
+  category: 'no-notes' | 'overdue-closing' | 'overdue-callback' | 'stale-deal' | 'ci-followup' | 'other'
   task: string
   detail: string
   linkedDeal: string
@@ -31,16 +31,17 @@ interface P0Task {
 }
 
 export async function GET() {
-  const [meetingsRes, notesRes, dealsRes, callsRes, zohoCallsRes, tasksRes] = await Promise.allSettled([
-    getMeetings(), getNotes(), getDeals(), getCalls(), getZohoCalls(), getTasks(),
+  const [meetingsRes, notesRes, dealsRes, callsRes, zohoCallsRes, tasksRes, ciFollowUpsRes] = await Promise.allSettled([
+    getMeetings(), getNotes(), getDeals(), getCalls(), getZohoCalls(), getTasks(), getContactIntelFollowUps(),
   ])
 
-  const meetings   = meetingsRes.status   === 'fulfilled' ? meetingsRes.value   : []
-  const notes      = notesRes.status      === 'fulfilled' ? notesRes.value      : []
-  const deals      = dealsRes.status      === 'fulfilled' ? dealsRes.value      : []
-  const calls      = callsRes.status      === 'fulfilled' ? callsRes.value      : []
-  const zohoCalls  = zohoCallsRes.status  === 'fulfilled' ? zohoCallsRes.value  : []
-  const existing   = tasksRes.status      === 'fulfilled' ? tasksRes.value      : []
+  const meetings    = meetingsRes.status    === 'fulfilled' ? meetingsRes.value    : []
+  const notes       = notesRes.status       === 'fulfilled' ? notesRes.value       : []
+  const deals       = dealsRes.status       === 'fulfilled' ? dealsRes.value       : []
+  const calls       = callsRes.status       === 'fulfilled' ? callsRes.value       : []
+  const zohoCalls   = zohoCallsRes.status   === 'fulfilled' ? zohoCallsRes.value   : []
+  const existing    = tasksRes.status       === 'fulfilled' ? tasksRes.value       : []
+  const ciFollowUps = ciFollowUpsRes.status === 'fulfilled' ? ciFollowUpsRes.value : []
 
   const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -190,6 +191,25 @@ export async function GET() {
       dealName:    d.dealName || '',
       closingDate: d.closingDate || '',
     })
+  }
+
+  // ── 5. Contact Intelligence follow-ups (Callback Later / Send More Info) ────
+  const MAX_CI_TASKS = 15
+  let ciCount = 0
+  for (const c of ciFollowUps) {
+    if (ciCount >= MAX_CI_TASKS) break
+    const key = `ci:followup:${c.email}:${c.lastCallDate}`
+    if (recentlyFlagged(key, 30)) continue
+    const companyPart = c.company ? ` (${c.company})` : ''
+    const verb = c.lastCallOutcome.toLowerCase().includes('send') ? 'Send info to' : 'Call back'
+    newTasks.push({
+      category:   'ci-followup',
+      task:       `${verb}: ${c.name}${companyPart}`,
+      detail:     `${c.lastCallOutcome} · ${c.lastCallDate}`,
+      linkedDeal: key,
+      assignedTo: 'Tanishq',
+    })
+    ciCount++
   }
 
   // Write new tasks to sheet

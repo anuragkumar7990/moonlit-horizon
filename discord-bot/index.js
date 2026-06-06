@@ -180,11 +180,12 @@ function buildP0Message(data) {
     return `✅ **P0 Tasks — ${dateStr}**\n\nNo P0 tasks today. Clean slate!`
   }
 
-  const stale    = tasks.filter(t => t.category === 'stale-deal')
-  const callback = tasks.filter(t => t.category === 'overdue-callback')
-  const noNotes  = tasks.filter(t => t.category === 'no-notes')
-  const overdue  = tasks.filter(t => t.category === 'overdue-closing')
-  const others   = tasks.filter(t => t.category === 'other')
+  const stale      = tasks.filter(t => t.category === 'stale-deal')
+  const callback   = tasks.filter(t => t.category === 'overdue-callback')
+  const noNotes    = tasks.filter(t => t.category === 'no-notes')
+  const overdue    = tasks.filter(t => t.category === 'overdue-closing')
+  const ciFollowUp = tasks.filter(t => t.category === 'ci-followup')
+  const others     = tasks.filter(t => t.category === 'other')
 
   const followup  = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'followup')
   const l2meeting = stale.filter(t => STAGE_GROUP[(t.stage || '').toLowerCase()] === 'l2-meeting')
@@ -205,6 +206,11 @@ function buildP0Message(data) {
   if (proposal.length > 0) {
     lines.push('', `**📄 Proposals to be sent (${proposal.length}) — Anurag**`)
     proposal.forEach((t, i) => lines.push(dealLine(i + 1, t)))
+  }
+
+  if (ciFollowUp.length > 0) {
+    lines.push('', `**📲 Prospect follow-ups (${ciFollowUp.length}) — Tanishq**`)
+    ciFollowUp.forEach((t, i) => lines.push(`${i + 1}. ${t.task} — _${t.detail}_`))
   }
 
   if (callback.length > 0) {

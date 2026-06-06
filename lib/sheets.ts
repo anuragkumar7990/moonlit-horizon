@@ -193,7 +193,9 @@ export async function callExistsInSheetByZohoId(zohoCallId: string): Promise<boo
   }
 }
 
+const CI_NAME_COL    = 3   // D — Name
 const CI_EMAIL_COL   = 4   // E — Email (lookup key)
+const CI_COMP_COL    = 7   // H — Company
 const CI_TOTAL_COL   = 12  // M — Total Calls
 const CI_CONNECT_COL = 13  // N — Calls Connected
 const CI_RATE_COL    = 14  // O — Connection Rate %
@@ -259,6 +261,47 @@ export async function upsertContactIntelRow(email: string, call: {
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
   })
+}
+
+export interface CIFollowUp {
+  name: string
+  company: string
+  email: string
+  lastCallDate: string
+  lastCallOutcome: string
+}
+
+const CI_FOLLOWUP_OUTCOMES_NORM = new Set(['call back later', 'send more info', 'callback later'])
+
+export async function getContactIntelFollowUps(): Promise<CIFollowUp[]> {
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Contact Intelligence!A:S',  // cols A-S only, skip JSON blob in col U
+  })
+  const rows = res.data.values ?? []
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 30)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+  const result: CIFollowUp[] = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    const outcome = (r[CI_LASTO_COL] ?? '').trim()
+    if (!CI_FOLLOWUP_OUTCOMES_NORM.has(outcome.toLowerCase())) continue
+    const lastCallDate = r[CI_LASTD_COL] ?? ''
+    if (!lastCallDate || lastCallDate < cutoffStr) continue  // skip stale / undated
+    const email = r[CI_EMAIL_COL] ?? ''
+    if (!email) continue
+    result.push({
+      name:            r[CI_NAME_COL] ?? '',
+      company:         r[CI_COMP_COL] ?? '',
+      email,
+      lastCallDate,
+      lastCallOutcome: outcome,
+    })
+  }
+  return result
 }
 
 const TASKS_HEADERS = ['Date', 'Task', 'Type', 'Assigned To', 'Linked Deal', 'Status', 'Completed At']
