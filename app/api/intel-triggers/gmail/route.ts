@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
 
     // For each thread, extract account name from subject
     const accountsToSync = new Set<string>()
-    for (const threadId of threadIds) {
+    for (const threadId of Array.from(threadIds)) {
       try {
         const threadRes = await gmailClient.users.threads.get({
           userId: 'me',
@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
 
     // Sync email intel for each matched account
     const results: Record<string, string> = {}
-    for (const account of accountsToSync) {
+    for (const account of Array.from(accountsToSync)) {
       try {
         const threads = await fetchThreadsForAccount(gmailClient, account, [])
         if (threads.length > 0) {
