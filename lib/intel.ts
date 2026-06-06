@@ -110,6 +110,14 @@ Reply in this exact format — nothing else:
 
 // ── Last contact auto-detection ──────────────────────────────────────────────
 
+function extractDates(text: string, re: RegExp): string[] {
+  const results: string[] = []
+  let m: RegExpExecArray | null
+  const r = new RegExp(re.source, re.flags)
+  while ((m = r.exec(text)) !== null) results.push(m[1])
+  return results
+}
+
 function autoDetectLastContact(intel: {
   lastMeeting: string
   emailIntelligence: string
@@ -117,19 +125,18 @@ function autoDetectLastContact(intel: {
   manualNotes: string
 }): string {
   const dates: string[] = []
-  const dateRe = /\b(\d{4}-\d{2}-\d{2})\b/g
 
   if (intel.lastMeeting) dates.push(intel.lastMeeting.slice(0, 10))
 
   for (const text of [intel.emailIntelligence, intel.callIntelligence]) {
-    for (const m of text.matchAll(dateRe)) dates.push(m[1])
+    dates.push(...extractDates(text, /\b(\d{4}-\d{2}-\d{2})\b/g))
   }
 
   // Manual notes timestamps: [2026-06-06 22:51 IST]
-  for (const m of intel.manualNotes.matchAll(/\[(\d{4}-\d{2}-\d{2})/g)) dates.push(m[1])
+  dates.push(...extractDates(intel.manualNotes, /\[(\d{4}-\d{2}-\d{2})/g))
 
   if (dates.length === 0) return ''
-  return dates.sort().at(-1)!
+  return dates.sort()[dates.length - 1]
 }
 
 // ── Cumulative synthesis ─────────────────────────────────────────────────────
