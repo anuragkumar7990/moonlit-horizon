@@ -314,6 +314,72 @@ export async function findOrCreateAccount(name: string): Promise<{ id: string; a
   return { id, accountName: name }
 }
 
+// ── Top-250 re-ranker helpers ─────────────────────────────────────────────────
+
+export interface ScoringLead {
+  id: string
+  designation: string
+  tags: string[]
+  lvl1Source: string
+  leadStatus: string
+}
+
+export async function getAllLeadsForScoring(): Promise<ScoringLead[]> {
+  const token = await getAccessToken()
+  const results: ScoringLead[] = []
+  let page = 1
+  while (true) {
+    const res = await fetch(
+      `${BASE_URL}/Leads?fields=id,Designation,Tag,Lvl_1_Source,Lead_Status&per_page=200&page=${page}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
+    )
+    const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    const rows = data.data ?? []
+    for (const r of rows) {
+      results.push({
+        id:          String(r.id ?? ''),
+        designation: String(r.Designation ?? ''),
+        tags:        Array.isArray(r.Tag) ? (r.Tag as { name: string }[]).map(t => t.name ?? '') : [],
+        lvl1Source:  String(r.Lvl_1_Source ?? ''),
+        leadStatus:  String(r.Lead_Status ?? ''),
+      })
+    }
+    if (!data.info?.more_records || rows.length < 200) break
+    page++
+  }
+  return results
+}
+
+export async function addTagToLeads(ids: string[], tagName: string): Promise<void> {
+  if (ids.length === 0) return
+  const token = await getAccessToken()
+  const BATCH = 50
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH)
+    const params = new URLSearchParams({ tag_names: tagName })
+    batch.forEach(id => params.append('ids[]', id))
+    await fetch(`${BASE_URL}/Leads/actions/add_tags?${params.toString()}`, {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    })
+  }
+}
+
+export async function removeTagFromLeads(ids: string[], tagName: string): Promise<void> {
+  if (ids.length === 0) return
+  const token = await getAccessToken()
+  const BATCH = 50
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH)
+    const params = new URLSearchParams({ tag_names: tagName })
+    batch.forEach(id => params.append('ids[]', id))
+    await fetch(`${BASE_URL}/Leads/actions/remove_tags?${params.toString()}`, {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    })
+  }
+}
+
 export async function convertLead(leadId: string): Promise<{
   contactId: string
   accountId: string

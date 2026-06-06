@@ -460,6 +460,23 @@ async function postEndOfMonthReview() {
   }
 }
 
+async function runTop250Reranker() {
+  try {
+    const statsChannel = client.channels.cache.find(c => c.name === 'stats')
+    const data = await vercelPost('/api/top-250', {})
+    const lines = [
+      `🎯 **Top-250 Weekly Re-rank Complete**`,
+      `**Total uncalled prospects:** ${data.totalProspects}`,
+      `**Tagged this run:** ${data.tagged} new · ${data.untagged} removed`,
+      `_Tanishq's call list for the week is ready._`,
+    ]
+    if (statsChannel) await statsChannel.send(lines.join('\n'))
+    console.log(`[top250] Re-rank done — ${data.tagged} tagged, ${data.untagged} removed`)
+  } catch (err) {
+    console.error('[top250] Re-rank failed:', err.message)
+  }
+}
+
 async function postWeeklySummary() {
   try {
     const data = await vercelPost('/api/weekly-summary', {})
@@ -579,6 +596,12 @@ client.on('clientReady', () => {
     postTargetsRequest()
   }, { timezone: 'UTC' })
 
+  // Top-250 re-ranker — Sunday 11:00pm IST = 5:30pm UTC Sunday
+  cron.schedule('30 17 * * 0', () => {
+    console.log('[cron] Firing Top-250 re-ranker...')
+    runTop250Reranker()
+  }, { timezone: 'UTC' })
+
   // End-of-month review — daily check at 6:00pm IST = 12:30pm UTC; fires when tomorrow is the 1st
   cron.schedule('30 12 * * *', () => {
     const tomorrow = new Date()
@@ -591,6 +614,7 @@ client.on('clientReady', () => {
 
   console.log('📅 P0 tasks scheduled for 8:30am IST (3:00am UTC)')
   console.log('📅 Daily digest scheduled for 9:00am IST (3:30am UTC)')
+  console.log('📅 Top-250 re-ranker scheduled for 11:00pm IST Sunday (5:30pm UTC)')
   console.log('📅 Monthly targets form scheduled for 7:00am IST on 1st of each month')
   console.log('📅 End-of-month review check scheduled daily at 6:00pm IST')
 })
