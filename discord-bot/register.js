@@ -68,8 +68,14 @@ const mhCommand = new SlashCommandBuilder()
           .setDescription('Log a call you just made')
           .addStringOption(opt =>
             opt.setName('account')
-              .setDescription('Company / account name')
-              .setRequired(true)
+              .setDescription('Existing account / company name')
+              .setRequired(false)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('prospect')
+              .setDescription('Prospect from the leads list (search by name or company)')
+              .setRequired(false)
               .setAutocomplete(true)
           )
           .addStringOption(opt =>

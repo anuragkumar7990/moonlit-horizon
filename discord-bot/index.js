@@ -84,34 +84,28 @@ client.on('interactionCreate', async interaction => {
     const query = focused.value.toLowerCase()
 
     try {
-      // /mh log call — account autocomplete (searches both accounts + leads by company)
+      // /mh log call — account autocomplete (existing Zoho accounts by company name)
       if (interaction.commandName === 'mh' && focused.name === 'account') {
-        const accountChoices = cache.accounts
+        const choices = cache.accounts
           .filter(a => a.accountName.toLowerCase().includes(query))
+          .slice(0, 25)
           .map(a => ({ name: a.accountName, value: a.accountName }))
+        return interaction.respond(choices)
+      }
 
-        const leadChoices = cache.leads
+      // /mh log call — prospect autocomplete (leads by person name or company)
+      if (interaction.commandName === 'mh' && focused.name === 'prospect') {
+        const choices = cache.leads
           .filter(l => {
+            const full = `${l.firstName} ${l.lastName}`.toLowerCase()
             const company = (l.company || '').toLowerCase()
-            const name = `${l.firstName} ${l.lastName}`.toLowerCase()
-            return company.includes(query) || name.includes(query)
-          })
-          .map(l => {
-            const displayName = l.company
-              ? `${l.company} (${l.firstName} ${l.lastName})`.trim()
-              : `${l.firstName} ${l.lastName}`.trim()
-            return { name: displayName, value: l.company || `${l.firstName} ${l.lastName}`.trim() }
-          })
-
-        const seen = new Set()
-        const choices = [...accountChoices, ...leadChoices]
-          .filter(c => {
-            if (seen.has(c.value)) return false
-            seen.add(c.value)
-            return true
+            return full.includes(query) || company.includes(query) || (l.email || '').toLowerCase().includes(query)
           })
           .slice(0, 25)
-
+          .map(l => ({
+            name: `${l.firstName} ${l.lastName}${l.company ? ' — ' + l.company : ''}`.trim(),
+            value: l.id,
+          }))
         return interaction.respond(choices)
       }
 
@@ -291,16 +285,32 @@ client.on('interactionCreate', async interaction => {
     if (group === 'log' && sub === 'call') {
       await interaction.deferReply()
 
-      const account     = interaction.options.getString('account', true)
+      const accountRaw  = interaction.options.getString('account')   ?? ''
+      const prospectId  = interaction.options.getString('prospect')  ?? ''
       const outcome     = interaction.options.getString('outcome', true)
-      const contact     = interaction.options.getString('contact')   ?? ''
+      const contactRaw  = interaction.options.getString('contact')   ?? ''
       const phone       = interaction.options.getString('phone')     ?? ''
       const notes       = interaction.options.getString('notes')     ?? ''
       const followUpRaw = interaction.options.getString('follow_up') ?? ''
 
-      // Validate follow-up date if provided
+      if (!accountRaw && !prospectId) {
+        return interaction.editReply('❌ Provide either an **account** or a **prospect** — at least one is required.')
+      }
+
       if (followUpRaw && !/^\d{4}-\d{2}-\d{2}$/.test(followUpRaw)) {
         return interaction.editReply('❌ Follow-up date must be in `YYYY-MM-DD` format, e.g. `2026-06-09`')
+      }
+
+      // Resolve prospect → account name + contact name
+      let account = accountRaw
+      let contactName = contactRaw
+
+      if (prospectId) {
+        const lead = cache.leads.find(l => l.id === prospectId)
+        if (lead) {
+          if (!account) account = lead.company || `${lead.firstName} ${lead.lastName}`.trim()
+          if (!contactName) contactName = `${lead.firstName} ${lead.lastName}`.trim()
+        }
       }
 
       const sdr = interaction.user.displayName || interaction.user.username
@@ -308,7 +318,7 @@ client.on('interactionCreate', async interaction => {
       try {
         await vercelPost('/api/log-call', {
           account,
-          contactName:  contact,
+          contactName,
           contactPhone: phone,
           sdr,
           outcome,
@@ -321,7 +331,7 @@ client.on('interactionCreate', async interaction => {
           `📞 **Call logged** by ${sdr}`,
           `**Account:** ${account}`,
         ]
-        if (contact) lines.push(`**Contact:** ${contact}${phone ? ` · ${phone}` : ''}`)
+        if (contactName) lines.push(`**Contact:** ${contactName}${phone ? ` · ${phone}` : ''}`)
         lines.push(`**Outcome:** ${outcomeLabel}`)
         if (followUpRaw) lines.push(`**Follow-up:** ${followUpRaw}`)
         if (notes) lines.push(`**Notes:** ${notes}`)
