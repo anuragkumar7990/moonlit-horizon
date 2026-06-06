@@ -5,7 +5,7 @@ import { getZohoCalls, ZOHO_CONNECTED_OUTCOMES } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
 
-export const MONTHLY_METRICS = [
+const MONTHLY_METRICS = [
   'Calls Dialled',
   'Calls Connected',
   'Meetings Booked',
