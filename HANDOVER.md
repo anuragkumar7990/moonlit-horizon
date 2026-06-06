@@ -1,6 +1,6 @@
 # Moonlit Horizon — Handover Document
 **Last updated:** 2026-06-06  
-**Latest commit:** `957c3ef` (main)  
+**Latest commit:** `973a9ac` (main)  
 **Live URL:** https://moonlit-horizon.vercel.app  
 **VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
 **Repo:** github.com/anuragkumar7990/moonlit-horizon
@@ -13,11 +13,11 @@
 |---|---|---|
 | **Phase 0 — Foundation** | ✅ Complete | Design tokens, Sheets tabs, Discord channels |
 | **Phase 1 — Master Tracker UI** | ✅ Complete | 5-column grid, person selector, weekly/monthly toggle |
-| **Phase 1b — Person Views** | ✅ Complete | All 4 views live with live data; Payments Pending still placeholder |
-| **Phase 2 — Agent Layer** | ✅ Mostly complete | See below |
-| **Phase 2b — Intelligence Layer** | ✅ Mostly complete | Weekly summary, targets bot, Circleback sync, Top-250 re-ranker all live |
-| **Phase 3 — Supply Module** | ❌ Not started | Trainer sheets read and understood; dashboard build not started |
-| **Phase 4 — People & Accounts** | ❌ Not started | — |
+| **Phase 1b — Person Views** | ✅ Complete | All 4 views live, all panels populated |
+| **Phase 2 — Agent Layer** | ✅ Complete | All slash commands live |
+| **Phase 2b — Intelligence Layer** | ✅ Complete | Weekly summary, targets, Circleback sync, Top-250, Objectives |
+| **Phase 3 — Supply Module** | ✅ Complete | Trainer pipeline, roster, topic coverage on Ashutosh view |
+| **Phase 4 — People & Accounts** | ❌ Not started | Blocked on ~2–3 weeks of Circleback history |
 
 ---
 
@@ -35,12 +35,12 @@
 
 **Person views:**
 
-| View | Route | What's live | What's placeholder |
-|---|---|---|---|
-| Mahesh | `/view/mahesh` | Won/Pipeline/Value; Funnel; This Week 6-stat grid; Leads; Weekly Summary (live LLM bullets) | Reports PDF links |
-| Tanishq | `/view/tanishq` | Daily/Weekly/Monthly targets with gold glow; Today's Meetings; Follow-ups from Calls sheet | — |
-| Ashutosh | `/view/ashutosh` | Leads H/W/C; Funnel; **Live Prospect DB Health** (total stock, weeks remaining, per-source breakdown, ⚠ warnings); **Live Pending Tasks** | Email Status, Objectives |
-| Anurag | `/view/anurag` | Today's Meetings (scrollable); Funnel; **Live Pending Tasks**; Quick Links | Payments Pending, Objectives |
+| View | Route | What's live |
+|---|---|---|
+| Mahesh | `/view/mahesh` | Won/Pipeline/Value; Funnel; This Week 6-stat grid; Leads; Weekly Summary; **Weekly + Monthly PDF links** |
+| Tanishq | `/view/tanishq` | Daily/Weekly/Monthly targets with gold glow; Today's Meetings; Follow-ups from Calls sheet |
+| Ashutosh | `/view/ashutosh` | Leads H/W/C; Funnel; Prospect DB Health; Email Status placeholder; Pending Tasks; **Objective Progress bars**; **Trainer Supply (pipeline + roster + topic coverage)**; Monthly PDF link |
+| Anurag | `/view/anurag` | Today's Meetings; Funnel; Pending Tasks; **Payments Pending**; **Objective Progress bars**; Quick Links; Weekly + Monthly PDF links |
 
 ### Discord Bot (VPS — Node.js + discord.js)
 
@@ -50,15 +50,18 @@
 |---|---|
 | `/book` | Book meeting with existing Zoho contact → Sheets + Google Calendar + Zoho Deal |
 | `/book-prospect` | Convert Zoho lead → contact, book meeting |
-| `/mh log call` | Log call → Sheets Calls tab + Zoho Calls module (bidirectional) |
+| `/mh log call` | Log call → Sheets Calls tab + Zoho Calls module |
+| `/mh log payment` | Log invoice → Payments sheet; status defaults to Invoiced |
 | `/mh p0 add` | Add manual P0 task |
 | `/mh p0 done` | Mark P0 task done (autocomplete from open tasks) |
-| `/mh p0 today` | Re-post open P0 summary to `#p0-tasks` |
-| `/mh stats weekly` | Generate + post LLM weekly summary to `#stats` |
-| `/mh targets set <metric> <value>` | Set monthly target; updates pinned message in `#targets` |
+| `/mh p0 today` | Re-post open P0 summary to #p0-tasks |
+| `/mh stats weekly` | Generate + post LLM weekly summary to #stats |
+| `/mh targets set <metric> <value>` | Set monthly target; updates pinned message in #targets |
 | `/mh targets view` | Show current month targets + actuals (ephemeral) |
-| `/mh briefing` | Post composite morning briefing to `#sales-ops`: calls + meetings + P0 tasks + hot pipeline |
-| `/mh sync-meetings` | Explains Circleback webhook status (sync is automatic) |
+| `/mh objective set <name> <target>` | Set monthly target for an objective (7 choices) |
+| `/mh objective update <name> <current>` | Update current progress for an objective |
+| `/mh briefing` | Post composite morning briefing to #general |
+| `/mh sync-meetings` | Explains Circleback webhook status |
 
 **Scheduled jobs:**
 
@@ -81,19 +84,24 @@
 | `/api/p0-tasks/done` | POST | Mark task done |
 | `/api/targets` | GET | Current month targets + live actuals |
 | `/api/targets` | POST | Set a monthly target |
+| `/api/objectives` | GET | Current month objectives |
+| `/api/objectives` | POST | Upsert objective (field = 'target' or 'current') |
 | `/api/weekly-summary` | GET | Latest stored LLM summary |
 | `/api/weekly-summary` | POST | Generate new LLM summary + save |
 | `/api/stats-digest` | GET | Full stats payload for daily digest |
-| `/api/briefing` | GET | Composite briefing payload: today's meetings + calls + P0 tasks + hot pipeline + leads |
+| `/api/briefing` | GET | Composite briefing payload |
 | `/api/log-call` | POST | Write call to Sheets + Zoho |
+| `/api/log-payment` | POST | Write payment row to Payments sheet |
 | `/api/book` | POST | Book meeting |
 | `/api/book-prospect` | POST | Convert lead + book meeting |
 | `/api/accounts` | GET | Zoho accounts (autocomplete) |
 | `/api/contacts` | GET | Zoho contacts (autocomplete) |
 | `/api/leads` | GET | Zoho leads (autocomplete) |
 | `/api/upload-prospects` | POST | Bulk upload to Sheets + Zoho Leads |
-| `/api/top-250` | POST | Score all Not Contacted leads, tag top 250 in Zoho, remove stale tags |
-| `/api/circleback-sync` | POST | Receive Circleback webhook → match to Meetings sheet → mark Conducted |
+| `/api/top-250` | POST | Score all Not Contacted leads, tag top 250 in Zoho |
+| `/api/circleback-sync` | POST | Receive Circleback webhook → mark Conducted + write Notes tab |
+| `/api/reports/weekly` | GET | Generate + stream weekly PDF |
+| `/api/reports/monthly` | GET | Generate + stream monthly PDF |
 
 ---
 
@@ -111,16 +119,21 @@ moonlit-horizon/
 │   ├── FunnelColumn.tsx                Pipeline bars
 │   ├── MetricsGraph.tsx                8-week recharts line chart (client)
 │   ├── PersonSelector.tsx              M/A/A/T circles (client, usePathname)
-│   └── TanishqDashboard.tsx            Daily/Weekly/Monthly toggle (client)
+│   ├── TanishqDashboard.tsx            Daily/Weekly/Monthly toggle (client)
+│   └── pdf/
+│       ├── WeeklyReport.tsx            react-pdf Document — calls/meetings/pipeline/summary
+│       └── MonthlyReport.tsx           react-pdf Document — targets vs actuals/won deals
 ├── lib/
 │   ├── zoho.ts                         Zoho OAuth + getDeals/Contacts/Accounts/Calls/createCall
 │   │                                   + getAllLeadsForScoring/addTagToLeads/removeTagFromLeads
 │   ├── sheets.ts                       Google Sheets read/write (all tabs)
-│   │                                   + getProspects/updateMeetingConducted
-│   ├── dashboard.ts                    Pure aggregation: mergeCallSources, buildCallsData,
-│   │                                   buildMeetingsData, buildFunnel, buildLeadCounts,
-│   │                                   buildWeeklyTrend, buildTanishqMetrics,
-│   │                                   buildTodaysMeetings, buildFollowUps
+│   │                                   Exports: getMeetings, getNotes, getCalls, getTargets,
+│   │                                   getTasks, getProspects, getPayments, getObjectives,
+│   │                                   getTrainerPipeline, getTrainerRoster, getTopicCoverage,
+│   │                                   appendCallRow, appendTaskRows, appendPaymentRow,
+│   │                                   appendNoteRow, upsertTarget, upsertObjective,
+│   │                                   updateMeetingConducted, saveSummary, getLatestSummary
+│   ├── dashboard.ts                    Pure aggregation functions
 │   └── types.ts                        TypeScript interfaces
 └── discord-bot/
     ├── index.js                        Bot + all handlers + cron jobs
@@ -132,37 +145,49 @@ moonlit-horizon/
 | Tab | Written by | Read by |
 |---|---|---|
 | Meetings | `/api/book`, `/api/book-prospect` | Dashboard, P0 tasks, weekly summary, briefing |
-| Notes | Manual / Circleback (future) | P0 tasks (no-notes check) |
+| Notes | `/api/circleback-sync` (auto on Conducted) | P0 tasks (no-notes check) |
 | Calls | `/api/log-call` | Dashboard, P0 tasks, weekly summary, briefing |
-| Targets | `/api/targets` (via `/mh targets set`) | Dashboard, weekly summary, briefing |
+| Targets | `/api/targets` | Dashboard, weekly summary, briefing |
 | Tasks | `/api/p0-tasks` | Bot autocomplete, Anurag/Ashutosh views |
 | Summaries | `/api/weekly-summary` | Homepage + Mahesh weekly summary card |
 | Prospects | `/api/upload-prospects` | Ashutosh view (Prospect DB Health) |
+| Payments | `/api/log-payment` | Anurag view (Payments Pending panel) |
+| Objectives | `/api/objectives` | Ashutosh + Anurag views (progress bars) |
 
-### Key data rule
-`mergeCallSources(sheetCalls, zohoCalls)` in `lib/dashboard.ts` — Zoho Calls is primary source; Sheet Calls supplement. Deduplication by `date:account.toLowerCase()`. This function is called in every page and API route that needs call data.
+### Objectives — 7 fixed buckets
+
+| Objective | Assigned to | Unit |
+|---|---|---|
+| Prospects Uploaded | Ashutosh | count |
+| Calls Dialled | Tanishq | count |
+| L1 Meetings Conducted | Tanishq | count |
+| Deals Won | Anurag | count |
+| Trainers Onboarded | Ashutosh | count |
+| Revenue Invoiced (₹K) | Anurag | ₹K |
+| Topic Coverage (%) | Ashutosh | % |
+
+Set targets with `/mh objective set`, update progress with `/mh objective update`. Current value is **manually updated** — it does not auto-calculate from Sheets data.
 
 ### Circleback Webhook
-Circleback Automations → fires to `/api/circleback-sync` after every meeting where `trainings@thetesttribe.com` is an invitee. Endpoint extracts account name from meeting title ("The Test Tribe <> Account | Type"), fuzzy-matches to Meetings sheet row by account + date (25h window), sets status = "Conducted". Verified with `CIRCLEBACK_WEBHOOK_SECRET` (HMAC-SHA256, `x-signature` header).
+Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttribe.com` is an invitee. Now does two things:
+1. Marks matching Meetings sheet row as `Conducted` (fuzzy match on account name + 25h date window)
+2. Writes meeting notes + action items to Notes tab (non-blocking — won't break status update if it fails)
 
-### Top-250 Re-ranker
-Sunday 11pm IST cron calls `/api/top-250` which scores all Zoho `Not Contacted` leads by:
-- Authority from Designation (0–13 pts)
-- Priority tag P1/P2/P3 from upload (0–10 pts)
-- Lvl 1 Source quality (0–5 pts)
-
-Tags top 250 with `#top250` in Zoho; removes tag from leads that fell out. Zero LLM tokens.
+### Reports PDF (`@react-pdf/renderer`)
+- `GET /api/reports/weekly` — streams a styled A4 PDF: calling stats, meetings, pipeline, hot deals, AI summary
+- `GET /api/reports/monthly` — streams a styled A4 PDF: all the above + targets vs actuals table, won deals list
+- Declared as `serverExternalPackages` in `next.config.js` so Next.js doesn't try to bundle the library
+- No scheduled storage — generated fresh on each request
 
 ---
 
 ## 4. Known Data Gaps
 
-| Gap | Root cause | Resolution |
-|---|---|---|
-| **L1/L2 Conducted** | Circleback webhook now live — will populate going forward | ✅ Fixed for new meetings; old meetings need manual backfill if needed |
-| **Meetings Booked target = 0** | Fixed — re-set via `/mh targets set Meetings Booked <n>` | ✅ Done |
-| **Notes tab "Assigned To" column** | Column added manually to Sheets | ✅ Done |
-| **Test rows in Meetings sheet** | "Test / Test Test" entries | ✅ Deleted |
+| Gap | Status |
+|---|---|
+| L1/L2 Conducted | Circleback webhook live; historical meetings need manual backfill if needed |
+| Objective current values | Manual — `/mh objective update` must be run weekly by the relevant person |
+| Payment status (Received) | Manual — update Status column in Payments sheet directly; no `/mh` command yet |
 
 ---
 
@@ -173,55 +198,45 @@ Tags top 250 with `#top250` in Zoho; removes tag from leads that fell out. Zero 
 | No retry logic on Zoho 429 rate limit | Medium | Add exponential backoff in `lib/zoho.ts` `zohoGet()` |
 | Sheets write failures are silent (only `console.error`) | Low | Add Discord alert to `#sales-ops` on failure |
 | Dead code in `lib/zoho.ts`: `scoreLeadForDashboard()`, `getLeadsByStatus()` | Low | Safe to delete |
-| pm2 restart count = 39 | Low | Non-critical; stale interaction timeouts |
-| Zoho deals — some contacts unlinked (show `—` in P0) | Low | Link contacts to deals in Zoho CRM |
-
----
-
-## 5b. Post-Session Fixes (same session)
-
-- `/mh briefing` was posting to `#sales-ops` which doesn't exist — fixed to `#general`
-- Hot Pipeline in briefing showed blank account names for deals with no Account linked in Zoho — fixed to fall back to Deal Name. Root fix: link accounts to those deals in Zoho CRM.
+| Objective current values don't auto-populate from Sheets | Medium | Could auto-fill Calls Dialled / L1 Conducted from existing data sources |
 
 ---
 
 ## 6. Immediate Action Items (before next build session)
 
-1. **Circleback backfill**: Run the existing meetings through the sync manually if you want historical Conducted data — select all past meetings in Circleback → Actions → trigger the webhook automation
-2. **Confirm Top-250 test**: Next Sunday 11pm IST the re-ranker fires automatically; verify `#top250` tags appear in Zoho
-3. **Test `/mh briefing`**: Run it in Discord and confirm the `#sales-ops` post looks right
+1. **Verify Top-250 tags**: Sunday 11pm IST the re-ranker fires — check `#top250` tags appear in Zoho
+2. **Seed objectives**: Run `/mh objective set` for each of the 7 objectives, then update progress weekly with `/mh objective update`
+3. **Test PDF reports**: Open Mahesh view → click Weekly Report / Monthly Report links
+4. **Watch Circleback Notes**: Next meeting with a thetesttribe.com attendee should auto-populate the Notes tab
 
 ---
 
 ## 7. Next Steps (Priority Order)
 
-### Priority 1 — Supply Module dashboard (Phase 3)
-**Effort**: 3–4 hours  
-Both trainer sheets have been read and understood. Structure:
-- **Sheet A** (Outreach): pipeline stages Form Filled → Email Sent → WhatsApp → Meeting Booked → Meeting Conducted → Sample Taken → Onboarded. ~60 LinkedIn prospects tracked with connection/form status.
-- **Sheet B** (Pricing & Scores): 30 scored trainers (Tier 1/2/3), topic → trainer mapping, customer pricing + trainer cost per tier, 100-pt scoring rubric.
-
-Build: read both sheets → show pipeline stage counts, trainer roster by topic/tier, weeks-of-supply estimate. Surface on Ashutosh's view.
-
-### Priority 2 — Payments Pending panel (Anurag view)
+### Priority 1 — Objective auto-population
 **Effort**: 1–2 hours  
-Payments tab needs to exist in Sheets (currently not written). Either: add manual entry flow via Discord command, or build the tab structure and add a form. Panel placeholder exists in Anurag's view.
+Currently objective current values are manual. Three of the seven can be auto-filled from existing data:
+- **Calls Dialled** → read from `callsData.monthly.dialled` (already computed)
+- **L1 Meetings Conducted** → read from `meetingsData.monthly.l1Conducted` (already computed)
+- **Deals Won** → count of Won-stage deals in Zoho
 
-### Priority 3 — Objective tracking
-**Effort**: 1 hour each  
-`/objective update` and `/reminder` commands write to Tasks sheet with `type = 'Objective'`. Progress bars on Ashutosh + Anurag views.
+Build: extend `/api/objectives GET` to also return auto-computed actuals for these three; dashboard displays the auto value with a small "auto" badge; manual update still works for the other four.
 
-### Priority 4 — Circleback → Notes tab sync
-**Effort**: 2–3 hours  
-Webhook already receives full meeting data including `notes` and `actionItems`. Extend `/api/circleback-sync` to also write to Notes tab: extract 2-3 action points per person, write to `Notes!A:F`.
+### Priority 2 — Payment mark-as-received command
+**Effort**: 1 hour  
+`/mh log payment` creates Invoiced rows. Currently you update Status manually in Sheets. Build:
+- `/mh payment received <account>` — autocomplete from open Payments rows, updates Status to 'Received' and sets a ReceivedAt timestamp
+- Add `updatePaymentStatus()` to `lib/sheets.ts`
+- Add `GET /api/payments/open` for autocomplete cache
 
-### Priority 5 — Reports PDF (Phase 1b)
-**Effort**: 3–4 hours  
-Use `@react-pdf/renderer`. Weekly PDF auto-generated Sunday night, monthly on 1st. Download links on Mahesh/Ashutosh views. Decision: use `@react-pdf/renderer`.
-
-### Priority 6 — People & Accounts module (Phase 4)
+### Priority 3 — People & Accounts module (Phase 4)
 **Effort**: Full session  
-Blocked on having enough Circleback data flowing first (needs ~2–3 weeks of webhook history).
+**Blocked** — needs ~2–3 weeks of Circleback webhook history to have enough meeting notes to build meaningful account intelligence. Start after late June 2026.  
+Will use: Notes tab (now being populated by circleback-sync), Meetings sheet, Zoho Accounts.
+
+### Priority 4 — Zoho 429 retry / backoff
+**Effort**: 30 min  
+Add exponential backoff to `zohoGet()` in `lib/zoho.ts`. Currently any rate-limit hits silently fail.
 
 ---
 
@@ -258,7 +273,7 @@ pm2 restart moonlit-bot
 | `ANTHROPIC_API_KEY` | Claude Haiku (`claude-haiku-4-5-20251001`) for weekly summary |
 | `DASHBOARD_PASSWORD` | Basic Auth for all `/api/*` routes |
 | `VERCEL_URL` | Bot → Vercel API base URL |
-| `CIRCLEBACK_WEBHOOK_SECRET` | HMAC-SHA256 signature verification for Circleback webhooks ✅ Added |
+| `CIRCLEBACK_WEBHOOK_SECRET` | HMAC-SHA256 signature verification for Circleback webhooks |
 
 All set in Vercel Project Settings → Environment Variables **and** in `/root/moonlit-horizon/discord-bot/.env` on VPS.
 
@@ -269,12 +284,10 @@ All set in Vercel Project Settings → Environment Variables **and** in `/root/m
 **Sheet A — Trainer Outreach & Onboarding**  
 ID: `1Xol3kb_5GDxS-Su-fAs1tIvTSLfGahNXWHv0MKUOY9I`  
 Pipeline stages: Form Filled → Email Sent → WhatsApp Sent → Meeting Booked → Meeting Conducted → Sample Taken → Onboarded  
-Form fields: Name, Email, Phone, Location, LinkedIn, Training Areas, Experience, Delivery Format, Languages, Video, Availability, Hourly Rate  
-Outreach tracker: ~60 LinkedIn prospects with Connection Status + Form Status per row
 
 **Sheet B — Trainer Pricing & Supply**  
 ID: `1R8FqcifveekYZsaS3taHARaQAo3CjZ0FqdHnNOcZg2U`  
-Contents: 30 scored trainers (Tier 1 = 70+, Tier 2 = 50–69, Tier 3 = <50), topic → trainer ranking, customer pricing by tier (e.g. Agentic AI Tier-1 = ₹15,000/hr), trainer cost by tier, 100-pt scoring rubric (Profile-Based 50 + Quality/Subjective 50)
+Contents: 30 scored trainers (Tier 1 = 70+, Tier 2 = 50–69, Tier 3 = <50), topic → trainer ranking, customer pricing by tier, trainer cost by tier
 
 ---
 
@@ -282,8 +295,7 @@ Contents: 30 scored trainers (Tier 1 = 70+, Tier 2 = 50–69, Tier 3 = <50), top
 
 | Decision | Status |
 |---|---|
-| Reports PDF generation | Decided: `@react-pdf/renderer` |
+| Objective auto-population | Not built — Priority 1 for next session |
+| Payment mark-as-received | Not built — Priority 2 for next session |
 | Ashutosh email status panel | Deferred — needs active email campaigns first |
-| Anurag view finalization | Revisit after 2 weeks of real usage data |
-| Supply Module (Phase 3) | Unblocked — trainer sheets read, build ready |
-| People & Accounts (Phase 4) | Blocked on Circleback history accumulation (~2–3 weeks) |
+| People & Accounts (Phase 4) | Blocked on Circleback history — start late June 2026 |
