@@ -303,6 +303,15 @@ export async function createZohoCall(params: {
   return json.data?.[0]?.details?.id ?? null
 }
 
+export async function updateLeadCompany(leadId: string, company: string): Promise<void> {
+  const token = await getAccessToken()
+  await fetch(`${BASE_URL}/Leads/${leadId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [{ id: leadId, Company: company, Company_Name: company }] }),
+  })
+}
+
 export async function linkContactToAccount(contactId: string, accountId: string): Promise<void> {
   const token = await getAccessToken()
   await fetch(`${BASE_URL}/Contacts`, {

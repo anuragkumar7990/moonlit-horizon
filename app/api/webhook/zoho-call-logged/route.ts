@@ -1,11 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCallById, getContactById, getLeadById } from '@/lib/zoho'
+import { getCallById, getContactById, getLeadById, updateLeadCompany } from '@/lib/zoho'
 import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
 export const dynamic = 'force-dynamic'
 
 const WEBHOOK_SECRET = process.env.DASHBOARD_PASSWORD ?? 'thetesttribe'
+
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'yahoo.com', 'yahoo.in', 'yahoo.co.in',
+  'hotmail.com', 'hotmail.co.in', 'outlook.com', 'live.com',
+  'rediffmail.com', 'icloud.com', 'me.com', 'mac.com',
+  'protonmail.com', 'proton.me', 'aol.com', 'ymail.com',
+])
+
+// Infers a display company name from an email domain.
+// Corporate: ptc.com → "PTC", indusface.com → "Indusface"
+// Free provider: gmail.com → "#Unknown"
+function inferCompanyFromDomain(email: string): string {
+  const domain = email.split('@')[1]?.toLowerCase()
+  if (!domain) return '#Unknown'
+  if (FREE_EMAIL_DOMAINS.has(domain)) return '#Unknown'
+
+  // Take the first label of the domain (before first dot) as the company name.
+  // e.g. ptc.com → "ptc", indusface.com → "indusface", mail.cohesity.com → "mail" (edge case)
+  const label = domain.split('.')[0]
+  if (!label) return '#Unknown'
+
+  // ≤ 4 chars: fully uppercase (PTC, IBM, SAP, HCL)
+  // longer: title case (Indusface, Bloomreach, Cohesity)
+  return label.length <= 4
+    ? label.toUpperCase()
+    : label.charAt(0).toUpperCase() + label.slice(1)
+}
 
 // Zoho sends Call_Start_Time as "2026-06-07T10:30:00+05:30" or UTC ISO
 function parseZohoDateTime(callStartTime: string): { date: string; time: string } {
@@ -67,6 +94,7 @@ export async function POST(req: NextRequest) {
   let contactName = ''
   let email = ''
   let accountName = ''
+  let leadIdForUpdate: string | null = null  // tracked so we can write company back to Zoho
 
   const whoId = call.whoId
   const whatId = call.whatId
@@ -75,6 +103,7 @@ export async function POST(req: NextRequest) {
     // Lead call — the lead record is in What_Id
     const leadId = whatId?.id
     if (leadId) {
+      leadIdForUpdate = leadId
       const lead = await getLeadById(leadId)
       if (lead) {
         contactName = `${lead.firstName} ${lead.lastName}`.trim()
@@ -98,10 +127,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fallback chain: email domain → contact name → skip Account Intel but still write Sheets + Contact Intel
+  // Fallback: infer company from email domain when Zoho Company_Name is blank
   if (!accountName && email) {
-    accountName = email.split('@')[1] ?? ''
-    console.log(`[webhook/zoho-call-logged] No company set — using email domain "${accountName}" for callId=${callId}`)
+    accountName = inferCompanyFromDomain(email)
+    console.log(`[webhook/zoho-call-logged] Inferred company "${accountName}" from email for callId=${callId}`)
+
+    // Write the inferred name back to Zoho so future calls don't need to fall back
+    if (accountName !== '#Unknown' && leadIdForUpdate) {
+      updateLeadCompany(leadIdForUpdate, accountName).catch(e =>
+        console.error('[webhook/zoho-call-logged] updateLeadCompany failed:', e.message)
+      )
+    }
   }
   if (!accountName) accountName = contactName
 
