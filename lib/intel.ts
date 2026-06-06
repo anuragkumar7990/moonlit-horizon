@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import {
   upsertAccountIntelligence,
   updateEmailIntelligence,
+  updateCallIntelligence,
+  updateCirclebakIntelligence,
   updateCumulativeInSheet,
   updateLastContactDate,
   getAccountIntelligence,
@@ -154,22 +156,69 @@ interface IntelLayers {
   manualNotes: string
 }
 
-async function generateCumulativeWithStatus(account: string, layers: IntelLayers): Promise<CumulativeResult> {
+// changedLayer hints which layer just updated so we can emphasise it in the prompt
+async function generateCumulativeWithStatus(
+  account: string,
+  layers: IntelLayers,
+  changedLayer?: 'email' | 'meeting' | 'call' | 'notes'
+): Promise<CumulativeResult> {
+  // Detect most recent manual note timestamp for recency weighting
+  const recentNoteTs = (() => {
+    if (!layers.manualNotes) return null
+    const m = layers.manualNotes.match(/\[(\d{4}-\d{2}-\d{2})/g)
+    if (!m) return null
+    return m.map(s => s.slice(1)).sort().at(-1) ?? null
+  })()
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const noteIsRecent = recentNoteTs && recentNoteTs >= todayStr.slice(0, 7) // same month
+
+  // Order layers by recency — most recent first gets "⬆ LATEST UPDATE" label
+  const layerLabel: Record<string, string> = {
+    email:   'EMAIL',
+    meeting: 'MEETINGS (Circleback)',
+    call:    'CALLS',
+    notes:   'MANUAL NOTES',
+  }
+
   const parts: string[] = []
-  if (layers.emailIntelligence)     parts.push(`EMAIL:\n${layers.emailIntelligence}`)
-  if (layers.circlebakIntelligence) parts.push(`MEETINGS (Circleback):\n${layers.circlebakIntelligence}`)
-  if (layers.callIntelligence)      parts.push(`CALLS:\n${layers.callIntelligence}`)
-  if (layers.manualNotes)           parts.push(`MANUAL NOTES:\n${layers.manualNotes}`)
+
+  // If manual notes is recent and is the changed layer, put it first with priority flag
+  if (changedLayer === 'notes' && noteIsRecent && layers.manualNotes) {
+    parts.push(`⬆ LATEST UPDATE — MANUAL NOTES (highest priority — answers open questions):\n${layers.manualNotes}`)
+  } else if (layers.manualNotes) {
+    parts.push(`MANUAL NOTES:\n${layers.manualNotes}`)
+  }
+
+  if (changedLayer === 'meeting' && layers.circlebakIntelligence)
+    parts.push(`⬆ LATEST UPDATE — MEETINGS (Circleback):\n${layers.circlebakIntelligence}`)
+  else if (layers.circlebakIntelligence)
+    parts.push(`MEETINGS (Circleback):\n${layers.circlebakIntelligence}`)
+
+  if (changedLayer === 'call' && layers.callIntelligence)
+    parts.push(`⬆ LATEST UPDATE — CALLS:\n${layers.callIntelligence}`)
+  else if (layers.callIntelligence)
+    parts.push(`CALLS:\n${layers.callIntelligence}`)
+
+  if (changedLayer === 'email' && layers.emailIntelligence)
+    parts.push(`⬆ LATEST UPDATE — EMAIL:\n${layers.emailIntelligence}`)
+  else if (layers.emailIntelligence)
+    parts.push(`EMAIL:\n${layers.emailIntelligence}`)
 
   if (parts.length === 0) {
     return { cumulativeSummary: '', nextAction: '', status: 'Cold' }
   }
 
+  const priorityNote = changedLayer
+    ? `\nIMPORTANT: The layer marked "⬆ LATEST UPDATE" contains the most recent information. Weight it most heavily and use it to fill any gaps from other layers.`
+    : ''
+
   const prompt = `You are a sales intelligence assistant for The Test Tribe, a corporate AI training company in India. We sell live, trainer-led AI/Agentic AI upskilling programs (10–20 hours, ₹1.3L–₹4L+) to QA and engineering teams.
 
 Client: ${account}
+${priorityNote}
 
-Intelligence layers:
+Intelligence layers (most recent first):
 ${parts.join('\n\n')}
 
 Reply with ONLY these three lines and nothing else — no preamble, no notes, no extra text:
@@ -256,10 +305,11 @@ export async function generateAndSaveIntel(
   return intel
 }
 
-// ── Public: regenerate cumulative only (after note/email sync) ───────────────
+// ── Public: regenerate cumulative only ──────────────────────────────────────
 
 export async function regenerateCumulative(
-  account: string
+  account: string,
+  changedLayer?: 'email' | 'meeting' | 'call' | 'notes'
 ): Promise<{ cumulativeSummary: string; nextAction: string; lastContactDate: string }> {
   const allIntel = await getAccountIntelligence()
   const intel    = allIntel.find(i => norm(i.account) === norm(account))
@@ -270,7 +320,7 @@ export async function regenerateCumulative(
     circlebakIntelligence: intel.circlebakIntelligence,
     callIntelligence:      intel.callIntelligence,
     manualNotes:           intel.manualNotes,
-  })
+  }, changedLayer)
 
   const lastContactDate = autoDetectLastContact({
     lastMeeting:          intel.lastMeeting,
@@ -288,5 +338,40 @@ export async function regenerateCumulative(
 export async function syncEmailIntel(account: string, threads: EmailThread[]): Promise<{ cumulativeSummary: string; nextAction: string }> {
   const emailIntelligence = await generateEmailIntel(account, threads)
   await updateEmailIntelligence(account, emailIntelligence)
-  return regenerateCumulative(account)
+  return regenerateCumulative(account, 'email')
+}
+
+// ── Public: sync call intel for one account (triggered after new call logged) ─
+
+export async function syncCallIntel(account: string, todayIST?: string): Promise<{ cumulativeSummary: string; nextAction: string; lastContactDate: string }> {
+  const allCalls     = await getCalls()
+  const accountCalls = allCalls.filter(c => norm(c.account) === norm(account))
+
+  if (accountCalls.length === 0) return regenerateCumulative(account, 'call')
+
+  const callIntelligence = await generateCallIntel(
+    account,
+    accountCalls.map(c => ({ date: c.date, outcome: c.outcome, notes: c.notes, duration: c.duration }))
+  )
+  await updateCallIntelligence(account, callIntelligence)
+
+  // Update Last Contact Date to today if a call was made today
+  if (todayIST) {
+    await updateLastContactDate(account, todayIST).catch(() => {})
+  }
+
+  return regenerateCumulative(account, 'call')
+}
+
+// ── Public: sync Circleback intel for one account ────────────────────────────
+
+export async function syncCirclebakIntel(account: string, meetings: { date: string; notes: string }[], meetingDate?: string): Promise<void> {
+  const circlebakIntelligence = await generateCirclebakIntel(account, meetings)
+  await updateCirclebakIntelligence(account, circlebakIntelligence)
+
+  if (meetingDate) {
+    await updateLastContactDate(account, meetingDate).catch(() => {})
+  }
+
+  await regenerateCumulative(account, 'meeting')
 }

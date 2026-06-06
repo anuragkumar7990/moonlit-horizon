@@ -829,6 +829,40 @@ export async function updateAccountStatus(
   })
 }
 
+export async function updateCallIntelligence(account: string, callIntelligence: string): Promise<void> {
+  const sheets = getSheets()
+  const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
+  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `Account Intelligence!B${rowIdx + 1}`, values: [[istNowSheets()]] },
+        { range: `Account Intelligence!H${rowIdx + 1}`, values: [[callIntelligence]] },
+      ],
+    },
+  })
+}
+
+export async function updateCirclebakIntelligence(account: string, circlebakIntelligence: string): Promise<void> {
+  const sheets = getSheets()
+  const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
+  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `Account Intelligence!B${rowIdx + 1}`, values: [[istNowSheets()]] },
+        { range: `Account Intelligence!G${rowIdx + 1}`, values: [[circlebakIntelligence]] },
+      ],
+    },
+  })
+}
+
 export async function updateEmailIntelligence(account: string, emailIntelligence: string): Promise<void> {
   const sheets = getSheets()
   const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')

@@ -9,7 +9,7 @@ export async function addManualNote(
   note: string
 ): Promise<{ updatedNotes: string; cumulativeSummary: string; nextAction: string; lastContactDate: string }> {
   const updatedNotes = await appendManualNote(account, note)
-  const { cumulativeSummary, nextAction, lastContactDate } = await regenerateCumulative(account)
+  const { cumulativeSummary, nextAction, lastContactDate } = await regenerateCumulative(account, 'notes')
   revalidatePath('/view/anurag')
   return { updatedNotes, cumulativeSummary, nextAction, lastContactDate: lastContactDate ?? '' }
 }

@@ -1148,7 +1148,7 @@ client.on('interactionCreate', async interaction => {
     if (group === 'intel' && sub === 'touch') {
       await interaction.deferReply({ ephemeral: true })
       const accountVal = interaction.options.getString('account', true)
-      const account    = accountVal.includes('|') ? accountVal.split('|')[0].trim() : accountVal.trim()
+      const account    = cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal.trim()
       const rawDate    = interaction.options.getString('date') ?? null
 
       // Validate and normalise date (default today IST)
@@ -1310,6 +1310,13 @@ client.on('interactionCreate', async interaction => {
           followUpDate: followUpRaw,
         })
 
+        // Fire-and-forget: update Call Intelligence + Cumulative for the account
+        if (account) {
+          const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          vercelPost('/api/intel-triggers/call', { account, date: istNow })
+            .catch(e => console.error('[call-intel-trigger]', e.message))
+        }
+
         const outcomeLabel = OUTCOME_LABELS[outcome] ?? outcome
         const typeLabel = nameType === 'prospect' ? '👤 Prospect' : nameType === 'contact' ? '🏢 Contact' : ''
         const lines = [
@@ -1321,6 +1328,7 @@ client.on('interactionCreate', async interaction => {
         lines.push(`**Outcome:** ${outcomeLabel}`)
         if (followUpRaw) lines.push(`**Follow-up:** ${followUpRaw}`)
         if (notes) lines.push(`**Notes:** ${notes}`)
+        if (account) lines.push(`_Account intelligence updating in background…_`)
 
         await interaction.editReply(lines.join('\n'))
       } catch (err) {
