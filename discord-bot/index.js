@@ -1109,11 +1109,11 @@ client.on('interactionCreate', async interaction => {
 
       try {
         const data = await vercelPost('/api/account-intel/note', { account, note: text })
+        const summary = data.cumulativeSummary?.slice(0, 300) ?? ''
         const lines = [
           `📝 **Note added to ${account}**`,
           `> ${text}`,
-          ``,
-          data.cumulativeSummary ? `**Updated summary:** ${data.cumulativeSummary}` : null,
+          summary ? `\n**Summary:** ${summary}` : null,
           data.nextAction ? `**→ Next:** ${data.nextAction}` : null,
         ].filter(Boolean).join('\n')
         await interaction.editReply(lines)

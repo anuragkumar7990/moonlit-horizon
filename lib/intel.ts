@@ -132,27 +132,26 @@ Client: ${account}
 Intelligence layers:
 ${parts.join('\n\n')}
 
-Synthesise all signals into a cumulative account brief. Use exactly this format:
+Reply with ONLY these three lines and nothing else — no preamble, no notes, no extra text:
 
-SUMMARY: [2–3 sentences: synthesise all data sources, what's the overall deal status and the single most important insight about this account]
+SUMMARY: <2–3 sentences synthesising all data — deal status, key insight, blockers>
+NEXT ACTION: <one specific action, max 15 words>
+STATUS: <exactly one of: Won | Active | Warm | Cold | Dead>
 
-NEXT ACTION: [One specific action sentence, max 15 words]
+Status definitions: Won=training delivered; Active=pricing/scheduling agreed; Warm=interested+following up; Cold=blocked by budget/approval; Dead=no fit or ghosted`
 
-STATUS: [exactly one of: Won, Active, Warm, Cold, Dead]
-- Won = training delivered or actively underway
-- Active = pricing/scheduling agreed, deal closing
-- Warm = genuinely interested, proposal shared, follow-ups happening
-- Cold = interested but blocked (budget/approval/timing — months away)
-- Dead = no fit, explicitly declined, or ghosted with no path forward`
+  const text = await callHaiku(prompt, 250)
 
-  const text = await callHaiku(prompt, 300)
-
-  const summaryMatch    = text.match(/SUMMARY:\s*([\s\S]+?)(?=\n\nNEXT ACTION:|$)/)
-  const nextActionMatch = text.match(/NEXT ACTION:\s*([\s\S]+?)(?=\n\nSTATUS:|$)/)
+  const summaryMatch    = text.match(/SUMMARY:\s*([\s\S]+?)(?=\nNEXT ACTION:)/)
+  const nextActionMatch = text.match(/NEXT ACTION:\s*([\s\S]+?)(?=\nSTATUS:)/)
   const statusMatch     = text.match(/STATUS:\s*(Won|Active|Warm|Cold|Dead)/i)
 
+  // If LLM skipped the SUMMARY: label entirely, treat the whole first paragraph as summary
+  const rawSummary = summaryMatch?.[1]?.trim()
+    ?? text.split(/\n+(NEXT ACTION|STATUS):/i)[0].replace(/^SUMMARY:\s*/i, '').trim()
+
   return {
-    cumulativeSummary: summaryMatch?.[1]?.trim()    ?? text,
+    cumulativeSummary: rawSummary,
     nextAction:        nextActionMatch?.[1]?.trim() ?? '',
     status:            (statusMatch?.[1] as AccountIntelligence['status']) ?? 'Cold',
   }
