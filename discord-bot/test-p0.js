@@ -46,6 +46,23 @@ function buildP0Message(data) {
   return lines.join('\n')
 }
 
+function splitIntoChunks(text, limit = 1900) {
+  const lines = text.split('\n')
+  const chunks = []
+  let current = ''
+  for (const line of lines) {
+    const candidate = current ? current + '\n' + line : line
+    if (candidate.length > limit) {
+      if (current) chunks.push(current)
+      current = line
+    } else {
+      current = candidate
+    }
+  }
+  if (current) chunks.push(current)
+  return chunks
+}
+
 const bot = new Client({ intents: [GatewayIntentBits.Guilds] })
 
 bot.once('ready', async () => {
@@ -65,8 +82,9 @@ bot.once('ready', async () => {
       console.error('❌ #p0-tasks channel not found — create it in Discord first')
       process.exit(1)
     }
-    await ch.send(msg)
-    console.log('✅ Posted to #p0-tasks!')
+    const chunks = splitIntoChunks(msg)
+    for (const chunk of chunks) await ch.send(chunk)
+    console.log(`✅ Posted to #p0-tasks! (${chunks.length} message${chunks.length > 1 ? 's' : ''})`)
   } catch (e) {
     console.error('❌ Error:', e.message)
   }

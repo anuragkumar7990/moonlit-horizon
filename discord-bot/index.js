@@ -181,6 +181,23 @@ function buildP0Message(data) {
   return lines.join('\n')
 }
 
+function splitIntoChunks(text, limit = 1900) {
+  const lines = text.split('\n')
+  const chunks = []
+  let current = ''
+  for (const line of lines) {
+    const candidate = current ? current + '\n' + line : line
+    if (candidate.length > limit) {
+      if (current) chunks.push(current)
+      current = line
+    } else {
+      current = candidate
+    }
+  }
+  if (current) chunks.push(current)
+  return chunks
+}
+
 async function postP0Tasks() {
   try {
     const data = await vercelGet('/api/p0-tasks')
@@ -190,8 +207,9 @@ async function postP0Tasks() {
       console.error('[p0] #p0-tasks channel not found')
       return
     }
-    await channel.send(message)
-    console.log(`[p0] Posted ${data.newCount} P0 tasks to #p0-tasks`)
+    const chunks = splitIntoChunks(message)
+    for (const chunk of chunks) await channel.send(chunk)
+    console.log(`[p0] Posted ${data.newCount} P0 tasks to #p0-tasks (${chunks.length} message${chunks.length > 1 ? 's' : ''})`)
   } catch (err) {
     console.error('[p0] Failed to post P0 tasks:', err.message)
   }
