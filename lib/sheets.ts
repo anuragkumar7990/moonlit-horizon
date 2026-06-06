@@ -775,6 +775,7 @@ export async function upsertAccountIntelligence(intel: AccountIntelligence): Pro
 export async function appendManualNote(account: string, note: string): Promise<string> {
   const sheets = getSheets()
   const ts = istNowSheets()
+  const newEntry = `[${ts} IST] ${note}`
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -783,10 +784,22 @@ export async function appendManualNote(account: string, note: string): Promise<s
   const rows = res.data.values ?? []
   const norm = (s: string) => s.toLowerCase().trim()
   const rowIdx = rows.findIndex((r, i) => i > 0 && norm(r[0] ?? '') === norm(account))
-  if (rowIdx === -1) throw new Error(`Account not found in Account Intelligence: ${account}`)
+
+  if (rowIdx === -1) {
+    // Account not in sheet yet — create a new row with just the manual note
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Account Intelligence!A:K',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[account, ts, 0, '', 'Cold', '', '', '', newEntry, '', '']],
+      },
+    })
+    return newEntry
+  }
 
   const existing = rows[rowIdx][8] ?? ''
-  const updated = existing ? `${existing}\n[${ts} IST] ${note}` : `[${ts} IST] ${note}`
+  const updated = existing ? `${existing}\n${newEntry}` : newEntry
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
@@ -838,7 +851,7 @@ export async function updateCumulativeInSheet(
 ): Promise<void> {
   const sheets = getSheets()
   const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
-  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+  if (rowIdx === -1) return // row was just created with no intel layers yet — skip
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
