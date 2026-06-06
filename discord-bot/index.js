@@ -485,6 +485,71 @@ async function postWeeklySummary() {
   }
 }
 
+// ── Briefing formatter ───────────────────────────────────────────
+
+function fmtMeetingTime(isoStr) {
+  try {
+    const d = new Date(isoStr)
+    return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true })
+  } catch { return isoStr }
+}
+
+function buildBriefingMessage(data) {
+  const { todayMeetings, callsToday, hotDeals, openTasks, leads } = data
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  })
+
+  const lines = [`🌅 **Morning Briefing — ${dateStr}**`]
+
+  // Calls today
+  const ct = callsToday
+  const dialledStr   = ct.targets.dialled   != null ? `${ct.dialled} / ${ct.targets.dialled}`   : `${ct.dialled}`
+  const connStr      = ct.targets.connected  != null ? `${ct.connected} / ${ct.targets.connected}` : `${ct.connected}`
+  const bookedStr    = ct.targets.booked     != null ? `${ct.booked} / ${ct.targets.booked}`     : `${ct.booked}`
+  lines.push('', `**📞 Calls Today**`, `Dialled: **${dialledStr}** · Connected: **${connStr}** · Booked: **${bookedStr}**`)
+
+  // Today's meetings
+  if (todayMeetings.length === 0) {
+    lines.push('', `**📅 Meetings Today**`, `_No meetings scheduled_`)
+  } else {
+    lines.push('', `**📅 Meetings Today (${todayMeetings.length})**`)
+    todayMeetings.forEach(m => {
+      const contact = m.contactName ? ` — ${m.contactName}` : ''
+      lines.push(`• **${m.accountName}**${contact} @ ${fmtMeetingTime(m.meetingTime)} _(${m.meetingType})_`)
+    })
+  }
+
+  // Open P0 tasks
+  const p0Tasks = openTasks.filter(t => t.type === 'P0')
+  if (p0Tasks.length === 0) {
+    lines.push('', `**⚠️ P0 Tasks**`, `_No open P0 tasks_`)
+  } else {
+    lines.push('', `**⚠️ P0 Tasks (${p0Tasks.length})**`)
+    p0Tasks.slice(0, 8).forEach(t => {
+      const assignee = t.assignedTo ? ` — ${t.assignedTo}` : ''
+      lines.push(`• ${t.task}${assignee}`)
+    })
+    if (p0Tasks.length > 8) lines.push(`_...and ${p0Tasks.length - 8} more — see #p0-tasks_`)
+  }
+
+  // Hot pipeline
+  if (hotDeals.length > 0) {
+    lines.push('', `**🔥 Hot Pipeline (${hotDeals.length} deals)**`)
+    hotDeals.slice(0, 6).forEach(d => {
+      const amt = d.amount >= 100000 ? `₹${(d.amount / 100000).toFixed(1)}L` : d.amount > 0 ? `₹${d.amount.toLocaleString('en-IN')}` : ''
+      const amtStr = amt ? ` · ${amt}` : ''
+      lines.push(`• **${d.accountName}** — ${d.stage}${amtStr}`)
+    })
+  }
+
+  // Lead overview
+  lines.push('', `🔴 Hot: **${leads.hot}** · 🟡 Warm: **${leads.warm}** · 🔵 Cold: **${leads.cold}** · Total: **${leads.total}**`)
+
+  return lines.join('\n')
+}
+
 client.on('clientReady', () => {
   console.log(`✅ Logged in as ${client.user.tag}`)
   refreshCache()
@@ -912,6 +977,24 @@ client.on('interactionCreate', async interaction => {
         await interaction.editReply(lines.join('\n'))
       } catch (err) {
         console.error('/mh targets view error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh briefing ────────────────────────────────────────────────
+    if (!group && sub === 'briefing') {
+      await interaction.deferReply({ ephemeral: true })
+      try {
+        const data = await vercelGet('/api/briefing')
+        const message = buildBriefingMessage(data)
+        const salesOps = interaction.client.channels.cache.find(c => c.name === 'sales-ops')
+        if (!salesOps) return interaction.editReply('❌ #sales-ops channel not found.')
+        const chunks = splitIntoChunks(message)
+        for (const chunk of chunks) await salesOps.send(chunk)
+        await interaction.editReply('✅ Briefing posted to #sales-ops')
+      } catch (err) {
+        console.error('/mh briefing error:', err)
         await interaction.editReply(`❌ Failed: ${err.message}`)
       }
       return

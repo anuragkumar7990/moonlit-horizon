@@ -160,6 +160,11 @@ const mhCommand = new SlashCommandBuilder()
           .setDescription('View current month\'s targets and actuals')
       )
   )
+  .addSubcommand(sub =>
+    sub
+      .setName('briefing')
+      .setDescription('Post today\'s briefing to #sales-ops: P0 tasks + meetings + hot pipeline')
+  )
   .addSubcommandGroup(group =>
     group
       .setName('log')
