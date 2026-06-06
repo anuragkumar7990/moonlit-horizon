@@ -59,7 +59,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Call ${callId} not found in Zoho` }, { status: 404 })
   }
 
-  // Resolve contact/lead to get name, email, and account name
+  // Resolve contact/lead to get name, email, and account name.
+  //
+  // Zoho's call structure differs by record type:
+  //   Lead calls:    $se_module="Leads",    Who_Id=null, What_Id={ id: leadId, name }
+  //   Contact calls: $se_module="Contacts", Who_Id={ id: contactId, name }, What_Id=null (or Account)
   let contactName = ''
   let email = ''
   let accountName = ''
@@ -67,27 +71,30 @@ export async function POST(req: NextRequest) {
   const whoId = call.whoId
   const whatId = call.whatId
 
-  // Prefer the linked Account name from What_Id if available
-  if (whatId?.module === 'Accounts' && whatId.name) {
-    accountName = whatId.name
-  }
-
-  if (whoId) {
-    const isLead = whoId.module === 'Leads' || call.seModule === 'Leads'
-    if (isLead) {
-      const lead = await getLeadById(whoId.id)
+  if (call.seModule === 'Leads') {
+    // Lead call — the lead record is in What_Id
+    const leadId = whatId?.id
+    if (leadId) {
+      const lead = await getLeadById(leadId)
       if (lead) {
         contactName = `${lead.firstName} ${lead.lastName}`.trim()
         email = lead.email
-        if (!accountName) accountName = lead.company
+        accountName = lead.company
       }
-    } else {
+    }
+  } else {
+    // Contact call — contact is in Who_Id; account may be in What_Id
+    if (whoId?.id) {
       const contact = await getContactById(whoId.id)
       if (contact) {
         contactName = `${contact.firstName} ${contact.lastName}`.trim()
         email = contact.email
-        if (!accountName) accountName = contact.accountName
+        accountName = contact.accountName
       }
+    }
+    // Fallback: account name from What_Id if contact had none
+    if (!accountName && whatId?.name) {
+      accountName = whatId.name
     }
   }
 
