@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { renderToBuffer } from '@react-pdf/renderer'
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer'
 import React, { type ReactElement } from 'react'
-import { WeeklyReport } from '@/components/pdf/WeeklyReport'
+import { WeeklyReport, type WeeklyReportData } from '@/components/pdf/WeeklyReport'
 import { getCalls, getMeetings, getTargets, getLatestSummary } from '@/lib/sheets'
 import { getDeals, getZohoCalls } from '@/lib/zoho'
 import { buildCallsData, buildMeetingsData, buildFunnel, buildLeadCounts, mergeCallSources } from '@/lib/dashboard'
@@ -43,7 +43,7 @@ export async function GET() {
     const funnel       = buildFunnel(deals)
     const leads        = buildLeadCounts(deals)
 
-    const w = callsData.weekly
+    const w  = callsData.weekly
     const mw = meetingsData.weekly
     const rate = w.dialled > 0 ? ((w.connected / w.dialled) * 100).toFixed(0) : '0'
 
@@ -55,18 +55,18 @@ export async function GET() {
     const ist = istNow()
     const generatedAt = `${ist.toISOString().slice(0, 10)} ${ist.toISOString().slice(11, 16)} IST`
 
+    const data: WeeklyReportData = {
+      weekOf: weekOfLabel(),
+      generatedAt,
+      calls: { dialled: w.dialled, connected: w.connected, rate, meetingsBooked: w.meetingsBooked },
+      meetings: { l1Booked: mw.l1Booked, l1Conducted: mw.l1Conducted, l2Conducted: mw.l2Conducted },
+      leads: { hot: leads.hot, warm: leads.warm, cold: leads.cold, total: leads.total },
+      hotDeals,
+      summary: summary?.summary ?? '',
+    }
+
     const buffer = await renderToBuffer(
-      React.createElement(WeeklyReport, {
-        data: {
-          weekOf: weekOfLabel(),
-          generatedAt,
-          calls: { dialled: w.dialled, connected: w.connected, rate, meetingsBooked: w.meetingsBooked },
-          meetings: { l1Booked: mw.l1Booked, l1Conducted: mw.l1Conducted, l2Conducted: mw.l2Conducted },
-          leads: { hot: leads.hot, warm: leads.warm, cold: leads.cold, total: leads.total },
-          hotDeals,
-          summary: summary?.summary ?? '',
-        }
-      }) as ReactElement
+      React.createElement(WeeklyReport, { data }) as ReactElement<DocumentProps>
     )
 
     const filename = `ttt-weekly-${ist.toISOString().slice(0, 10)}.pdf`
