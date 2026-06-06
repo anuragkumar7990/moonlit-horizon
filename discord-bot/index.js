@@ -1042,6 +1042,62 @@ client.on('interactionCreate', async interaction => {
       return
     }
 
+    // ── /mh intel show ──────────────────────────────────────────────
+    if (group === 'intel' && sub === 'show') {
+      await interaction.deferReply({ ephemeral: true })
+      const accountVal = interaction.options.getString('account', true)
+      const account = cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal
+
+      try {
+        const data = await vercelGet('/api/account-intel')
+        const normalise = s => s.toLowerCase().trim()
+        const item = data.intel?.find(i => normalise(i.account) === normalise(account))
+        if (!item) {
+          return interaction.editReply(`❌ No intel found for **${account}**. Run \`/mh intel refresh\` to generate it.`)
+        }
+
+        const statusEmoji = { Won: '✅', Active: '🔥', Warm: '🟡', Cold: '🔵', Dead: '❌' }
+        const lines = [
+          `${statusEmoji[item.status] ?? '⚪'} **${item.account}** — ${item.status}`,
+          ``,
+          item.summary,
+          ``,
+          item.nextAction ? `**→ Next:** ${item.nextAction}` : null,
+          `_${item.meetingCount} meeting${item.meetingCount !== 1 ? 's' : ''} · last: ${item.lastMeeting?.slice(0, 10) ?? '—'} · updated: ${item.updatedAt?.slice(0, 10) ?? '—'}_`,
+        ].filter(Boolean).join('\n')
+
+        await interaction.editReply(lines)
+      } catch (err) {
+        console.error('/mh intel show error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh intel refresh ───────────────────────────────────────────
+    if (group === 'intel' && sub === 'refresh') {
+      await interaction.deferReply({ ephemeral: true })
+      const accountVal = interaction.options.getString('account', true)
+      const account = cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal
+
+      try {
+        const data = await vercelPost('/api/account-intel/refresh', { account })
+        const item = data.intel
+        const statusEmoji = { Won: '✅', Active: '🔥', Warm: '🟡', Cold: '🔵', Dead: '❌' }
+        const lines = [
+          `${statusEmoji[item.status] ?? '⚪'} **${item.account}** intel refreshed`,
+          ``,
+          item.summary,
+          item.nextAction ? `**→ Next:** ${item.nextAction}` : null,
+        ].filter(Boolean).join('\n')
+        await interaction.editReply(lines)
+      } catch (err) {
+        console.error('/mh intel refresh error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
     // ── /mh objective set ───────────────────────────────────────────
     if (group === 'objective' && sub === 'set') {
       await interaction.deferReply({ ephemeral: true })

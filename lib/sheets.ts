@@ -674,6 +674,80 @@ export async function getTopicCoverage(): Promise<TopicCoverageEntry[]> {
   } catch { return [] }
 }
 
+// ── Account Intelligence sheet ───────────────────────────────────────────────
+// Columns: Account | Updated At | Meeting Count | Last Meeting | Status | Summary | Next Action
+
+export interface AccountIntelligence {
+  account: string
+  updatedAt: string
+  meetingCount: number
+  lastMeeting: string
+  status: 'Won' | 'Active' | 'Warm' | 'Cold' | 'Dead'
+  summary: string
+  nextAction: string
+}
+
+const ACCOUNT_INTEL_HEADERS = ['Account', 'Updated At', 'Meeting Count', 'Last Meeting', 'Status', 'Summary', 'Next Action']
+
+export async function getAccountIntelligence(): Promise<AccountIntelligence[]> {
+  try {
+    return readSheet<AccountIntelligence>('Account Intelligence!A:G', (r) => ({
+      account:      r[0] ?? '',
+      updatedAt:    r[1] ?? '',
+      meetingCount: parseInt(r[2] ?? '0', 10) || 0,
+      lastMeeting:  r[3] ?? '',
+      status:       (r[4] as AccountIntelligence['status']) ?? 'Cold',
+      summary:      r[5] ?? '',
+      nextAction:   r[6] ?? '',
+    }))
+  } catch { return [] }
+}
+
+export async function upsertAccountIntelligence(intel: AccountIntelligence): Promise<void> {
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Account Intelligence')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Account Intelligence' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Account Intelligence!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [ACCOUNT_INTEL_HEADERS] },
+    })
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Account Intelligence!A:G',
+  })
+  const rows = res.data.values ?? []
+  const normalise = (s: string) => s.toLowerCase().trim()
+  const rowIdx = rows.findIndex((r, i) => i > 0 && normalise(r[0]) === normalise(intel.account))
+
+  const row = [intel.account, intel.updatedAt, intel.meetingCount, intel.lastMeeting, intel.status, intel.summary, intel.nextAction]
+
+  if (rowIdx !== -1) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `Account Intelligence!A${rowIdx + 1}:G${rowIdx + 1}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [row] },
+    })
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Account Intelligence!A:G',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [row] },
+    })
+  }
+}
+
 // ── Notes append ─────────────────────────────────────────────────────────────
 
 export async function appendNoteRow(row: {

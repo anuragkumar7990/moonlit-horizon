@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { getMeetings, updateMeetingConducted, appendNoteRow } from '@/lib/sheets'
+import { getMeetings, updateMeetingConducted, appendNoteRow, getNotes } from '@/lib/sheets'
+import { generateAndSaveIntel } from '@/lib/intel'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,6 +101,24 @@ async function syncMeetings(meetings: CirclebackMeeting[]): Promise<SyncResult> 
         assignedTo:  '',
       }).catch(e => console.error('[circleback-sync] Notes write failed:', e))
     }
+
+    // Regenerate account intelligence from all Notes for this account
+    ;(async () => {
+      try {
+        const allNotes = await getNotes()
+        const accountNotes = allNotes.filter(n =>
+          n.accountName.toLowerCase() === sheetRow.accountName.toLowerCase() && n.summary
+        )
+        if (accountNotes.length > 0) {
+          await generateAndSaveIntel(
+            sheetRow.accountName,
+            accountNotes.map(n => ({ date: n.createdAt, notes: n.summary + (n.actionables ? '\n' + n.actionables : '') }))
+          )
+        }
+      } catch (e) {
+        console.error('[circleback-sync] Intel refresh failed:', e)
+      }
+    })()
   }
 
   return result

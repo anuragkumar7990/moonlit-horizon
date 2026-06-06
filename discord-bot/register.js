@@ -271,6 +271,33 @@ const mhCommand = new SlashCommandBuilder()
   )
   .addSubcommandGroup(group =>
     group
+      .setName('intel')
+      .setDescription('Account intelligence')
+      .addSubcommand(sub =>
+        sub
+          .setName('show')
+          .setDescription('Show account intelligence for a client')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Client account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+      )
+      .addSubcommand(sub =>
+        sub
+          .setName('refresh')
+          .setDescription('Regenerate intel for one account from its Notes tab history')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Client account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+      )
+  )
+  .addSubcommandGroup(group =>
+    group
       .setName('objective')
       .setDescription('Monthly objective tracking')
       .addSubcommand(sub =>
