@@ -12,7 +12,15 @@
  *   new F, H, I, J      = '' (empty, populated later)
  */
 
-require('dotenv').config()
+const fs = require('fs')
+const path = require('path')
+const envPath = path.join(__dirname, '..', '.env.local')
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+    const m = line.match(/^([^#=]+)=(.*)$/)
+    if (m) process.env[m[1].trim()] = m[2].trim().replace(/^["']|["']$/g, '')
+  })
+}
 const { google } = require('googleapis')
 
 const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID

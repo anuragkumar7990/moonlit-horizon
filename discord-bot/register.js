@@ -334,6 +334,22 @@ const mhCommand = new SlashCommandBuilder()
               )
           )
       )
+      .addSubcommand(sub =>
+        sub
+          .setName('touch')
+          .setDescription('Record the last contact date for an account')
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Client account name')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('date')
+              .setDescription('Date of last contact — YYYY-MM-DD (leave blank for today)')
+              .setRequired(false)
+          )
+      )
   )
   .addSubcommandGroup(group =>
     group

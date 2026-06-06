@@ -675,9 +675,9 @@ export async function getTopicCoverage(): Promise<TopicCoverageEntry[]> {
 }
 
 // ── Account Intelligence sheet ───────────────────────────────────────────────
-// Columns A:K — Account | Updated At | Meeting Count | Last Meeting | Status |
+// Columns A:L — Account | Updated At | Meeting Count | Last Meeting | Status |
 //               Email Intelligence | Circleback Intelligence | Call Intelligence |
-//               Manual Notes | Cumulative Summary | Next Action
+//               Manual Notes | Cumulative Summary | Next Action | Last Contact Date
 
 export interface AccountIntelligence {
   account: string
@@ -691,12 +691,13 @@ export interface AccountIntelligence {
   manualNotes: string
   cumulativeSummary: string
   nextAction: string
+  lastContactDate: string
 }
 
 const ACCOUNT_INTEL_HEADERS = [
   'Account', 'Updated At', 'Meeting Count', 'Last Meeting', 'Status',
   'Email Intelligence', 'Circleback Intelligence', 'Call Intelligence',
-  'Manual Notes', 'Cumulative Summary', 'Next Action',
+  'Manual Notes', 'Cumulative Summary', 'Next Action', 'Last Contact Date',
 ]
 
 function istNowSheets(): string {
@@ -706,7 +707,7 @@ function istNowSheets(): string {
 
 export async function getAccountIntelligence(): Promise<AccountIntelligence[]> {
   try {
-    return readSheet<AccountIntelligence>('Account Intelligence!A:K', (r) => ({
+    return readSheet<AccountIntelligence>('Account Intelligence!A:L', (r) => ({
       account:               r[0]  ?? '',
       updatedAt:             r[1]  ?? '',
       meetingCount:          parseInt(r[2] ?? '0', 10) || 0,
@@ -718,6 +719,7 @@ export async function getAccountIntelligence(): Promise<AccountIntelligence[]> {
       manualNotes:           r[8]  ?? '',
       cumulativeSummary:     r[9]  ?? '',
       nextAction:            r[10] ?? '',
+      lastContactDate:       r[11] ?? '',
     }))
   } catch { return [] }
 }
@@ -752,20 +754,20 @@ export async function upsertAccountIntelligence(intel: AccountIntelligence): Pro
   const row = [
     intel.account, intel.updatedAt, intel.meetingCount, intel.lastMeeting, intel.status,
     intel.emailIntelligence, intel.circlebakIntelligence, intel.callIntelligence,
-    intel.manualNotes, intel.cumulativeSummary, intel.nextAction,
+    intel.manualNotes, intel.cumulativeSummary, intel.nextAction, intel.lastContactDate ?? '',
   ]
 
   if (rowIdx !== -1) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `Account Intelligence!A${rowIdx + 1}:K${rowIdx + 1}`,
+      range: `Account Intelligence!A${rowIdx + 1}:L${rowIdx + 1}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [row] },
     })
   } else {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Account Intelligence!A:K',
+      range: 'Account Intelligence!A:L',
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [row] },
     })
@@ -789,10 +791,10 @@ export async function appendManualNote(account: string, note: string): Promise<s
     // Account not in sheet yet — create a new row with just the manual note
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Account Intelligence!A:K',
+      range: 'Account Intelligence!A:L',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [[account, ts, 0, '', 'Cold', '', '', '', newEntry, '', '']],
+        values: [[account, ts, 0, '', 'Cold', '', '', '', newEntry, '', '', '']],
       },
     })
     return newEntry
@@ -847,21 +849,37 @@ export async function updateEmailIntelligence(account: string, emailIntelligence
 export async function updateCumulativeInSheet(
   account: string,
   cumulativeSummary: string,
-  nextAction: string
+  nextAction: string,
+  lastContactDate?: string
 ): Promise<void> {
   const sheets = getSheets()
   const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
   if (rowIdx === -1) return // row was just created with no intel layers yet — skip
 
+  const data: { range: string; values: unknown[][] }[] = [
+    { range: `Account Intelligence!B${rowIdx + 1}`, values: [[istNowSheets()]] },
+    { range: `Account Intelligence!J${rowIdx + 1}:K${rowIdx + 1}`, values: [[cumulativeSummary, nextAction]] },
+  ]
+  if (lastContactDate !== undefined) {
+    data.push({ range: `Account Intelligence!L${rowIdx + 1}`, values: [[lastContactDate]] })
+  }
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
-    requestBody: {
-      valueInputOption: 'USER_ENTERED',
-      data: [
-        { range: `Account Intelligence!B${rowIdx + 1}`,      values: [[istNowSheets()]] },
-        { range: `Account Intelligence!J${rowIdx + 1}:K${rowIdx + 1}`, values: [[cumulativeSummary, nextAction]] },
-      ],
-    },
+    requestBody: { valueInputOption: 'USER_ENTERED', data },
+  })
+}
+
+export async function updateLastContactDate(account: string, date: string): Promise<void> {
+  const sheets = getSheets()
+  const rowIdx = await findAccountRow(account, 'Account Intelligence!A:A')
+  if (rowIdx === -1) throw new Error(`Account not found: ${account}`)
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Account Intelligence!L${rowIdx + 1}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[date]] },
   })
 }
 

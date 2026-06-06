@@ -52,10 +52,14 @@ const STOP_WORDS = new Set(['systems', 'technologies', 'solutions', 'software', 
   'group', 'india', 'pvt', 'ltd', 'inc', 'llc', 'the', 'and', 'of', 'for'])
 
 function extractSearchWord(accountName) {
-  // Strip parenthetical "(RIL)" etc, then pick first non-stop word
+  // Strip parenthetical "(RIL)" etc, pick longest non-stop word (min 5 chars) to avoid
+  // generic terms like "Info" or "Apex" matching unrelated companies in Zoho
   const cleaned = accountName.replace(/\s*\(.*?\)\s*/g, '').trim()
   const words = cleaned.split(/\s+/)
-  return words.find(w => w.length >= 4 && !STOP_WORDS.has(w.toLowerCase())) ?? words[0]
+  const candidates = words.filter(w => w.length >= 5 && !STOP_WORDS.has(w.toLowerCase()))
+  if (candidates.length > 0) return candidates.reduce((a, b) => a.length >= b.length ? a : b)
+  // Fallback: first word of any length
+  return words[0]
 }
 
 async function getContactEmailsForAccount(zohoToken, accountName) {
@@ -79,13 +83,15 @@ async function searchGmailForEmails(contacts, accountName) {
   const cleanName = accountName.replace(/\s*\(.*?\)\s*/g, '').trim()
   const subjectClause = `subject:"The Test Tribe <> ${cleanName}"`
 
+  // Exclude newsletters, promotions, course/event emails
+  const exclusions = `-category:promotions -category:social -category:forums -category:updates -from:finercircle -from:thriveedschool`
+
   let q
   if (contacts.length === 0) {
-    // No contacts found — fall back to subject search only
-    q = `${subjectClause} newer_than:730d`
+    q = `${subjectClause} newer_than:730d ${exclusions}`
   } else {
     const emailParts = contacts.map(c => `{from:${c.email} to:${c.email}}`).join(' OR ')
-    q = `(${emailParts} OR ${subjectClause}) newer_than:730d`
+    q = `(${emailParts} OR ${subjectClause}) newer_than:730d ${exclusions}`
   }
 
   const listRes = await gmail.users.threads.list({ userId: 'me', q, maxResults: 20 })

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import type { AccountIntelligence } from '@/lib/sheets'
-import { addManualNote, changeAccountStatus } from '@/app/actions/intel'
+import { addManualNote, changeAccountStatus, updateLastContact } from '@/app/actions/intel'
+import { lastContactRange, RANGE_COLOR } from '@/lib/intel-utils'
 
 type Status = AccountIntelligence['status']
 
@@ -26,7 +27,7 @@ function IntelCard({ title, content, placeholder }: { title: string; content: st
     <div className="p-3 rounded-lg bg-mh-surface2 border border-mh-border flex flex-col gap-2">
       <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">{title}</p>
       {content ? (
-        <p className="text-xs text-mh-muted leading-relaxed">{content}</p>
+        <p className="text-xs text-mh-muted leading-relaxed whitespace-pre-line">{content}</p>
       ) : (
         <p className="text-xs text-mh-muted italic">{placeholder}</p>
       )}
@@ -43,6 +44,8 @@ export function AccountIntelPanel({ intel: initialIntel }: { intel: AccountIntel
   const [selectedAccount, setSelectedAccount] = useState<string>(sorted[0]?.account ?? '')
   const [noteInput, setNoteInput] = useState('')
   const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [editingDate, setEditingDate] = useState(false)
+  const [dateSaving, setDateSaving] = useState(false)
   const [, startTransition] = useTransition()
 
   const account = intel.find(i => i.account === selectedAccount)
@@ -51,14 +54,14 @@ export function AccountIntelPanel({ intel: initialIntel }: { intel: AccountIntel
     if (!noteInput.trim() || !selectedAccount || noteState === 'saving') return
     setNoteState('saving')
     try {
-      const { updatedNotes, cumulativeSummary, nextAction } = await addManualNote(
+      const { updatedNotes, cumulativeSummary, nextAction, lastContactDate } = await addManualNote(
         selectedAccount,
         noteInput.trim()
       )
       setIntel(prev =>
         prev.map(i =>
           i.account === selectedAccount
-            ? { ...i, manualNotes: updatedNotes, cumulativeSummary, nextAction }
+            ? { ...i, manualNotes: updatedNotes, cumulativeSummary, nextAction, lastContactDate }
             : i
         )
       )
@@ -85,13 +88,29 @@ export function AccountIntelPanel({ intel: initialIntel }: { intel: AccountIntel
     })
   }
 
+  async function handleDateUpdate(newDate: string) {
+    if (!newDate || !selectedAccount) return
+    setDateSaving(true)
+    try {
+      await updateLastContact(selectedAccount, newDate)
+      setIntel(prev => prev.map(i =>
+        i.account === selectedAccount ? { ...i, lastContactDate: newDate } : i
+      ))
+      setEditingDate(false)
+    } catch { /* ignore */ }
+    setDateSaving(false)
+  }
+
+  const range = account ? lastContactRange(account.lastContactDate) : '—'
+  const rangeColor = RANGE_COLOR[range] ?? 'text-mh-muted'
+
   return (
     <div>
       {/* Selector row */}
       <div className="flex items-center gap-3 mb-4">
         <select
           value={selectedAccount}
-          onChange={e => setSelectedAccount(e.target.value)}
+          onChange={e => { setSelectedAccount(e.target.value); setEditingDate(false) }}
           className="flex-1 bg-mh-surface2 border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text focus:outline-none focus:border-mh-vermillion cursor-pointer"
         >
           {intel.map(i => (
@@ -121,11 +140,49 @@ export function AccountIntelPanel({ intel: initialIntel }: { intel: AccountIntel
       ) : (
         <>
           {/* Meta row */}
-          <p className="text-[10px] text-mh-muted mb-4">
-            {account.meetingCount} meeting{account.meetingCount !== 1 ? 's' : ''}
-            {account.lastMeeting ? ` · last meeting ${account.lastMeeting.slice(0, 10)}` : ''}
-            {account.updatedAt ? ` · updated ${account.updatedAt.slice(0, 10)}` : ''}
-          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-[10px] text-mh-muted">
+            <span>
+              {account.meetingCount} meeting{account.meetingCount !== 1 ? 's' : ''}
+              {account.lastMeeting ? ` · last meeting ${account.lastMeeting.slice(0, 10)}` : ''}
+              {account.updatedAt   ? ` · updated ${account.updatedAt.slice(0, 10)}` : ''}
+            </span>
+
+            {/* Last contact badge */}
+            <span className="flex items-center gap-1">
+              <span className="text-mh-muted">last contact</span>
+              <span className={`font-medium ${rangeColor}`}>{range}</span>
+              {account.lastContactDate && (
+                <span className="text-mh-muted">({account.lastContactDate})</span>
+              )}
+              <button
+                onClick={() => setEditingDate(e => !e)}
+                title="Update last contact date"
+                className="ml-1 text-mh-muted hover:text-mh-text transition-colors"
+              >
+                ✎
+              </button>
+            </span>
+          </div>
+
+          {/* Inline date picker */}
+          {editingDate && (
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="date"
+                defaultValue={account.lastContactDate || new Date().toISOString().slice(0, 10)}
+                onChange={e => handleDateUpdate(e.target.value)}
+                disabled={dateSaving}
+                className="bg-mh-surface border border-mh-border rounded px-2 py-1 text-xs text-mh-text focus:outline-none focus:border-mh-vermillion disabled:opacity-50"
+              />
+              <button
+                onClick={() => setEditingDate(false)}
+                className="text-xs text-mh-muted hover:text-mh-text"
+              >
+                Cancel
+              </button>
+              {dateSaving && <span className="text-xs text-mh-muted">Saving…</span>}
+            </div>
+          )}
 
           {/* 4 intelligence panels */}
           <div className="grid grid-cols-2 gap-3 mb-4">

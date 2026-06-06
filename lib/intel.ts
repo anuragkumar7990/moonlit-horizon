@@ -3,10 +3,13 @@ import {
   upsertAccountIntelligence,
   updateEmailIntelligence,
   updateCumulativeInSheet,
+  updateLastContactDate,
   getAccountIntelligence,
   getCalls,
   type AccountIntelligence,
 } from './sheets'
+import { lastContactRange as _rangeLabel } from './intel-utils'
+export { lastContactRange } from './intel-utils'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -105,6 +108,30 @@ Reply in this exact format — nothing else:
   return callHaiku(prompt, 400)
 }
 
+// ── Last contact auto-detection ──────────────────────────────────────────────
+
+function autoDetectLastContact(intel: {
+  lastMeeting: string
+  emailIntelligence: string
+  callIntelligence: string
+  manualNotes: string
+}): string {
+  const dates: string[] = []
+  const dateRe = /\b(\d{4}-\d{2}-\d{2})\b/g
+
+  if (intel.lastMeeting) dates.push(intel.lastMeeting.slice(0, 10))
+
+  for (const text of [intel.emailIntelligence, intel.callIntelligence]) {
+    for (const m of text.matchAll(dateRe)) dates.push(m[1])
+  }
+
+  // Manual notes timestamps: [2026-06-06 22:51 IST]
+  for (const m of intel.manualNotes.matchAll(/\[(\d{4}-\d{2}-\d{2})/g)) dates.push(m[1])
+
+  if (dates.length === 0) return ''
+  return dates.sort().at(-1)!
+}
+
 // ── Cumulative synthesis ─────────────────────────────────────────────────────
 
 interface CumulativeResult {
@@ -196,6 +223,13 @@ export async function generateAndSaveIntel(
     manualNotes,
   })
 
+  const lastContactDate = autoDetectLastContact({
+    lastMeeting,
+    emailIntelligence,
+    callIntelligence,
+    manualNotes,
+  })
+
   const intel: AccountIntelligence = {
     account,
     updatedAt: istNow(),
@@ -208,6 +242,7 @@ export async function generateAndSaveIntel(
     manualNotes,
     cumulativeSummary,
     nextAction,
+    lastContactDate,
   }
 
   await upsertAccountIntelligence(intel)
@@ -230,8 +265,15 @@ export async function regenerateCumulative(
     manualNotes:           intel.manualNotes,
   })
 
-  await updateCumulativeInSheet(account, cumulativeSummary, nextAction)
-  return { cumulativeSummary, nextAction }
+  const lastContactDate = autoDetectLastContact({
+    lastMeeting:          intel.lastMeeting,
+    emailIntelligence:    intel.emailIntelligence,
+    callIntelligence:     intel.callIntelligence,
+    manualNotes:          intel.manualNotes,
+  })
+
+  await updateCumulativeInSheet(account, cumulativeSummary, nextAction, lastContactDate)
+  return { cumulativeSummary, nextAction, lastContactDate }
 }
 
 // ── Public: sync email intel for one account ─────────────────────────────────

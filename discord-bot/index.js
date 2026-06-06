@@ -1144,6 +1144,37 @@ client.on('interactionCreate', async interaction => {
       return
     }
 
+    // ── /mh intel touch ─────────────────────────────────────────────
+    if (group === 'intel' && sub === 'touch') {
+      await interaction.deferReply({ ephemeral: true })
+      const accountVal = interaction.options.getString('account', true)
+      const account    = accountVal.includes('|') ? accountVal.split('|')[0].trim() : accountVal.trim()
+      const rawDate    = interaction.options.getString('date') ?? null
+
+      // Validate and normalise date (default today IST)
+      let date
+      if (rawDate) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+          return interaction.editReply('❌ Date must be in YYYY-MM-DD format (e.g. 2026-06-10).')
+        }
+        date = rawDate
+      } else {
+        const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+        date = istNow.toISOString().slice(0, 10)
+      }
+
+      try {
+        await vercelPost('/api/account-intel/last-contact', { account, date })
+        await interaction.editReply(
+          `📅 **${account}** last contact date set to **${date}**.\n_Dashboard will reflect within 60 seconds._`
+        )
+      } catch (err) {
+        console.error('/mh intel touch error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
     // ── /mh objective set ───────────────────────────────────────────
     if (group === 'objective' && sub === 'set') {
       await interaction.deferReply({ ephemeral: true })
