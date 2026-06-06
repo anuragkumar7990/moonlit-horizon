@@ -460,6 +460,25 @@ async function postEndOfMonthReview() {
   }
 }
 
+async function syncCircleback() {
+  try {
+    const data = await vercelGet('/api/circleback-sync?days=3')
+    const salesOps = client.channels.cache.find(c => c.name === 'sales-ops')
+    if (data.matched > 0 && salesOps) {
+      const lines = [
+        `✅ **Circleback sync complete — ${data.matched} meeting${data.matched !== 1 ? 's' : ''} marked Conducted**`,
+        ...data.updated.map(u => `• ${u.account} (${u.date?.slice(0, 10) ?? ''})`),
+      ]
+      if (data.unmatched > 0) lines.push(`_${data.unmatched} Circleback meeting${data.unmatched !== 1 ? 's' : ''} had no match in the Meetings sheet_`)
+      const chunks = splitIntoChunks(lines.join('\n'))
+      for (const chunk of chunks) await salesOps.send(chunk)
+    }
+    console.log(`[circleback] Sync done — ${data.matched} updated, ${data.unmatched} unmatched`)
+  } catch (err) {
+    console.error('[circleback] Sync failed:', err.message)
+  }
+}
+
 async function runTop250Reranker() {
   try {
     const statsChannel = client.channels.cache.find(c => c.name === 'stats')
@@ -596,6 +615,12 @@ client.on('clientReady', () => {
     postTargetsRequest()
   }, { timezone: 'UTC' })
 
+  // Circleback sync — daily at 9:30pm IST = 4:00pm UTC (catches same-day meetings)
+  cron.schedule('0 16 * * *', () => {
+    console.log('[cron] Firing Circleback sync...')
+    syncCircleback()
+  }, { timezone: 'UTC' })
+
   // Top-250 re-ranker — Sunday 11:00pm IST = 5:30pm UTC Sunday
   cron.schedule('30 17 * * 0', () => {
     console.log('[cron] Firing Top-250 re-ranker...')
@@ -614,6 +639,7 @@ client.on('clientReady', () => {
 
   console.log('📅 P0 tasks scheduled for 8:30am IST (3:00am UTC)')
   console.log('📅 Daily digest scheduled for 9:00am IST (3:30am UTC)')
+  console.log('📅 Circleback sync scheduled for 9:30pm IST daily (4:00pm UTC)')
   console.log('📅 Top-250 re-ranker scheduled for 11:00pm IST Sunday (5:30pm UTC)')
   console.log('📅 Monthly targets form scheduled for 7:00am IST on 1st of each month')
   console.log('📅 End-of-month review check scheduled daily at 6:00pm IST')
@@ -1001,6 +1027,34 @@ client.on('interactionCreate', async interaction => {
         await interaction.editReply(lines.join('\n'))
       } catch (err) {
         console.error('/mh targets view error:', err)
+        await interaction.editReply(`❌ Failed: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh sync-meetings ───────────────────────────────────────────
+    if (!group && sub === 'sync-meetings') {
+      await interaction.deferReply({ ephemeral: true })
+      try {
+        const data = await vercelGet('/api/circleback-sync?days=7')
+        const lines = [
+          `🔄 **Circleback sync complete**`,
+          `Fetched: ${data.fetched ?? '?'} Circleback meetings`,
+          `Newly marked Conducted: **${data.matched}**`,
+          `Already Conducted: ${data.alreadyConducted}`,
+          `No match found: ${data.unmatched}`,
+        ]
+        if (data.updated?.length > 0) {
+          lines.push('', '**Updated:**')
+          data.updated.forEach(u => lines.push(`• ${u.account} (${(u.date ?? '').slice(0, 10)})`))
+        }
+        if (data.unmatchedNames?.length > 0) {
+          lines.push('', '_Unmatched Circleback meetings (no row in Meetings sheet):_')
+          data.unmatchedNames.slice(0, 5).forEach(n => lines.push(`• ${n}`))
+        }
+        await interaction.editReply(lines.join('\n'))
+      } catch (err) {
+        console.error('/mh sync-meetings error:', err)
         await interaction.editReply(`❌ Failed: ${err.message}`)
       }
       return

@@ -165,6 +165,11 @@ const mhCommand = new SlashCommandBuilder()
       .setName('briefing')
       .setDescription('Post today\'s briefing to #sales-ops: P0 tasks + meetings + hot pipeline')
   )
+  .addSubcommand(sub =>
+    sub
+      .setName('sync-meetings')
+      .setDescription('Sync Circleback notes → mark L1/L2 meetings as Conducted in the Meetings sheet')
+  )
   .addSubcommandGroup(group =>
     group
       .setName('log')

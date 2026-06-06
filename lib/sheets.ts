@@ -41,6 +41,18 @@ export async function getMeetings(): Promise<Meeting[]> {
   }))
 }
 
+export async function updateMeetingConducted(rowIndex: number): Promise<void> {
+  const sheets = getSheets()
+  // Row 1 = headers, data starts at row 2, so sheetRow = rowIndex + 2
+  const sheetRow = rowIndex + 2
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Meetings!I${sheetRow}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [['Conducted']] },
+  })
+}
+
 export async function getNotes(): Promise<Note[]> {
   return readSheet<Note>('Notes!A:F', (r) => ({
     meetingId:   r[0] ?? '',
