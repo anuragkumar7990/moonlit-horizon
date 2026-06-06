@@ -1,258 +1,282 @@
 # Moonlit Horizon — Handover Document
-**Last updated**: 2026-06-06  
-**Status**: Phase 1 + Phase 1b complete. Phase 2 — Call Logger, Daily Digest, P0 Task Generator all live.
+**Last updated:** 2026-06-06  
+**Latest commit:** `0b66e40` (main)  
+**Live URL:** https://moonlit-horizon.vercel.app  
+**VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
+**Repo:** github.com/anuragkumar7990/moonlit-horizon
 
 ---
 
-## What's Been Built
+## 1. Overall Status vs Master Plan
 
-### Phase 0 — Foundation ✅
-- Tailwind design tokens: `mh.bg`, `mh.surface`, `mh.surface2`, `mh.border`, `mh.text`, `mh.muted`, `mh.vermillion`, `mh.gold`, `mh.positive`, `mh.negative`
-- Poppins font via `next/font/google`, CSS variable `--font-poppins`
-- Dark layout in `app/layout.tsx` with vermillion CTA nav
-- Google Sheets tabs created via `/api/setup-sheets`: Calling, Calls, Targets, Tasks, Payments
-- Discord channels created: `#targets`, `#objectives`
-
-### Phase 1 — Master Tracker Homepage ✅
-**Route**: `/`  
-**File**: `app/page.tsx` → `components/MasterTrackerGrid.tsx`
-
-5-column grid:
-- **Calls**: Dialled / Connected / Mtgs Booked — Weekly/Monthly toggle, targets from Sheets, gold glow if achieved ≥ target
-- **Meetings**: L1 Booked / L1 Conducted / L2 Conducted — same toggle + targets
-- **Leads**: Hot (Negotiation + Payment Pending) / Warm (DC Conducted + Outline) / Cold (DC Booked) — from Zoho Deals
-- **Pipeline**: Funnel bars for active stages, Won (gold trophy button) / Lost (red thumbs-down button)
-- **Trends**: Recharts line chart with filter tabs (Calls / Meetings / Lead Conversion / Emails), custom legend (Recharts v3 bug workaround)
-
-Below grid: Weekly Summary placeholder + Monthly Summary placeholder
-
-**Data flow**: `Promise.allSettled([getCalls, getMeetings, getDeals, getTargets])` → pure aggregation in `lib/dashboard.ts` → passed as props to client component
-
-### Phase 1b — Four Person Views ✅
-
-| View | Route | Key content |
+| Phase | Status | Notes |
 |---|---|---|
-| Mahesh | `/view/mahesh` | Won/Pipeline/Value hero cards, Funnel, This Week stats (6 metrics), Leads H/W/C, Summary + Reports placeholders |
-| Ashutosh | `/view/ashutosh` | Leads H/W/C, Funnel, Prospect DB Health skeleton (7 sources), Email Status + Tasks + Objectives placeholders |
-| Anurag | `/view/anurag` | Meetings Today (scrollable, max-h-80), Pending Tasks placeholder, Funnel, Payments placeholder, Quick Links grid |
-| Tanishq | `/view/tanishq` | Daily/Weekly/Monthly targets toggle, 3 metric cards with gold glow, Meetings Today (scrollable), Follow-ups Today, Prospects placeholder |
-
-PersonSelector (M/A/A/T circles) at top of every page — active = vermillion ring.
-
----
-
-## File Map
-
-```
-app/
-  page.tsx                        — Homepage (server, fetches all data)
-  layout.tsx                      — Poppins, dark bg, nav
-  globals.css                     — CSS vars, .card, .glow-gold, scrollbar
-  api/
-    setup-sheets/route.ts         — One-time POST: creates 5 Sheets tabs
-  view/
-    mahesh/page.tsx               — Mahesh view (server)
-    ashutosh/page.tsx             — Ashutosh view (server)
-    anurag/page.tsx               — Anurag view (server)
-    tanishq/page.tsx              — Tanishq view (server → TanishqDashboard client)
-
-components/
-  MasterTrackerGrid.tsx           — 5-column homepage grid (client, holds toggle state)
-  MetricCard.tsx                  — label / achieved / target card with gold glow
-  MetricsGraph.tsx                — Recharts LineChart with custom legend (client)
-  FunnelColumn.tsx                — Pipeline bars + Won/Lost SVG buttons
-  PersonSelector.tsx              — M/A/A/T nav circles (client, uses usePathname)
-  TanishqDashboard.tsx            — Tanishq's Daily/Weekly/Monthly toggle (client)
-
-lib/
-  dashboard.ts                    — ALL aggregation logic (no API calls):
-                                    buildCallsData, buildMeetingsData,
-                                    buildLeadCounts, buildFunnel,
-                                    buildWeeklyTrend,
-                                    buildTanishqMetrics, buildTodaysMeetings,
-                                    buildFollowUps
-  sheets.ts                       — Google Sheets reads: getMeetings, getNotes,
-                                    getCalls, getTargets, getCommunications,
-                                    getAccounts, appendProspectRows
-  zoho.ts                         — Zoho CRM: getDeals, getLeads (getLeads unused)
-  types.ts                        — All TypeScript interfaces
-  
-tailwind.config.ts                — mh.* design tokens + Poppins font family
-BUILD_LOG.md                      — Running log of failures and fixes
-MOONLIT_HORIZON_MASTER.md         — Full system spec and build roadmap
-```
+| **Phase 0 — Foundation** | ✅ Complete | Design tokens, Sheets tabs, Discord channels |
+| **Phase 1 — Master Tracker UI** | ✅ Complete | 5-column grid, person selector, weekly/monthly toggle |
+| **Phase 1b — Person Views** | ✅ Complete | All 4 views live with live data; Payments Pending still placeholder |
+| **Phase 2 — Agent Layer** | ✅ Mostly complete | See below |
+| **Phase 2b — Intelligence Layer** | ✅ Mostly complete | Weekly summary, targets bot, Circleback sync, Top-250 re-ranker all live |
+| **Phase 3 — Supply Module** | ❌ Not started | Trainer sheets read and understood; dashboard build not started |
+| **Phase 4 — People & Accounts** | ❌ Not started | — |
 
 ---
 
-## Key Technical Decisions
+## 2. What Is Live Today
 
-1. **Single `getDeals()` call** reused for both `buildFunnel()` and `buildLeadCounts()` — avoids duplicate Zoho API call
-2. **`Promise.allSettled`** on all data fetches — page renders even if one source fails
-3. **Recharts Legend bug**: Recharts v3 ignores JSX order for `<Legend>`. Fix: removed `<Legend>` entirely, replaced with a hand-rolled div using `LEGEND_ITEMS` constant
-4. **Lead temperature** is deal-stage-based (not Zoho Lead scoring):
-   - Hot = Negotiation, Payment Pending
-   - Warm = Discovery Call Conducted, Outline Meeting Conducted
-   - Cold = Discovery Call Booked
-5. **SVG icons** for Won/Lost buttons — emoji rendered incorrectly on Vercel server
-6. **Zoho DC**: India datacenter `zohoapis.in`, API v3
+### Dashboard (Vercel — Next.js 14)
 
----
+**Homepage `/`** — Master Tracker, 5 columns:
+- **Calls**: Dialled / Connected / Meetings Booked — weekly/monthly toggle — targets from Sheets with gold glow — **data source: Zoho Calls + Sheets Calls merged, deduped by date+account**
+- **Meetings**: L1 Booked / L1 Conducted / L2 Conducted — targets-aware — **data source: Meetings sheet** (Conducted auto-updated via Circleback webhook)
+- **Leads**: Hot / Warm / Cold / Total — **data source: Zoho Deals by stage**
+- **Pipeline**: Funnel by stage (count + amount) + Won/Lost — **data source: Zoho Deals**
+- **Trends**: 8-week recharts line graph (dialled, connected, L1 booked, L1 conducted)
+- **Weekly Summary card**: shows stored LLM bullets from Summaries sheet; falls back to Discord hint if empty
 
-## Targets Sheet Format
+**Person views:**
 
-**Tab**: `Targets`  
-**Columns**: Month (A) | Metric Name (B) | Target Value (C) | Actual Value (D)
+| View | Route | What's live | What's placeholder |
+|---|---|---|---|
+| Mahesh | `/view/mahesh` | Won/Pipeline/Value; Funnel; This Week 6-stat grid; Leads; Weekly Summary (live LLM bullets) | Reports PDF links |
+| Tanishq | `/view/tanishq` | Daily/Weekly/Monthly targets with gold glow; Today's Meetings; Follow-ups from Calls sheet | — |
+| Ashutosh | `/view/ashutosh` | Leads H/W/C; Funnel; **Live Prospect DB Health** (total stock, weeks remaining, per-source breakdown, ⚠ warnings); **Live Pending Tasks** | Email Status, Objectives |
+| Anurag | `/view/anurag` | Today's Meetings (scrollable); Funnel; **Live Pending Tasks**; Quick Links | Payments Pending, Objectives |
 
-Month must be **plain text** `2026-06` format (NOT a date cell). Code uses `format(new Date(), 'yyyy-MM')` for lookup.
+### Discord Bot (VPS — Node.js + discord.js)
 
-Current June 2026 targets set:
-| Metric Name | Target |
+**Slash commands live:**
+
+| Command | What it does |
 |---|---|
-| Calls Dialled | 1250 |
-| Calls Connected | 600 |
-| L1 Meetings Booked | 60 |
-| L1 Meetings Conducted | 50 |
-| L2 Meetings Conducted | 30 |
+| `/book` | Book meeting with existing Zoho contact → Sheets + Google Calendar + Zoho Deal |
+| `/book-prospect` | Convert Zoho lead → contact, book meeting |
+| `/mh log call` | Log call → Sheets Calls tab + Zoho Calls module (bidirectional) |
+| `/mh p0 add` | Add manual P0 task |
+| `/mh p0 done` | Mark P0 task done (autocomplete from open tasks) |
+| `/mh p0 today` | Re-post open P0 summary to `#p0-tasks` |
+| `/mh stats weekly` | Generate + post LLM weekly summary to `#stats` |
+| `/mh targets set <metric> <value>` | Set monthly target; updates pinned message in `#targets` |
+| `/mh targets view` | Show current month targets + actuals (ephemeral) |
+| `/mh briefing` | Post composite morning briefing to `#sales-ops`: calls + meetings + P0 tasks + hot pipeline |
+| `/mh sync-meetings` | Explains Circleback webhook status (sync is automatic) |
 
-Weekly targets auto-derived as `monthly ÷ 4`. Daily targets as `monthly ÷ 22`.
+**Scheduled jobs:**
 
----
+| UTC cron | IST | Channel | Action |
+|---|---|---|---|
+| `0 3 * * *` | 8:30am daily | `#p0-tasks` | P0 task scan + post |
+| `30 3 * * *` | 9:00am daily | `#stats` | Daily stats digest |
+| `30 3 * * 0` | 9:00am Sunday | `#stats` | LLM weekly summary |
+| `30 17 * * 0` | 11:00pm Sunday | `#stats` | Top-250 lead re-ranker |
+| `30 1 1 * *` | 7:00am 1st of month | `#targets` | Monthly targets form (pinned) |
+| `30 12 * * *` | 6:00pm daily | `#stats` | End-of-month review (fires only on last day) |
 
-## Phase 2 — What's Been Built
+### APIs (Vercel routes, all behind Basic Auth)
 
-### 2a — Call Logger (`/mh log call`) ✅
-**Slash command**: `/mh log call`  
-**API**: `POST /api/log-call`  
-**Sheet**: Calls tab (14 columns: Date, Time, Account, Contact Name, Contact Phone, SDR, Duration, Outcome, Notes, Zoho Call ID, Follow-up Date, Recording Drive Link, Transcript Summary, Auto Tags)
-
-Flow: user selects Type (Prospect/Contact) → Name (autocomplete, context-aware) → Outcome → optional Account/Phone/Notes/Follow-up. Bot reads from Zoho Leads or Contacts cache, resolves account + phone automatically. Posts confirmation ephemeral reply.
-
-### 2b — Daily Stats Digest ✅
-**Cron**: every day 3:30am UTC (9:00am IST)  
-**API**: `GET /api/stats-digest`  
-**Channel**: `#stats`
-
-Posts: Calls Today (Dialled/Connected/Booked), This Week (Calls + Meetings), Pipeline (Hot/Warm/Cold), Funnel, Won/Lost. Manual trigger: `node discord-bot/test-digest.js` on VPS.
-
-### 2c — P0 Task Generator ✅
-**Cron**: every day 3:00am UTC (8:30am IST)  
-**API**: `GET /api/p0-tasks` (scanner), `POST /api/p0-tasks` (manual add), `DELETE /api/p0-tasks` (clear, test utility)  
-**Supporting**: `GET /api/p0-tasks/open` (for autocomplete), `POST /api/p0-tasks/done` (mark done)  
-**Channel**: `#p0-tasks`  
-**Sheet**: Tasks tab (7 columns: Date, Task, Type, Assigned To, Linked Deal, Status, Completed At)
-
-Scans 4 issue types every morning:
-1. **Meetings without notes** — meetings 24–72h old with no Notes sheet entry → assigned Tanishq
-2. **Overdue closing dates** — active deals past their Zoho closing date → assigned Anurag
-3. **Overdue callbacks** — calls logged as "callback later" with past follow-up date → assigned Tanishq
-4. **Stale deals by stage** — no call logged for account within threshold:
-   - Payment Pending: 2 days → Tanishq
-   - Negotiation: 3 days → Tanishq
-   - Outline Meeting Conducted: 5 days → Anurag
-   - Discovery Call Conducted: 5 days → Anurag
-
-**Dedup**: tasks use `linkedDeal` key + per-task recurrence window (not just "once today"). Stale-deal tasks recur every N days matching their threshold.
-
-**Discord commands**:
-- `/mh p0 add` — add manual Other task, optional account + contact autocomplete
-- `/mh p0 done` — mark task done via autocomplete (shows today's open tasks), updates Tasks sheet Status + CompletedAt
-
-**Message format** (grouped):
-```
-📞 Follow-up calls to be made (N) — Tanishq
-N. ContactName, Account (Stage) — DealName · DD/MM/YY
-
-📋 Outlines to be sent (N) — Anurag
-📄 Proposals to be sent (N) — Anurag
-🗂️ Others (N) — Anurag
-🔁 Overdue callbacks (N) — Tanishq
-📝 Meeting notes pending (N) — Tanishq
-📅 Overdue closing dates (N) — Anurag
-```
-
-Splits into multiple Discord messages if over 1900 chars. Manual trigger: `node discord-bot/test-p0.js` on VPS.
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/p0-tasks` | GET | Scan + generate P0 tasks; write to Tasks sheet |
+| `/api/p0-tasks` | POST | Add manual "Other" P0 task |
+| `/api/p0-tasks/open` | GET | Open tasks (autocomplete cache) |
+| `/api/p0-tasks/done` | POST | Mark task done |
+| `/api/targets` | GET | Current month targets + live actuals |
+| `/api/targets` | POST | Set a monthly target |
+| `/api/weekly-summary` | GET | Latest stored LLM summary |
+| `/api/weekly-summary` | POST | Generate new LLM summary + save |
+| `/api/stats-digest` | GET | Full stats payload for daily digest |
+| `/api/briefing` | GET | Composite briefing payload: today's meetings + calls + P0 tasks + hot pipeline + leads |
+| `/api/log-call` | POST | Write call to Sheets + Zoho |
+| `/api/book` | POST | Book meeting |
+| `/api/book-prospect` | POST | Convert lead + book meeting |
+| `/api/accounts` | GET | Zoho accounts (autocomplete) |
+| `/api/contacts` | GET | Zoho contacts (autocomplete) |
+| `/api/leads` | GET | Zoho leads (autocomplete) |
+| `/api/upload-prospects` | POST | Bulk upload to Sheets + Zoho Leads |
+| `/api/top-250` | POST | Score all Not Contacted leads, tag top 250 in Zoho, remove stale tags |
+| `/api/circleback-sync` | POST | Receive Circleback webhook → match to Meetings sheet → mark Conducted |
 
 ---
 
-## File Map (Updated)
+## 3. Architecture
 
 ```
-app/api/
-  log-call/route.ts               — POST: write call to Calls sheet
-  stats-digest/route.ts           — GET: aggregate metrics for digest
-  p0-tasks/route.ts               — GET: scan + write P0 tasks; POST: manual add; DELETE: clear
-  p0-tasks/open/route.ts          — GET: today's open P0 tasks (for autocomplete)
-  p0-tasks/done/route.ts          — POST: mark task done by linkedDeal key
+moonlit-horizon/
+├── app/
+│   ├── page.tsx                        Homepage server component (revalidate 60s)
+│   ├── view/mahesh|tanishq|ashutosh|anurag/page.tsx
+│   └── api/                            All API routes (see table above)
+├── components/
+│   ├── MasterTrackerGrid.tsx           5-column grid (client, holds toggle state)
+│   ├── MetricCard.tsx                  label/achieved/target + gold glow
+│   ├── FunnelColumn.tsx                Pipeline bars
+│   ├── MetricsGraph.tsx                8-week recharts line chart (client)
+│   ├── PersonSelector.tsx              M/A/A/T circles (client, usePathname)
+│   └── TanishqDashboard.tsx            Daily/Weekly/Monthly toggle (client)
+├── lib/
+│   ├── zoho.ts                         Zoho OAuth + getDeals/Contacts/Accounts/Calls/createCall
+│   │                                   + getAllLeadsForScoring/addTagToLeads/removeTagFromLeads
+│   ├── sheets.ts                       Google Sheets read/write (all tabs)
+│   │                                   + getProspects/updateMeetingConducted
+│   ├── dashboard.ts                    Pure aggregation: mergeCallSources, buildCallsData,
+│   │                                   buildMeetingsData, buildFunnel, buildLeadCounts,
+│   │                                   buildWeeklyTrend, buildTanishqMetrics,
+│   │                                   buildTodaysMeetings, buildFollowUps
+│   └── types.ts                        TypeScript interfaces
+└── discord-bot/
+    ├── index.js                        Bot + all handlers + cron jobs
+    └── register.js                     Discord command registration
+```
 
-lib/
-  sheets.ts                       — Added: appendCallRow, getTasks, appendTaskRows,
-                                    updateTaskStatus, clearTasksSheet
-  types.ts                        — Added: Task interface
+### Google Sheets tabs in use
 
-discord-bot/
-  index.js                        — Added: /mh log call, /mh p0 add, /mh p0 done handlers;
-                                    buildDigestMessage, postDailyDigest, buildP0Message,
-                                    postP0Tasks, splitIntoChunks; node-cron schedules
-  register.js                     — Added: /mh command with p0 + log subcommand groups
-  test-digest.js                  — Manual trigger for daily digest
-  test-p0.js                      — Manual trigger for P0 task post
+| Tab | Written by | Read by |
+|---|---|---|
+| Meetings | `/api/book`, `/api/book-prospect` | Dashboard, P0 tasks, weekly summary, briefing |
+| Notes | Manual / Circleback (future) | P0 tasks (no-notes check) |
+| Calls | `/api/log-call` | Dashboard, P0 tasks, weekly summary, briefing |
+| Targets | `/api/targets` (via `/mh targets set`) | Dashboard, weekly summary, briefing |
+| Tasks | `/api/p0-tasks` | Bot autocomplete, Anurag/Ashutosh views |
+| Summaries | `/api/weekly-summary` | Homepage + Mahesh weekly summary card |
+| Prospects | `/api/upload-prospects` | Ashutosh view (Prospect DB Health) |
+
+### Key data rule
+`mergeCallSources(sheetCalls, zohoCalls)` in `lib/dashboard.ts` — Zoho Calls is primary source; Sheet Calls supplement. Deduplication by `date:account.toLowerCase()`. This function is called in every page and API route that needs call data.
+
+### Circleback Webhook
+Circleback Automations → fires to `/api/circleback-sync` after every meeting where `trainings@thetesttribe.com` is an invitee. Endpoint extracts account name from meeting title ("The Test Tribe <> Account | Type"), fuzzy-matches to Meetings sheet row by account + date (25h window), sets status = "Conducted". Verified with `CIRCLEBACK_WEBHOOK_SECRET` (HMAC-SHA256, `x-signature` header).
+
+### Top-250 Re-ranker
+Sunday 11pm IST cron calls `/api/top-250` which scores all Zoho `Not Contacted` leads by:
+- Authority from Designation (0–13 pts)
+- Priority tag P1/P2/P3 from upload (0–10 pts)
+- Lvl 1 Source quality (0–5 pts)
+
+Tags top 250 with `#top250` in Zoho; removes tag from leads that fell out. Zero LLM tokens.
+
+---
+
+## 4. Known Data Gaps
+
+| Gap | Root cause | Resolution |
+|---|---|---|
+| **L1/L2 Conducted** | Circleback webhook now live — will populate going forward | ✅ Fixed for new meetings; old meetings need manual backfill if needed |
+| **Meetings Booked target = 0** | Fixed — re-set via `/mh targets set Meetings Booked <n>` | ✅ Done |
+| **Notes tab "Assigned To" column** | Column added manually to Sheets | ✅ Done |
+| **Test rows in Meetings sheet** | "Test / Test Test" entries | ✅ Deleted |
+
+---
+
+## 5. Known Issues / Watch List
+
+| Issue | Severity | Action |
+|---|---|---|
+| No retry logic on Zoho 429 rate limit | Medium | Add exponential backoff in `lib/zoho.ts` `zohoGet()` |
+| Sheets write failures are silent (only `console.error`) | Low | Add Discord alert to `#sales-ops` on failure |
+| Dead code in `lib/zoho.ts`: `scoreLeadForDashboard()`, `getLeadsByStatus()` | Low | Safe to delete |
+| pm2 restart count = 39 | Low | Non-critical; stale interaction timeouts |
+| Zoho deals — some contacts unlinked (show `—` in P0) | Low | Link contacts to deals in Zoho CRM |
+
+---
+
+## 6. Immediate Action Items (before next build session)
+
+1. **Circleback backfill**: Run the existing meetings through the sync manually if you want historical Conducted data — select all past meetings in Circleback → Actions → trigger the webhook automation
+2. **Confirm Top-250 test**: Next Sunday 11pm IST the re-ranker fires automatically; verify `#top250` tags appear in Zoho
+3. **Test `/mh briefing`**: Run it in Discord and confirm the `#sales-ops` post looks right
+
+---
+
+## 7. Next Steps (Priority Order)
+
+### Priority 1 — Supply Module dashboard (Phase 3)
+**Effort**: 3–4 hours  
+Both trainer sheets have been read and understood. Structure:
+- **Sheet A** (Outreach): pipeline stages Form Filled → Email Sent → WhatsApp → Meeting Booked → Meeting Conducted → Sample Taken → Onboarded. ~60 LinkedIn prospects tracked with connection/form status.
+- **Sheet B** (Pricing & Scores): 30 scored trainers (Tier 1/2/3), topic → trainer mapping, customer pricing + trainer cost per tier, 100-pt scoring rubric.
+
+Build: read both sheets → show pipeline stage counts, trainer roster by topic/tier, weeks-of-supply estimate. Surface on Ashutosh's view.
+
+### Priority 2 — Payments Pending panel (Anurag view)
+**Effort**: 1–2 hours  
+Payments tab needs to exist in Sheets (currently not written). Either: add manual entry flow via Discord command, or build the tab structure and add a form. Panel placeholder exists in Anurag's view.
+
+### Priority 3 — Objective tracking
+**Effort**: 1 hour each  
+`/objective update` and `/reminder` commands write to Tasks sheet with `type = 'Objective'`. Progress bars on Ashutosh + Anurag views.
+
+### Priority 4 — Circleback → Notes tab sync
+**Effort**: 2–3 hours  
+Webhook already receives full meeting data including `notes` and `actionItems`. Extend `/api/circleback-sync` to also write to Notes tab: extract 2-3 action points per person, write to `Notes!A:F`.
+
+### Priority 5 — Reports PDF (Phase 1b)
+**Effort**: 3–4 hours  
+Use `@react-pdf/renderer`. Weekly PDF auto-generated Sunday night, monthly on 1st. Download links on Mahesh/Ashutosh views. Decision: use `@react-pdf/renderer`.
+
+### Priority 6 — People & Accounts module (Phase 4)
+**Effort**: Full session  
+Blocked on having enough Circleback data flowing first (needs ~2–3 weeks of webhook history).
+
+---
+
+## 8. VPS Operations
+
+```bash
+# SSH
+ssh root@72.61.126.30   # password: Clawdbotanupass@123
+
+# Check bot
+pm2 status
+pm2 logs moonlit-bot --lines 50 --nostream
+
+# After a code push (no schema change)
+cd /root/moonlit-horizon && git pull origin main && pm2 restart moonlit-bot
+
+# After a slash command schema change (register.js edited)
+cd /root/moonlit-horizon && git pull origin main
+cd discord-bot && node register.js
+pm2 restart moonlit-bot
 ```
 
 ---
 
-## Known Issues / Pending Cleanup
+## 9. Environment Variables
 
-1. **Test meeting rows** — Meetings sheet has "Test / Test Test" entries. Delete when ready.
-2. **Dead code** in `lib/zoho.ts` — `scoreLeadForDashboard()` and `getLeadsByStatus()` are no longer called. Safe to delete.
-3. **Pagination** — `getDeals()` fetches `per_page=200`. Note if deals exceed 200.
-4. **Zoho Contact Name gap** — Most active deals have no `Contact_Name` linked. P0 tasks show `—` for contact. Fix by linking contacts to deals in Zoho CRM. See Section 18 of MOONLIT_HORIZON_MASTER.md for full list.
-5. **Zoho deals to close**: Qualizeal and Vivriti Capital deals should be moved to Lost. Betterworks - AI in PM should be moved from Negotiation to Outline Meeting Conducted.
-6. **Closing dates** — Many active deals have past closing dates (triggering daily overdue tasks). Update in Zoho.
-7. **`DeprecationWarning: ready event`** — appears in bot error log from older pm2 instances. Harmless; the bot uses `clientReady` correctly in latest code.
-
----
-
-## What's Next — Phase 2 Agent Layer
-
-Priority order (highest ROI first):
-
-### 1. Call Logger (Discord → Sheets + Zoho)
-`/mh log call` slash command — prompts for account, outcome, notes → writes row to Calls sheet → updates Zoho deal stage if applicable  
-**Impact**: Dialled/Connected numbers become real immediately
-
-### 2. #targets bot
-On 1st of each month: posts structured form to `#targets` channel asking for monthly targets → writes responses to Targets sheet → pins message  
-**Impact**: Targets auto-set without manual Sheets editing
-
-### 3. Daily Stats Digest
-Every day at 9am IST: pulls aggregated data → posts to `#stats`  
-**Impact**: Team sees daily snapshot in Discord without opening the dashboard
-
-### 4. P0 Task Generator
-Every morning 8:30am IST: scans for meetings with no follow-up (>24h), stale deals, overdue proposals → creates tasks in Tasks sheet → posts to `#p0-tasks`  
-**Impact**: Nothing falls through the cracks
-
-### 5. Weekly Summary Generator (LLM)
-Every Sunday: pulls all data → sends to Claude → 5-bullet summary → posts to `#stats` + appears on homepage  
-**Impact**: Replaces "coming in Phase 2" placeholder on homepage
-
----
-
-## Deployment
-
-- **Platform**: Vercel
-- **Repo**: `github.com/anuragkumar7990/moonlit-horizon`
-- **Branch**: `main` → auto-deploys on push
-- **Revalidation**: `export const revalidate = 60` on all pages (60s ISR)
-- **Env vars on Vercel**: `SHEETS_SPREADSHEET_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`
-
----
-
-## Recent Commits (Phase 1b session)
-| Hash | Message |
+| Variable | Purpose |
 |---|---|
-| `448e010` | fix: standardise meetings booked target key to L1 Meetings Booked |
-| `021a946` | fix: cap meetings list height to 320px with scroll |
-| `c02390c` | feat: Phase 1b — build all four person views |
-| `52a3e3b` | fix: replace emoji with SVG icons for Won/Lost buttons |
-| `e58c2f9` | fix: stage-based lead scoring, correct funnel order, remove Lost from funnel |
+| `ZOHO_CLIENT_ID / SECRET / REFRESH_TOKEN` | Zoho CRM API (India DC: zohoapis.in) |
+| `GOOGLE_CLIENT_ID / SECRET / REFRESH_TOKEN` | Google Sheets + Google Calendar |
+| `SHEETS_SPREADSHEET_ID` | The main Google Sheet |
+| `DISCORD_BOT_TOKEN` | Discord bot login |
+| `DISCORD_CLIENT_ID / GUILD_ID` | Command registration |
+| `ANTHROPIC_API_KEY` | Claude Haiku (`claude-haiku-4-5-20251001`) for weekly summary |
+| `DASHBOARD_PASSWORD` | Basic Auth for all `/api/*` routes |
+| `VERCEL_URL` | Bot → Vercel API base URL |
+| `CIRCLEBACK_WEBHOOK_SECRET` | HMAC-SHA256 signature verification for Circleback webhooks ✅ Added |
+
+All set in Vercel Project Settings → Environment Variables **and** in `/root/moonlit-horizon/discord-bot/.env` on VPS.
+
+---
+
+## 10. Trainer Sheets (Phase 3 Reference)
+
+**Sheet A — Trainer Outreach & Onboarding**  
+ID: `1Xol3kb_5GDxS-Su-fAs1tIvTSLfGahNXWHv0MKUOY9I`  
+Pipeline stages: Form Filled → Email Sent → WhatsApp Sent → Meeting Booked → Meeting Conducted → Sample Taken → Onboarded  
+Form fields: Name, Email, Phone, Location, LinkedIn, Training Areas, Experience, Delivery Format, Languages, Video, Availability, Hourly Rate  
+Outreach tracker: ~60 LinkedIn prospects with Connection Status + Form Status per row
+
+**Sheet B — Trainer Pricing & Supply**  
+ID: `1R8FqcifveekYZsaS3taHARaQAo3CjZ0FqdHnNOcZg2U`  
+Contents: 30 scored trainers (Tier 1 = 70+, Tier 2 = 50–69, Tier 3 = <50), topic → trainer ranking, customer pricing by tier (e.g. Agentic AI Tier-1 = ₹15,000/hr), trainer cost by tier, 100-pt scoring rubric (Profile-Based 50 + Quality/Subjective 50)
+
+---
+
+## 11. Open Decisions
+
+| Decision | Status |
+|---|---|
+| Reports PDF generation | Decided: `@react-pdf/renderer` |
+| Ashutosh email status panel | Deferred — needs active email campaigns first |
+| Anurag view finalization | Revisit after 2 weeks of real usage data |
+| Supply Module (Phase 3) | Unblocked — trainer sheets read, build ready |
+| People & Accounts (Phase 4) | Blocked on Circleback history accumulation (~2–3 weeks) |
