@@ -215,6 +215,79 @@ export async function getCallById(id: string): Promise<{
   }
 }
 
+// Outcome mapping: our system → Zoho
+const OUTCOME_TO_ZOHO: Record<string, string> = {
+  'meeting booked':  'Meeting Scheduled',
+  'connected':       'Interested',
+  'not interested':  'Not Interested',
+  'callback later':  'Call Back Later',
+  'send more info':  'Send More Info',
+  'no answer':       'No Answer',
+  'voicemail':       'Left Voice Message',
+  'busy':            'Busy',
+  'wrong number':    'Wrong Number',
+}
+
+// Zoho outcomes that count as "connected" for weekly summary stats
+export const ZOHO_CONNECTED_OUTCOMES = new Set([
+  'Meeting Scheduled', 'Interested', 'Not Interested', 'Call Back Later', 'Send More Info',
+  // also our own values in case Sheet calls are mixed in
+  'meeting booked', 'connected', 'not interested', 'callback later', 'send more info',
+])
+
+export async function getZohoCalls(): Promise<{
+  id: string
+  date: string
+  accountName: string
+  contactName: string
+  outcome: string
+}[]> {
+  try {
+    const data = await zohoGet('/Calls?fields=id,Call_Start_Time,Call_Result,What_Id,Who_Id&per_page=200&sort_by=id&sort_order=desc') as { data?: Record<string, unknown>[] }
+    return (data.data ?? []).map(c => {
+      const whatId = c.What_Id && typeof c.What_Id === 'object' ? c.What_Id as Record<string, unknown> : null
+      const whoId  = c.Who_Id  && typeof c.Who_Id  === 'object' ? c.Who_Id  as Record<string, unknown> : null
+      const accountName = whatId ? String(whatId.name ?? '') : (whoId ? String(whoId.name ?? '') : '')
+      const contactName = whoId ? String(whoId.name ?? '') : ''
+      const rawTime = String(c.Call_Start_Time ?? '')
+      const date = rawTime ? rawTime.slice(0, 10) : ''
+      return { id: String(c.id ?? ''), date, accountName, contactName, outcome: String(c.Call_Result ?? '') }
+    }).filter(c => c.date && c.accountName)
+  } catch { return [] }
+}
+
+export async function createZohoCall(params: {
+  contactId: string
+  contactType: 'lead' | 'contact'
+  accountName: string
+  outcome: string
+  notes?: string
+}): Promise<void> {
+  const token = await getAccessToken()
+  const now = new Date()
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const callStartTime = ist.toISOString().replace('Z', '+05:30')
+
+  const zohoOutcome = OUTCOME_TO_ZOHO[params.outcome] ?? params.outcome
+  const whoModule = params.contactType === 'lead' ? 'Leads' : 'Contacts'
+
+  await fetch(`${BASE_URL}/Calls`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      data: [{
+        Subject: `Outbound Call — ${params.accountName}`,
+        Call_Type: 'Outbound',
+        Call_Start_Time: callStartTime,
+        Call_Duration: '00:05:00',
+        Call_Result: zohoOutcome,
+        Description: params.notes ?? '',
+        Who_Id: { id: params.contactId, module: whoModule },
+      }],
+    }),
+  })
+}
+
 export async function linkContactToAccount(contactId: string, accountId: string): Promise<void> {
   const token = await getAccessToken()
   await fetch(`${BASE_URL}/Contacts`, {

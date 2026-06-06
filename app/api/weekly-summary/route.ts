@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { format, startOfWeek, endOfWeek, isWithinInterval, parseISO, differenceInDays } from 'date-fns'
+import { format, startOfWeek, endOfWeek, isWithinInterval, parseISO } from 'date-fns'
 import { getMeetings, getCalls, getTasks, getTargets, getLatestSummary, saveSummary } from '@/lib/sheets'
-import { getDeals } from '@/lib/zoho'
+import { getDeals, getZohoCalls, ZOHO_CONNECTED_OUTCOMES } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,15 +13,16 @@ export async function GET() {
 }
 
 export async function POST() {
-  const [meetingsRes, callsRes, tasksRes, dealsRes, targetsRes] = await Promise.allSettled([
-    getMeetings(), getCalls(), getTasks(), getDeals(), getTargets(),
+  const [meetingsRes, callsRes, zohoCallsRes, tasksRes, dealsRes, targetsRes] = await Promise.allSettled([
+    getMeetings(), getCalls(), getZohoCalls(), getTasks(), getDeals(), getTargets(),
   ])
 
-  const meetings = meetingsRes.status === 'fulfilled' ? meetingsRes.value : []
-  const calls    = callsRes.status    === 'fulfilled' ? callsRes.value    : []
-  const tasks    = tasksRes.status    === 'fulfilled' ? tasksRes.value    : []
-  const deals    = dealsRes.status    === 'fulfilled' ? dealsRes.value    : []
-  const targets  = targetsRes.status  === 'fulfilled' ? targetsRes.value  : []
+  const meetings  = meetingsRes.status  === 'fulfilled' ? meetingsRes.value  : []
+  const calls     = callsRes.status     === 'fulfilled' ? callsRes.value     : []
+  const zohoCalls = zohoCallsRes.status === 'fulfilled' ? zohoCallsRes.value : []
+  const tasks     = tasksRes.status     === 'fulfilled' ? tasksRes.value     : []
+  const deals     = dealsRes.status     === 'fulfilled' ? dealsRes.value     : []
+  const targets   = targetsRes.status   === 'fulfilled' ? targetsRes.value   : []
 
   const now       = new Date()
   const weekStart = startOfWeek(now, { weekStartsOn: 1 })
@@ -32,11 +33,28 @@ export async function POST() {
     catch { return false }
   }
 
-  // Calls this week
-  const weekCalls     = calls.filter(c => inWeek(c.date))
-  const dialled       = weekCalls.length
-  const connected     = weekCalls.filter(c => !['no answer', 'voicemail', 'busy', 'wrong number'].includes(c.outcome ?? '')).length
-  const meetingsBooked = weekCalls.filter(c => c.outcome === 'meeting booked').length
+  // Calls this week — merge Sheet calls + Zoho calls (deduplicate by date+account)
+  const weekSheetCalls = calls.filter(c => inWeek(c.date))
+  const weekZohoCalls  = zohoCalls.filter(c => inWeek(c.date))
+
+  // Use Zoho as primary source; Sheet calls are supplementary (Discord-logged)
+  // Dedup: track seen date+account combos to avoid double-counting if both logged
+  const seenCallKeys = new Set<string>()
+  const allWeekCalls: { outcome: string }[] = []
+
+  for (const c of weekZohoCalls) {
+    const key = `${c.date}:${c.accountName.toLowerCase()}`
+    seenCallKeys.add(key)
+    allWeekCalls.push({ outcome: c.outcome })
+  }
+  for (const c of weekSheetCalls) {
+    const key = `${c.date}:${c.account.toLowerCase()}`
+    if (!seenCallKeys.has(key)) allWeekCalls.push({ outcome: c.outcome ?? '' })
+  }
+
+  const dialled        = allWeekCalls.length
+  const connected      = allWeekCalls.filter(c => ZOHO_CONNECTED_OUTCOMES.has(c.outcome)).length
+  const meetingsBooked = allWeekCalls.filter(c => c.outcome === 'Meeting Scheduled' || c.outcome === 'meeting booked').length
 
   // Meetings this week
   const weekMeetings = meetings.filter(m => m.meetingTime && inWeek(m.meetingTime))

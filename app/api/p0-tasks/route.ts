@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO, differenceInHours, differenceInDays, isPast } from 'date-fns'
 import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows, clearTasksSheet } from '@/lib/sheets'
-import { getDeals } from '@/lib/zoho'
+import { getDeals, getZohoCalls } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,15 +31,16 @@ interface P0Task {
 }
 
 export async function GET() {
-  const [meetingsRes, notesRes, dealsRes, callsRes, tasksRes] = await Promise.allSettled([
-    getMeetings(), getNotes(), getDeals(), getCalls(), getTasks(),
+  const [meetingsRes, notesRes, dealsRes, callsRes, zohoCallsRes, tasksRes] = await Promise.allSettled([
+    getMeetings(), getNotes(), getDeals(), getCalls(), getZohoCalls(), getTasks(),
   ])
 
-  const meetings = meetingsRes.status === 'fulfilled' ? meetingsRes.value : []
-  const notes    = notesRes.status    === 'fulfilled' ? notesRes.value    : []
-  const deals    = dealsRes.status    === 'fulfilled' ? dealsRes.value    : []
-  const calls    = callsRes.status    === 'fulfilled' ? callsRes.value    : []
-  const existing = tasksRes.status    === 'fulfilled' ? tasksRes.value    : []
+  const meetings   = meetingsRes.status   === 'fulfilled' ? meetingsRes.value   : []
+  const notes      = notesRes.status      === 'fulfilled' ? notesRes.value      : []
+  const deals      = dealsRes.status      === 'fulfilled' ? dealsRes.value      : []
+  const calls      = callsRes.status      === 'fulfilled' ? callsRes.value      : []
+  const zohoCalls  = zohoCallsRes.status  === 'fulfilled' ? zohoCallsRes.value  : []
+  const existing   = tasksRes.status      === 'fulfilled' ? tasksRes.value      : []
 
   const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -58,13 +59,20 @@ export async function GET() {
     return differenceInDays(new Date(), parseISO(last)) < withinDays
   }
 
-  // Last call date per account (case-insensitive), for stale-deal checks
+  // Last call date per account (case-insensitive), merging Sheet calls + Zoho calls
   const lastCallByAccount = new Map<string, string>()
+  const updateLastCall = (key: string, date: string) => {
+    if (!key || !date) return
+    const prev = lastCallByAccount.get(key.toLowerCase())
+    if (!prev || date > prev) lastCallByAccount.set(key.toLowerCase(), date)
+  }
   for (const c of calls) {
-    if (!c.date || !c.account) continue
-    const key = c.account.toLowerCase()
-    const prev = lastCallByAccount.get(key)
-    if (!prev || c.date > prev) lastCallByAccount.set(key, c.date)
+    updateLastCall(c.account, c.date)
+    if (c.contactName) updateLastCall(c.contactName, c.date)
+  }
+  for (const c of zohoCalls) {
+    updateLastCall(c.accountName, c.date)
+    if (c.contactName) updateLastCall(c.contactName, c.date)
   }
 
   const newTasks: P0Task[] = []

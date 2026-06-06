@@ -780,6 +780,8 @@ client.on('interactionCreate', async interaction => {
           account,
           contactName,
           contactPhone,
+          contactId: nameId || undefined,
+          contactType: nameType === 'prospect' ? 'lead' : nameType === 'contact' ? 'contact' : undefined,
           sdr,
           outcome,
           notes,
