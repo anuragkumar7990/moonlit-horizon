@@ -198,6 +198,31 @@ export async function appendTaskRows(rows: {
   })
 }
 
+export async function updateTaskStatus(linkedDeal: string, status: 'Done' | 'Open'): Promise<void> {
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Tasks!A:G',
+  })
+  const rows = res.data.values ?? []
+  const rowIdx = rows.findIndex((r, i) => i > 0 && r[4] === linkedDeal)
+  if (rowIdx === -1) throw new Error(`Task not found: ${linkedDeal}`)
+
+  const sheetRow = rowIdx + 1
+  const now = new Date()
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const completedAt = status === 'Done'
+    ? `${ist.toISOString().slice(0, 10)} ${ist.toISOString().slice(11, 16)}`
+    : ''
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Tasks!F${sheetRow}:G${sheetRow}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[status, completedAt]] },
+  })
+}
+
 const PROSPECTS_HEADERS = ['Date', 'Email', 'First Name', 'Last Name', 'Company', 'Designation', 'City', 'Phone', 'Lvl 1 Source', 'Lvl 2 Source', 'Priority', 'Status']
 
 export async function appendProspectRows(rows: {

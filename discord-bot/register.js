@@ -88,6 +88,17 @@ const mhCommand = new SlashCommandBuilder()
               )
           )
       )
+      .addSubcommand(sub =>
+        sub
+          .setName('done')
+          .setDescription('Mark a P0 task as done')
+          .addStringOption(opt =>
+            opt.setName('task')
+              .setDescription('Select the task to mark done')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+      )
   )
   .addSubcommandGroup(group =>
     group

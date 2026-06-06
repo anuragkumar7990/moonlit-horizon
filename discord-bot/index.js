@@ -51,20 +51,22 @@ const OUTCOME_LABELS = {
 }
 
 // Cache for autocomplete data — refreshed every 5 minutes
-const cache = { accounts: [], contacts: [], leads: [], lastFetch: 0 }
+const cache = { accounts: [], contacts: [], leads: [], p0Tasks: [], lastFetch: 0 }
 
 async function refreshCache() {
   try {
-    const [accounts, contacts, leads] = await Promise.all([
+    const [accounts, contacts, leads, p0Open] = await Promise.all([
       vercelGet('/api/accounts'),
       vercelGet('/api/contacts'),
       vercelGet('/api/leads'),
+      vercelGet('/api/p0-tasks/open'),
     ])
     cache.accounts = accounts
     cache.contacts = contacts
     cache.leads = leads
+    cache.p0Tasks = p0Open.tasks ?? []
     cache.lastFetch = Date.now()
-    console.log(`Cache refreshed — ${accounts.length} accounts, ${contacts.length} contacts, ${leads.length} leads`)
+    console.log(`Cache refreshed — ${accounts.length} accounts, ${contacts.length} contacts, ${leads.length} leads, ${cache.p0Tasks.length} open P0 tasks`)
   } catch (err) {
     console.error('Cache refresh failed:', err)
   }
@@ -294,6 +296,16 @@ client.on('interactionCreate', async interaction => {
     const query = focused.value.toLowerCase()
 
     try {
+      // /mh p0 done — task autocomplete (today's open P0 tasks)
+      if (interaction.commandName === 'mh' && focused.name === 'task' &&
+          interaction.options.getSubcommand(false) === 'done') {
+        const choices = cache.p0Tasks
+          .filter(t => t.task.toLowerCase().includes(query))
+          .slice(0, 25)
+          .map(t => ({ name: t.task.slice(0, 100), value: t.linkedDeal }))
+        return interaction.respond(choices)
+      }
+
       // /mh log call — name autocomplete (searches leads or contacts based on selected type)
       if (interaction.commandName === 'mh' && focused.name === 'name') {
         const type = interaction.options.getString('type') // may be null if not yet selected
@@ -524,6 +536,27 @@ client.on('interactionCreate', async interaction => {
   if (interaction.commandName === 'mh') {
     const group = interaction.options.getSubcommandGroup(false)
     const sub   = interaction.options.getSubcommand(false)
+
+    // ── /mh p0 done ─────────────────────────────────────────────
+    if (group === 'p0' && sub === 'done') {
+      await interaction.deferReply({ ephemeral: true })
+      const linkedDeal = interaction.options.getString('task', true)
+
+      // Find task label from cache for the confirmation message
+      const taskEntry = cache.p0Tasks.find(t => t.linkedDeal === linkedDeal)
+      const taskLabel = taskEntry ? taskEntry.task : linkedDeal
+
+      try {
+        await vercelPost('/api/p0-tasks/done', { linkedDeal })
+        // Remove from cache immediately so it doesn't show in autocomplete again
+        cache.p0Tasks = cache.p0Tasks.filter(t => t.linkedDeal !== linkedDeal)
+        await interaction.editReply(`✅ **Done:** ${taskLabel}`)
+      } catch (err) {
+        console.error('/mh p0 done error:', err)
+        await interaction.editReply(`❌ Failed to update task: ${err.message}`)
+      }
+      return
+    }
 
     // ── /mh p0 add ──────────────────────────────────────────────
     if (group === 'p0' && sub === 'add') {
