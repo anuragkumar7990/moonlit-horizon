@@ -4,7 +4,6 @@ import {
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   isWithinInterval, parseISO, format,
 } from 'date-fns'
-import PersonSelector from './PersonSelector'
 import type { Call } from '@/lib/types'
 
 type Period = 'daily' | 'weekly' | 'monthly'
@@ -159,9 +158,8 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
 
   return (
     <div>
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-6">
-        <PersonSelector />
+      {/* Period toggle */}
+      <div className="flex items-center justify-end mb-6">
         <div className="flex items-center gap-1 bg-mh-surface border border-mh-border rounded-full p-1">
           {(['daily', 'weekly', 'monthly'] as Period[]).map(p => (
             <button

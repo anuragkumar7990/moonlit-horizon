@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import MasterTrackerGrid from './MasterTrackerGrid'
 import CallingModule from './CallingModule'
+import PersonSelector from './PersonSelector'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
@@ -29,6 +30,11 @@ export default function HomeTabs({
 
   return (
     <div>
+      {/* Person selector — centred above tabs */}
+      <div className="flex justify-center mb-6">
+        <PersonSelector />
+      </div>
+
       <div className="flex gap-0 mb-6 border-b border-mh-border">
         {TABS.map(t => (
           <button

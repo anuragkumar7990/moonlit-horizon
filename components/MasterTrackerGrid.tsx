@@ -3,7 +3,6 @@ import { useState } from 'react'
 import MetricCard from './MetricCard'
 import MetricsGraph from './MetricsGraph'
 import FunnelColumn from './FunnelColumn'
-import PersonSelector from './PersonSelector'
 import type { LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
@@ -40,9 +39,8 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
 
   return (
     <div>
-      {/* Row 1: person selector + period toggle */}
-      <div className="flex items-center justify-between mb-6">
-        <PersonSelector />
+      {/* Row 1: period toggle */}
+      <div className="flex items-center justify-end mb-6">
         <div className="flex items-center gap-1 bg-mh-surface border border-mh-border rounded-full p-1">
           {(['weekly', 'monthly'] as Period[]).map(p => (
             <button
