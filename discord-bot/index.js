@@ -84,15 +84,6 @@ client.on('interactionCreate', async interaction => {
     const query = focused.value.toLowerCase()
 
     try {
-      // /mh log call — account autocomplete (existing Zoho accounts by company name)
-      if (interaction.commandName === 'mh' && focused.name === 'account') {
-        const choices = cache.accounts
-          .filter(a => a.accountName.toLowerCase().includes(query))
-          .slice(0, 25)
-          .map(a => ({ name: a.accountName, value: a.accountName }))
-        return interaction.respond(choices)
-      }
-
       // /mh log call — prospect autocomplete (leads by person name or company)
       if (interaction.commandName === 'mh' && focused.name === 'prospect') {
         const choices = cache.leads
@@ -285,31 +276,39 @@ client.on('interactionCreate', async interaction => {
     if (group === 'log' && sub === 'call') {
       await interaction.deferReply()
 
-      const accountRaw  = interaction.options.getString('account')   ?? ''
       const prospectId  = interaction.options.getString('prospect')  ?? ''
+      const contactId   = interaction.options.getString('contact')   ?? ''
       const outcome     = interaction.options.getString('outcome', true)
-      const contactRaw  = interaction.options.getString('contact')   ?? ''
       const phone       = interaction.options.getString('phone')     ?? ''
       const notes       = interaction.options.getString('notes')     ?? ''
       const followUpRaw = interaction.options.getString('follow_up') ?? ''
 
-      if (!accountRaw && !prospectId) {
-        return interaction.editReply('❌ Provide either an **account** or a **prospect** — at least one is required.')
+      if (!prospectId && !contactId) {
+        return interaction.editReply('❌ Select either a **prospect** (cold lead) or a **contact** (existing client) — at least one is required.')
       }
 
       if (followUpRaw && !/^\d{4}-\d{2}-\d{2}$/.test(followUpRaw)) {
         return interaction.editReply('❌ Follow-up date must be in `YYYY-MM-DD` format, e.g. `2026-06-09`')
       }
 
-      // Resolve prospect → account name + contact name
-      let account = accountRaw
-      let contactName = contactRaw
+      let account = ''
+      let contactName = ''
+      let contactPhone = phone
 
       if (prospectId) {
         const lead = cache.leads.find(l => l.id === prospectId)
         if (lead) {
-          if (!account) account = lead.company || `${lead.firstName} ${lead.lastName}`.trim()
-          if (!contactName) contactName = `${lead.firstName} ${lead.lastName}`.trim()
+          account = lead.company || `${lead.firstName} ${lead.lastName}`.trim()
+          contactName = `${lead.firstName} ${lead.lastName}`.trim()
+        }
+      }
+
+      if (contactId) {
+        const ct = cache.contacts.find(c => c.id === contactId)
+        if (ct) {
+          if (!account) account = ct.accountName || `${ct.firstName} ${ct.lastName}`.trim()
+          if (!contactName) contactName = `${ct.firstName} ${ct.lastName}`.trim()
+          if (!contactPhone) contactPhone = ct.phone || ''
         }
       }
 
@@ -319,7 +318,7 @@ client.on('interactionCreate', async interaction => {
         await vercelPost('/api/log-call', {
           account,
           contactName,
-          contactPhone: phone,
+          contactPhone,
           sdr,
           outcome,
           notes,
@@ -329,9 +328,9 @@ client.on('interactionCreate', async interaction => {
         const outcomeLabel = OUTCOME_LABELS[outcome] ?? outcome
         const lines = [
           `📞 **Call logged** by ${sdr}`,
-          `**Account:** ${account}`,
+          `**Account:** ${account || '—'}`,
         ]
-        if (contactName) lines.push(`**Contact:** ${contactName}${phone ? ` · ${phone}` : ''}`)
+        if (contactName) lines.push(`**Contact:** ${contactName}${contactPhone ? ` · ${contactPhone}` : ''}`)
         lines.push(`**Outcome:** ${outcomeLabel}`)
         if (followUpRaw) lines.push(`**Follow-up:** ${followUpRaw}`)
         if (notes) lines.push(`**Notes:** ${notes}`)
