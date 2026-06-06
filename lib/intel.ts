@@ -94,9 +94,15 @@ Email threads: ${threads.length}
 Email history (oldest first):
 ${threadBlock}
 
-Write a 2–3 sentence email intelligence brief covering: communication patterns, key topics discussed, any commitments or concerns raised in email. Be specific and factual.`
+Reply in this exact format — nothing else:
 
-  return callHaiku(prompt, 200)
+<2 sentences: overall communication summary — tone, frequency, where things stand>
+
+1. YYYY-MM-DD >> <7–8 word summary of this thread>
+2. YYYY-MM-DD >> <7–8 word summary of this thread>
+(one line per thread, oldest first)`
+
+  return callHaiku(prompt, 400)
 }
 
 // ── Cumulative synthesis ─────────────────────────────────────────────────────
