@@ -33,7 +33,7 @@ async function zohoGet(path: string): Promise<unknown> {
 }
 
 export async function getDeals(): Promise<ZohoDeal[]> {
-  const data = await zohoGet('/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Name&per_page=200') as { data?: Record<string, unknown>[] }
+  const data = await zohoGet('/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Full_Name&per_page=200') as { data?: Record<string, unknown>[] }
   return (data.data ?? []).map((d) => ({
     id: String(d.id ?? ''),
     dealName: String(d.Deal_Name ?? ''),
@@ -41,7 +41,7 @@ export async function getDeals(): Promise<ZohoDeal[]> {
     amount: String(d.Amount ?? ''),
     closingDate: String(d.Closing_Date ?? ''),
     accountName: typeof d.Account_Name === 'object' && d.Account_Name !== null ? String((d.Account_Name as Record<string, unknown>).name ?? '') : String(d.Account_Name ?? ''),
-    contactName: typeof d.Contact_Name === 'object' && d.Contact_Name !== null ? String((d.Contact_Name as Record<string, unknown>).name ?? '') : String(d.Contact_Name ?? ''),
+    contactName: String(d.Contact_Full_Name ?? ''),
   }))
 }
 
