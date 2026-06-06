@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { getMeetings, updateMeetingConducted } from '@/lib/sheets'
+import { getMeetings, updateMeetingConducted, appendNoteRow } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,6 +82,24 @@ async function syncMeetings(meetings: CirclebackMeeting[]): Promise<SyncResult> 
     sheetMeetings[matchIdx] = { ...sheetRow, status: 'Conducted' }
     result.matched++
     result.updated.push({ account: sheetRow.accountName, date: sheetRow.meetingTime, circlebackId: cb.id })
+
+    // Write meeting notes + action items to Notes tab
+    const summary = (cb.notes ?? '').slice(0, 1000)
+    const actionables = (cb.actionItems ?? [])
+      .map((a: { title: string; assignee?: { name?: string } | null }) => {
+        const who = a.assignee?.name ? ` (${a.assignee.name})` : ''
+        return `• ${a.title}${who}`
+      })
+      .join('\n')
+    if (summary || actionables) {
+      appendNoteRow({
+        meetingId:   String(cb.id),
+        accountName: sheetRow.accountName,
+        summary,
+        actionables,
+        assignedTo:  '',
+      }).catch(e => console.error('[circleback-sync] Notes write failed:', e))
+    }
   }
 
   return result

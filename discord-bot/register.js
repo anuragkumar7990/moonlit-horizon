@@ -269,6 +269,61 @@ const mhCommand = new SlashCommandBuilder()
           )
       )
   )
+  .addSubcommandGroup(group =>
+    group
+      .setName('objective')
+      .setDescription('Monthly objective tracking')
+      .addSubcommand(sub =>
+        sub
+          .setName('set')
+          .setDescription('Set a monthly target for an objective')
+          .addStringOption(opt =>
+            opt.setName('name')
+              .setDescription('Which objective to set a target for')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Prospects Uploaded',    value: 'Prospects Uploaded'    },
+                { name: 'Calls Dialled',         value: 'Calls Dialled'         },
+                { name: 'L1 Meetings Conducted', value: 'L1 Meetings Conducted' },
+                { name: 'Deals Won',             value: 'Deals Won'             },
+                { name: 'Trainers Onboarded',    value: 'Trainers Onboarded'    },
+                { name: 'Revenue Invoiced (₹K)', value: 'Revenue Invoiced (₹K)' },
+                { name: 'Topic Coverage (%)',    value: 'Topic Coverage (%)'    },
+              )
+          )
+          .addIntegerOption(opt =>
+            opt.setName('target')
+              .setDescription('Monthly target value')
+              .setRequired(true)
+              .setMinValue(0)
+          )
+      )
+      .addSubcommand(sub =>
+        sub
+          .setName('update')
+          .setDescription('Update current progress for an objective')
+          .addStringOption(opt =>
+            opt.setName('name')
+              .setDescription('Which objective to update')
+              .setRequired(true)
+              .addChoices(
+                { name: 'Prospects Uploaded',    value: 'Prospects Uploaded'    },
+                { name: 'Calls Dialled',         value: 'Calls Dialled'         },
+                { name: 'L1 Meetings Conducted', value: 'L1 Meetings Conducted' },
+                { name: 'Deals Won',             value: 'Deals Won'             },
+                { name: 'Trainers Onboarded',    value: 'Trainers Onboarded'    },
+                { name: 'Revenue Invoiced (₹K)', value: 'Revenue Invoiced (₹K)' },
+                { name: 'Topic Coverage (%)',    value: 'Topic Coverage (%)'    },
+              )
+          )
+          .addIntegerOption(opt =>
+            opt.setName('current')
+              .setDescription('Current value (replaces previous progress)')
+              .setRequired(true)
+              .setMinValue(0)
+          )
+      )
+  )
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
 const clientId = process.env.DISCORD_CLIENT_ID

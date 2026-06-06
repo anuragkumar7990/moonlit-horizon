@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.101.0",
+    "@react-pdf/renderer": "^4.5.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "googleapis": "^144.0.0",

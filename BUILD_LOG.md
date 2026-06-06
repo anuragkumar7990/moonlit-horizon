@@ -18,13 +18,10 @@ Running log of issues, failures, decisions, and manual steps. Updated as the bui
 
 ### Manual steps still required (Phase 0)
 
-- [ ] **Run Sheets setup**: `POST /api/setup-sheets` once after deploy. Response will list `created` and `skipped` tabs. Expected first-run output:
-  ```json
-  { "created": ["Calling","Calls","Targets","Tasks","Payments"], "skipped": [] }
-  ```
-- [ ] **Notes tab — add "Assigned To" column**: Insert column E (`Assigned To`) in the existing Notes tab, shifting old column E (`Created At`) to column F. Do this BEFORE Phase 2 agents go live. The `/api/setup-sheets` endpoint will warn if this is still missing.
-- [ ] **Discord — create `#targets` channel** in the TTT Discord guild
-- [ ] **Discord — create `#objectives` channel** in the TTT Discord guild
+- [x] **Run Sheets setup**: created Calling, Calls, Targets, Tasks, Payments — commit 7ac53ad
+- [x] **Notes tab — "Assigned To" column added** as column E; Created At shifted to F
+- [x] **Discord — `#targets` created** under Text Channels (Augustus Bot Server)
+- [x] **Discord — `#objectives` created** under Text Channels (Augustus Bot Server)
 - [ ] **Install recharts** before Phase 1 Column V build: `npm install recharts`
 
 ### Known risks at end of Phase 0
@@ -34,16 +31,20 @@ Running log of issues, failures, decisions, and manual steps. Updated as the bui
 ---
 
 ## Phase 1 — Master Tracker UI
-**Date:** TBD  
-**Status:** Pending
+**Date:** 2026-06-06  
+**Status:** Complete (commit 99f013b)
 
 ### Pre-flight checks
-- [ ] `npm run build` passes with zero TypeScript errors
-- [ ] `/api/setup-sheets` has been called and all 5 tabs exist
-- [ ] recharts installed (`npm install recharts @types/recharts` — note: recharts ships its own types)
+- [x] TypeScript passes with zero errors (local)
+- [x] `/api/setup-sheets` called — all 5 tabs exist
+- [x] recharts installed and committed to package.json
 
 ### Issues
-_(none yet)_
+| # | Description | Fix | Commit |
+|---|---|---|---|
+| 1 | `recharts` not committed to package.json — Vercel build failed with "Can't resolve 'recharts'" | `git add package.json package-lock.json` + push | 99f013b |
+
+**Rule added**: After `npm install <package>`, always commit `package.json` + `package-lock.json` in the same push.
 
 ---
 
@@ -100,7 +101,7 @@ _(none yet)_
 |---|---|---|---|
 | 1 | 0 | Notes tab missing "Assigned To" column — manual step required before Phase 2 | Pending manual action |
 | 2 | 0 | `lib/sheets.ts` `getNotes()` reads `Notes!A:E` — must update to `A:F` after column is added | Pending |
-| 3 | 0 | Discord channels `#targets` and `#objectives` not yet created | Pending manual action |
+| 3 | 0 | Discord channels `#targets` and `#objectives` not yet created | ✅ Done |
 | 4 | 1 | recharts not yet installed — required before Column V metrics graph | Pending `npm install` |
 
 ---

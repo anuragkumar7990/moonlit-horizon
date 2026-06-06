@@ -129,12 +129,38 @@ export default async function MaheshPage() {
           )}
         </div>
         <div className="card">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Reports</p>
-          <div className="space-y-2">
-            <p className="text-sm text-mh-muted italic">Weekly PDF — auto-generated every Sunday</p>
-            <p className="text-sm text-mh-muted italic">Monthly PDF — auto-generated on the 1st</p>
-            <p className="text-xs text-mh-muted mt-3">
-              Download links will appear here once report generation is live.
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-4">Reports</p>
+          <div className="space-y-3">
+            <a
+              href="/api/reports/weekly"
+              target="_blank"
+              className="flex items-center justify-between p-3 rounded-lg bg-mh-surface2 border border-mh-border
+                hover:border-mh-vermillion transition-colors group"
+            >
+              <div>
+                <p className="text-sm font-medium text-mh-text group-hover:text-mh-vermillion transition-colors">
+                  Weekly Report
+                </p>
+                <p className="text-xs text-mh-muted mt-0.5">Calls · Meetings · Pipeline · AI Summary</p>
+              </div>
+              <span className="text-mh-muted text-sm">↗</span>
+            </a>
+            <a
+              href="/api/reports/monthly"
+              target="_blank"
+              className="flex items-center justify-between p-3 rounded-lg bg-mh-surface2 border border-mh-border
+                hover:border-mh-vermillion transition-colors group"
+            >
+              <div>
+                <p className="text-sm font-medium text-mh-text group-hover:text-mh-vermillion transition-colors">
+                  Monthly Report
+                </p>
+                <p className="text-xs text-mh-muted mt-0.5">Targets vs Actuals · Pipeline Value · Won Deals</p>
+              </div>
+              <span className="text-mh-muted text-sm">↗</span>
+            </a>
+            <p className="text-[10px] text-mh-muted mt-1">
+              PDFs open in browser — right-click to save.
             </p>
           </div>
         </div>

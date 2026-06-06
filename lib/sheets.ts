@@ -673,3 +673,126 @@ export async function getTopicCoverage(): Promise<TopicCoverageEntry[]> {
     return coverage
   } catch { return [] }
 }
+
+// ── Notes append ─────────────────────────────────────────────────────────────
+
+export async function appendNoteRow(row: {
+  meetingId: string
+  accountName: string
+  summary: string
+  actionables: string
+  assignedTo: string
+}): Promise<void> {
+  const sheets = getSheets()
+  const now = new Date()
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
+  const createdAt = `${ist.toISOString().slice(0, 10)} ${ist.toISOString().slice(11, 16)}`
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Notes!A:F',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[row.meetingId, row.accountName, row.summary, row.actionables, row.assignedTo, createdAt]],
+    },
+  })
+}
+
+// ── Objectives sheet ──────────────────────────────────────────────────────────
+// Columns: Period | Objective | Target | Current | Assigned To
+
+export interface Objective {
+  period: string
+  objective: string
+  target: number
+  current: number
+  assignedTo: string
+}
+
+export const OBJECTIVE_NAMES = [
+  'Prospects Uploaded',
+  'Calls Dialled',
+  'L1 Meetings Conducted',
+  'Deals Won',
+  'Trainers Onboarded',
+  'Revenue Invoiced (₹K)',
+  'Topic Coverage (%)',
+] as const
+
+const OBJECTIVE_ASSIGNEES: Record<string, string> = {
+  'Prospects Uploaded':    'Ashutosh',
+  'Calls Dialled':         'Tanishq',
+  'L1 Meetings Conducted': 'Tanishq',
+  'Deals Won':             'Anurag',
+  'Trainers Onboarded':    'Ashutosh',
+  'Revenue Invoiced (₹K)': 'Anurag',
+  'Topic Coverage (%)':    'Ashutosh',
+}
+
+const OBJECTIVES_HEADERS = ['Period', 'Objective', 'Target', 'Current', 'Assigned To']
+
+export async function getObjectives(period?: string): Promise<Objective[]> {
+  try {
+    const all = await readSheet<Objective>('Objectives!A:E', (r) => ({
+      period:     r[0] ?? '',
+      objective:  r[1] ?? '',
+      target:     parseInt(r[2] ?? '0', 10) || 0,
+      current:    parseInt(r[3] ?? '0', 10) || 0,
+      assignedTo: r[4] ?? '',
+    }))
+    if (period) return all.filter(o => o.period === period)
+    return all
+  } catch { return [] }
+}
+
+export async function upsertObjective(
+  period: string,
+  objective: string,
+  field: 'target' | 'current',
+  value: number
+): Promise<void> {
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Objectives')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Objectives' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Objectives!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [OBJECTIVES_HEADERS] },
+    })
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Objectives!A:E',
+  })
+  const rows = res.data.values ?? []
+  const rowIdx = rows.findIndex((r, i) => i > 0 && r[0] === period && r[1] === objective)
+
+  if (rowIdx !== -1) {
+    const col = field === 'target' ? 'C' : 'D'
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `Objectives!${col}${rowIdx + 1}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[value]] },
+    })
+  } else {
+    const target  = field === 'target'  ? value : 0
+    const current = field === 'current' ? value : 0
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Objectives!A:E',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[period, objective, target, current, OBJECTIVE_ASSIGNEES[objective] ?? '']],
+      },
+    })
+  }
+}

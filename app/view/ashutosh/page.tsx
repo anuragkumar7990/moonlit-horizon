@@ -1,5 +1,5 @@
 import { getDeals } from '@/lib/zoho'
-import { getTasks, getProspects, getTrainerPipeline, getTrainerRoster, getTopicCoverage } from '@/lib/sheets'
+import { getTasks, getProspects, getTrainerPipeline, getTrainerRoster, getTopicCoverage, getObjectives } from '@/lib/sheets'
 import { buildFunnel, buildLeadCounts } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
 import FunnelColumn from '@/components/FunnelColumn'
@@ -8,9 +8,15 @@ export const revalidate = 60
 
 const WEEKLY_CALL_CAPACITY = 250
 
+function istPeriod(): string {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  return `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}`
+}
+
 export default async function AshutoshPage() {
-  const [dealsRes, tasksRes, prospectsRes, pipelineRes, rosterRes, coverageRes] = await Promise.allSettled([
+  const [dealsRes, tasksRes, prospectsRes, pipelineRes, rosterRes, coverageRes, objectivesRes] = await Promise.allSettled([
     getDeals(), getTasks(), getProspects(), getTrainerPipeline(), getTrainerRoster(), getTopicCoverage(),
+    getObjectives(istPeriod()),
   ])
   const deals    = dealsRes.status    === 'fulfilled' ? dealsRes.value    : []
   const allTasks = tasksRes.status    === 'fulfilled' ? tasksRes.value    : []
@@ -19,8 +25,9 @@ export default async function AshutoshPage() {
     outreachTotal: 0, connected: 0, formFilled: 0, emailSent: 0,
     whatsappSent: 0, meetingBooked: 0, meetingConducted: 0, sampleTaken: 0, onboarded: 0,
   }
-  const roster   = rosterRes.status   === 'fulfilled' ? rosterRes.value   : []
-  const coverage = coverageRes.status === 'fulfilled' ? coverageRes.value : []
+  const roster     = rosterRes.status     === 'fulfilled' ? rosterRes.value     : []
+  const coverage   = coverageRes.status   === 'fulfilled' ? coverageRes.value   : []
+  const objectives = objectivesRes.status === 'fulfilled' ? objectivesRes.value : []
 
   const funnel    = buildFunnel(deals)
   const leads     = buildLeadCounts(deals)
@@ -180,12 +187,51 @@ export default async function AshutoshPage() {
 
       {/* Row 3: Objectives */}
       <div className="card mb-4">
-        <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Objective Progress</p>
-        <p className="text-mh-muted text-sm italic leading-relaxed">
-          Objective tracking live in Phase 2b — updated via{' '}
-          <span className="text-mh-text">/objective update</span> in Discord.
-          Covers: Lead Generation, Calling, Meetings, Lead Conversion, Trainer Supply, Revenue, Team Capacity.
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">Objective Progress</p>
+          <a
+            href="/api/reports/monthly"
+            target="_blank"
+            className="text-[10px] text-mh-muted hover:text-mh-text transition-colors border border-mh-border hover:border-mh-vermillion rounded px-2 py-1"
+          >
+            Monthly PDF ↗
+          </a>
+        </div>
+        {objectives.length === 0 ? (
+          <p className="text-mh-muted text-sm italic">
+            No objectives set for this month. Use{' '}
+            <span className="text-mh-text font-medium">/mh objective set</span> in Discord to add targets.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            {objectives.map(obj => {
+              const pct = obj.target > 0 ? Math.min(100, Math.round((obj.current / obj.target) * 100)) : 0
+              const barColor = pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-mh-gold' : 'bg-mh-vermillion'
+              const textColor = pct >= 100 ? 'text-green-400' : pct >= 70 ? 'text-mh-gold' : 'text-mh-vermillion'
+              return (
+                <div key={obj.objective}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-mh-text">{obj.objective}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-mh-muted tabular-nums">
+                        {obj.current}{obj.target > 0 ? ` / ${obj.target}` : ''}
+                      </span>
+                      {obj.target > 0 && (
+                        <span className={`text-[10px] font-semibold tabular-nums ${textColor}`}>{pct}%</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-mh-surface2 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                  </div>
+                  {obj.assignedTo && (
+                    <p className="text-[10px] text-mh-muted mt-0.5">{obj.assignedTo}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Row 4: Trainer Supply */}

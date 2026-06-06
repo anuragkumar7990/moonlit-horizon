@@ -1042,6 +1042,42 @@ client.on('interactionCreate', async interaction => {
       return
     }
 
+    // ── /mh objective set ───────────────────────────────────────────
+    if (group === 'objective' && sub === 'set') {
+      await interaction.deferReply({ ephemeral: true })
+      const objective = interaction.options.getString('name', true)
+      const target    = interaction.options.getInteger('target', true)
+
+      try {
+        await vercelPost('/api/objectives', { objective, field: 'target', value: target })
+        await interaction.editReply(
+          `🎯 **Objective target set**\n**${objective}:** target = **${target}** for this month`
+        )
+      } catch (err) {
+        console.error('/mh objective set error:', err)
+        await interaction.editReply(`❌ Failed to set objective target: ${err.message}`)
+      }
+      return
+    }
+
+    // ── /mh objective update ─────────────────────────────────────────
+    if (group === 'objective' && sub === 'update') {
+      await interaction.deferReply({ ephemeral: true })
+      const objective = interaction.options.getString('name', true)
+      const current   = interaction.options.getInteger('current', true)
+
+      try {
+        await vercelPost('/api/objectives', { objective, field: 'current', value: current })
+        await interaction.editReply(
+          `📊 **Objective updated**\n**${objective}:** current = **${current}**\n_Dashboard will reflect the update within 60 seconds._`
+        )
+      } catch (err) {
+        console.error('/mh objective update error:', err)
+        await interaction.editReply(`❌ Failed to update objective: ${err.message}`)
+      }
+      return
+    }
+
     // ── /mh log payment ─────────────────────────────────────────────
     if (group === 'log' && sub === 'payment') {
       await interaction.deferReply({ ephemeral: true })

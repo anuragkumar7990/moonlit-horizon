@@ -1,5 +1,5 @@
 import { format, parseISO, isAfter } from 'date-fns'
-import { getMeetings, getTasks, getPayments } from '@/lib/sheets'
+import { getMeetings, getTasks, getPayments, getObjectives } from '@/lib/sheets'
 import { getDeals } from '@/lib/zoho'
 import { buildFunnel, buildTodaysMeetings } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
@@ -38,18 +38,25 @@ const STATUS_STYLE: Record<string, string> = {
   Overdue:  'bg-red-500/15 text-red-400',
 }
 
+function istPeriod(): string {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  return `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}`
+}
+
 export default async function AnuragPage() {
-  const [meetingsRes, dealsRes, tasksRes, paymentsRes] = await Promise.allSettled([
+  const [meetingsRes, dealsRes, tasksRes, paymentsRes, objectivesRes] = await Promise.allSettled([
     getMeetings(),
     getDeals(),
     getTasks(),
     getPayments(),
+    getObjectives(istPeriod()),
   ])
 
-  const meetings = meetingsRes.status  === 'fulfilled' ? meetingsRes.value  : []
-  const deals    = dealsRes.status     === 'fulfilled' ? dealsRes.value     : []
-  const allTasks = tasksRes.status     === 'fulfilled' ? tasksRes.value     : []
-  const payments = paymentsRes.status  === 'fulfilled' ? paymentsRes.value  : []
+  const meetings   = meetingsRes.status   === 'fulfilled' ? meetingsRes.value   : []
+  const deals      = dealsRes.status      === 'fulfilled' ? dealsRes.value      : []
+  const allTasks   = tasksRes.status      === 'fulfilled' ? tasksRes.value      : []
+  const payments   = paymentsRes.status   === 'fulfilled' ? paymentsRes.value   : []
+  const objectives = objectivesRes.status === 'fulfilled' ? objectivesRes.value : []
 
   const funnel        = buildFunnel(deals)
   const todayMeetings = buildTodaysMeetings(meetings)
@@ -239,6 +246,64 @@ export default async function AnuragPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Row 3: Objective Progress */}
+      <div className="card mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">Objective Progress</p>
+          <div className="flex items-center gap-2">
+            <a
+              href="/api/reports/weekly"
+              target="_blank"
+              className="text-[10px] text-mh-muted hover:text-mh-text transition-colors border border-mh-border hover:border-mh-vermillion rounded px-2 py-1"
+            >
+              Weekly PDF ↗
+            </a>
+            <a
+              href="/api/reports/monthly"
+              target="_blank"
+              className="text-[10px] text-mh-muted hover:text-mh-text transition-colors border border-mh-border hover:border-mh-vermillion rounded px-2 py-1"
+            >
+              Monthly PDF ↗
+            </a>
+          </div>
+        </div>
+        {objectives.length === 0 ? (
+          <p className="text-mh-muted text-sm italic">
+            No objectives set for this month. Use{' '}
+            <span className="text-mh-text font-medium">/mh objective set</span> in Discord to add targets.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            {objectives.map(obj => {
+              const pct = obj.target > 0 ? Math.min(100, Math.round((obj.current / obj.target) * 100)) : 0
+              const barColor = pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-mh-gold' : 'bg-mh-vermillion'
+              const textColor = pct >= 100 ? 'text-green-400' : pct >= 70 ? 'text-mh-gold' : 'text-mh-vermillion'
+              return (
+                <div key={obj.objective}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-mh-text">{obj.objective}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-mh-muted tabular-nums">
+                        {obj.current}{obj.target > 0 ? ` / ${obj.target}` : ''}
+                      </span>
+                      {obj.target > 0 && (
+                        <span className={`text-[10px] font-semibold tabular-nums ${textColor}`}>{pct}%</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-mh-surface2 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                  </div>
+                  {obj.assignedTo && (
+                    <p className="text-[10px] text-mh-muted mt-0.5">{obj.assignedTo}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Quick Links */}
