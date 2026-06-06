@@ -152,7 +152,7 @@ export async function GET() {
 
     if (daysSinceCall < rule.staleDays) continue
 
-    const displayName = d.accountName || d.contactName || d.dealName || 'Unknown'
+    const displayName = d.accountName || d.dealName || 'Unknown'
 
     const staleSuffix = lastCall
       ? `last call ${differenceInDays(new Date(), parseISO(lastCall))}d ago`
