@@ -1,29 +1,37 @@
 import { getDeals } from '@/lib/zoho'
-import { getTasks } from '@/lib/sheets'
+import { getTasks, getProspects } from '@/lib/sheets'
 import { buildFunnel, buildLeadCounts } from '@/lib/dashboard'
 import PersonSelector from '@/components/PersonSelector'
 import FunnelColumn from '@/components/FunnelColumn'
 
 export const revalidate = 60
 
+const WEEKLY_CALL_CAPACITY = 250
+
 export default async function AshutoshPage() {
-  const [dealsRes, tasksRes] = await Promise.allSettled([getDeals(), getTasks()])
-  const deals    = dealsRes.status  === 'fulfilled' ? dealsRes.value  : []
-  const allTasks = tasksRes.status  === 'fulfilled' ? tasksRes.value  : []
+  const [dealsRes, tasksRes, prospectsRes] = await Promise.allSettled([
+    getDeals(), getTasks(), getProspects(),
+  ])
+  const deals     = dealsRes.status     === 'fulfilled' ? dealsRes.value     : []
+  const allTasks  = tasksRes.status     === 'fulfilled' ? tasksRes.value     : []
+  const prospects = prospectsRes.status === 'fulfilled' ? prospectsRes.value : []
 
   const funnel    = buildFunnel(deals)
   const leads     = buildLeadCounts(deals)
   const openTasks = allTasks.filter(t => t.status === 'Open')
 
-  const SOURCES = [
-    'Events (Webinars + Conferences)',
-    'Cold-Engineering (Apollo)',
-    'Cold-L&D (Apollo)',
-    'Email-Engineering',
-    'Email-L&D',
-    'Referrals',
-    'Internal Community',
-  ]
+  // Prospect DB health — group by Lvl 1 Source
+  const totalStock = prospects.length
+  const totalWeeks = totalStock / WEEKLY_CALL_CAPACITY
+
+  const sourceMap = new Map<string, number>()
+  for (const p of prospects) {
+    const src = p.lvl1Source?.trim() || 'Unknown'
+    sourceMap.set(src, (sourceMap.get(src) ?? 0) + 1)
+  }
+  const sourceBreakdown = Array.from(sourceMap.entries())
+    .map(([source, count]) => ({ source, count, weeks: count / WEEKLY_CALL_CAPACITY }))
+    .sort((a, b) => b.count - a.count)
 
   return (
     <div>
@@ -64,20 +72,51 @@ export default async function AshutoshPage() {
         {/* Prospect DB Health */}
         <div className="card">
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-4">Prospect DB Health</p>
-          <p className="text-mh-muted text-sm italic leading-relaxed mb-4">
-            Metrics populate once leads are uploaded to the{' '}
-            <span className="text-mh-text">Prospects</span> tab.
-            Shows total uncalled stock, weeks remaining, and source breakdown.
-          </p>
-          <div className="space-y-2">
-            <p className="text-[10px] text-mh-muted uppercase tracking-widest mb-1">Sources tracked</p>
-            {SOURCES.map(s => (
-              <div key={s} className="flex items-center justify-between py-1 border-b border-mh-border last:border-0">
-                <span className="text-xs text-mh-muted">{s}</span>
-                <span className="text-xs text-mh-muted">—</span>
+
+          {totalStock === 0 ? (
+            <p className="text-mh-muted text-sm italic">No prospects in stock — upload to the Prospects tab.</p>
+          ) : (
+            <>
+              {/* Headline numbers */}
+              <div className="flex items-end gap-4 mb-4">
+                <div>
+                  <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">Total Stock</p>
+                  <p className="text-3xl font-semibold text-mh-text mt-0.5">{totalStock.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest">Weeks Remaining</p>
+                  <p className={`text-3xl font-semibold mt-0.5 ${totalWeeks < 2 ? 'text-red-500' : totalWeeks < 4 ? 'text-mh-gold' : 'text-mh-text'}`}>
+                    {totalWeeks.toFixed(1)}w
+                  </p>
+                </div>
               </div>
-            ))}
-          </div>
+
+              {/* Per-source breakdown */}
+              <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-2">By Source</p>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {sourceBreakdown.map(({ source, count, weeks }) => (
+                  <div key={source} className="flex items-center justify-between py-1 border-b border-mh-border last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {weeks < 2 && <span className="text-red-500 text-xs">⚠</span>}
+                      <span className="text-xs text-mh-text truncate">{source}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-2">
+                      <span className="text-xs text-mh-muted">{count.toLocaleString()}</span>
+                      <span className={`text-xs font-medium ${weeks < 2 ? 'text-red-500' : weeks < 4 ? 'text-mh-gold' : 'text-mh-muted'}`}>
+                        {weeks.toFixed(1)}w
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {sourceBreakdown.some(s => s.weeks < 2) && (
+                <p className="text-xs text-red-500 mt-3">
+                  ⚠ One or more sources below 2-week threshold — upload more prospects.
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
 

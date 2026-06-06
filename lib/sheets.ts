@@ -231,6 +231,40 @@ export async function updateTaskStatus(linkedDeal: string, status: 'Done' | 'Ope
   })
 }
 
+export interface Prospect {
+  date: string
+  email: string
+  firstName: string
+  lastName: string
+  company: string
+  designation: string
+  city: string
+  phone: string
+  lvl1Source: string
+  lvl2Source: string
+  priority: string
+  status: string
+}
+
+export async function getProspects(): Promise<Prospect[]> {
+  try {
+    return readSheet<Prospect>('Prospects!A:L', (r) => ({
+      date:        r[0]  ?? '',
+      email:       r[1]  ?? '',
+      firstName:   r[2]  ?? '',
+      lastName:    r[3]  ?? '',
+      company:     r[4]  ?? '',
+      designation: r[5]  ?? '',
+      city:        r[6]  ?? '',
+      phone:       r[7]  ?? '',
+      lvl1Source:  r[8]  ?? '',
+      lvl2Source:  r[9]  ?? '',
+      priority:    r[10] ?? '',
+      status:      r[11] ?? '',
+    }))
+  } catch { return [] }
+}
+
 const PROSPECTS_HEADERS = ['Date', 'Email', 'First Name', 'Last Name', 'Company', 'Designation', 'City', 'Phone', 'Lvl 1 Source', 'Lvl 2 Source', 'Priority', 'Status']
 
 export async function appendProspectRows(rows: {
