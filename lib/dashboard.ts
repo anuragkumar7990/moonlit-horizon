@@ -116,11 +116,11 @@ export function buildCallsData(
   }
 
   const wMtg = meetings.filter(m => {
-    const d = safeParseDate(m.createdAt)
+    const d = safeParseDate(m.meetingTime)
     return d && inWeek(d) && m.meetingType === 'L1'
   }).length
   const mMtg = meetings.filter(m => {
-    const d = safeParseDate(m.createdAt)
+    const d = safeParseDate(m.meetingTime)
     return d && inMonth(d) && m.meetingType === 'L1'
   }).length
 
@@ -156,16 +156,17 @@ export function buildMeetingsData(
   let mL1B = 0, mL1C = 0, mL2C = 0
 
   for (const m of meetings) {
-    const created = safeParseDate(m.createdAt)
-    if (!created) continue
+    // Use meetingTime as the date anchor — createdAt is unreliable for backfilled rows
+    const mt = safeParseDate(m.meetingTime)
+    if (!mt) continue
 
     if (m.meetingType === 'L1') {
-      if (inWeek(created))  { wL1B++; if (conducted(m)) wL1C++ }
-      if (inMonth(created)) { mL1B++; if (conducted(m)) mL1C++ }
+      if (inWeek(mt))  { wL1B++; if (conducted(m)) wL1C++ }
+      if (inMonth(mt)) { mL1B++; if (conducted(m)) mL1C++ }
     } else {
       if (conducted(m)) {
-        if (inWeek(created))  wL2C++
-        if (inMonth(created)) mL2C++
+        if (inWeek(mt))  wL2C++
+        if (inMonth(mt)) mL2C++
       }
     }
   }
@@ -298,9 +299,9 @@ export function buildTanishqMetrics(
     if (inMonth(d)) { mD++; if (isConnected(call.outcome)) mC++ }
   }
 
-  const dMtg = meetings.filter(m => { const d = safeParseDate(m.createdAt); return d && inToday(d) && m.meetingType === 'L1' }).length
-  const wMtg = meetings.filter(m => { const d = safeParseDate(m.createdAt); return d && inWeek(d)  && m.meetingType === 'L1' }).length
-  const mMtg = meetings.filter(m => { const d = safeParseDate(m.createdAt); return d && inMonth(d) && m.meetingType === 'L1' }).length
+  const dMtg = meetings.filter(m => { const d = safeParseDate(m.meetingTime); return d && inToday(d) && m.meetingType === 'L1' }).length
+  const wMtg = meetings.filter(m => { const d = safeParseDate(m.meetingTime); return d && inWeek(d)  && m.meetingType === 'L1' }).length
+  const mMtg = meetings.filter(m => { const d = safeParseDate(m.meetingTime); return d && inMonth(d) && m.meetingType === 'L1' }).length
 
   const tDial = getTarget(targets, 'Calls Dialled')
   const tConn = getTarget(targets, 'Calls Connected')
