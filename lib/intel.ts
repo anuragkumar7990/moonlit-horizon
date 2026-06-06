@@ -253,7 +253,7 @@ export async function generateAndSaveIntel(
 
 export async function regenerateCumulative(
   account: string
-): Promise<{ cumulativeSummary: string; nextAction: string }> {
+): Promise<{ cumulativeSummary: string; nextAction: string; lastContactDate: string }> {
   const allIntel = await getAccountIntelligence()
   const intel    = allIntel.find(i => norm(i.account) === norm(account))
   if (!intel) throw new Error(`Account not found in Account Intelligence: ${account}`)
@@ -273,7 +273,7 @@ export async function regenerateCumulative(
   })
 
   await updateCumulativeInSheet(account, cumulativeSummary, nextAction, lastContactDate)
-  return { cumulativeSummary, nextAction, lastContactDate }
+  return { cumulativeSummary, nextAction, lastContactDate: lastContactDate ?? '' }
 }
 
 // ── Public: sync email intel for one account ─────────────────────────────────
