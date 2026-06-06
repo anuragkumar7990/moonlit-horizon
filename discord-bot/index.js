@@ -1029,11 +1029,11 @@ client.on('interactionCreate', async interaction => {
       try {
         const data = await vercelGet('/api/briefing')
         const message = buildBriefingMessage(data)
-        const salesOps = interaction.client.channels.cache.find(c => c.name === 'sales-ops')
-        if (!salesOps) return interaction.editReply('❌ #sales-ops channel not found.')
+        const salesOps = interaction.client.channels.cache.find(c => c.name === 'general')
+        if (!salesOps) return interaction.editReply('❌ #general channel not found.')
         const chunks = splitIntoChunks(message)
         for (const chunk of chunks) await salesOps.send(chunk)
-        await interaction.editReply('✅ Briefing posted to #sales-ops')
+        await interaction.editReply('✅ Briefing posted to #general')
       } catch (err) {
         console.error('/mh briefing error:', err)
         await interaction.editReply(`❌ Failed: ${err.message}`)
