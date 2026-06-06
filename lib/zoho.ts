@@ -195,8 +195,14 @@ export async function getCallById(id: string): Promise<{
   seModule: string
   whoId: { id: string; module: string; name: string } | null
   whatId: { id: string; module: string; name: string } | null
+  callStartTime: string
+  callDuration: string
+  description: string
+  ownerName: string
 } | null> {
-  const data = await zohoGet(`/Calls/${id}`) as { data?: Record<string, unknown>[] }
+  const data = await zohoGet(
+    `/Calls/${id}?fields=id,Call_Result,Proposed_Meeting_Time,$se_module,Who_Id,What_Id,Call_Start_Time,Call_Duration,Description,Owner`
+  ) as { data?: Record<string, unknown>[] }
   const c = data.data?.[0]
   if (!c) return null
   const whoId = c.Who_Id && typeof c.Who_Id === 'object'
@@ -205,6 +211,9 @@ export async function getCallById(id: string): Promise<{
   const whatId = c.What_Id && typeof c.What_Id === 'object'
     ? c.What_Id as { id: string; module: string; name: string }
     : null
+  const owner = c.Owner && typeof c.Owner === 'object'
+    ? c.Owner as { id: string; name: string }
+    : null
   return {
     id: String(c.id ?? ''),
     callResult: String(c.Call_Result ?? ''),
@@ -212,6 +221,10 @@ export async function getCallById(id: string): Promise<{
     seModule: String(c.$se_module ?? ''),
     whoId,
     whatId,
+    callStartTime: String(c.Call_Start_Time ?? ''),
+    callDuration: String(c.Call_Duration ?? ''),
+    description: String(c.Description ?? ''),
+    ownerName: owner?.name ?? '',
   }
 }
 
@@ -262,7 +275,7 @@ export async function createZohoCall(params: {
   accountName: string
   outcome: string
   notes?: string
-}): Promise<void> {
+}): Promise<string | null> {
   const token = await getAccessToken()
   const now = new Date()
   const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
@@ -271,7 +284,7 @@ export async function createZohoCall(params: {
   const zohoOutcome = OUTCOME_TO_ZOHO[params.outcome] ?? params.outcome
   const whoModule = params.contactType === 'lead' ? 'Leads' : 'Contacts'
 
-  await fetch(`${BASE_URL}/Calls`, {
+  const res = await fetch(`${BASE_URL}/Calls`, {
     method: 'POST',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -286,6 +299,8 @@ export async function createZohoCall(params: {
       }],
     }),
   })
+  const json = await res.json() as { data?: { details?: { id?: string } }[] }
+  return json.data?.[0]?.details?.id ?? null
 }
 
 export async function linkContactToAccount(contactId: string, accountId: string): Promise<void> {

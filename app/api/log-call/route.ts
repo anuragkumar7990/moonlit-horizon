@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { appendCallRow } from '@/lib/sheets'
+import { appendCallRow, updateCallRowZohoId } from '@/lib/sheets'
 import { createZohoCall } from '@/lib/zoho'
 
 export async function POST(req: NextRequest) {
@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
     const date = ist.toISOString().slice(0, 10)
     const time = ist.toISOString().slice(11, 16)
 
-    // Write to Sheets
-    await appendCallRow({
+    // Write to Sheets — capture row number so we can back-fill the Zoho Call ID
+    const rowNum = await appendCallRow({
       date,
       time,
       account,
@@ -40,7 +40,8 @@ export async function POST(req: NextRequest) {
       followUpDate: followUpDate ?? '',
     })
 
-    // Write to Zoho Calls module (best-effort — don't fail the whole request if this errors)
+    // Write to Zoho Calls module (best-effort). On success, write the Zoho Call ID back
+    // to col J so the Zoho webhook can skip this row instead of double-writing.
     if (contactId && contactType) {
       createZohoCall({
         contactId,
@@ -48,6 +49,12 @@ export async function POST(req: NextRequest) {
         accountName: account,
         outcome,
         notes,
+      }).then(async (zohoCallId) => {
+        if (zohoCallId && rowNum > 0) {
+          await updateCallRowZohoId(rowNum, zohoCallId).catch(e =>
+            console.error('[log-call] Failed to write Zoho Call ID back to Sheets:', e.message)
+          )
+        }
       }).catch(err => console.error('[log-call] Zoho write failed (non-fatal):', err.message))
     }
 

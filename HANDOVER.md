@@ -1,6 +1,6 @@
 # Moonlit Horizon — Handover Document
-**Last updated:** 2026-06-06  
-**Latest commit:** `973a9ac` (main)  
+**Last updated:** 2026-06-07  
+**Latest commit:** `79566b2` (main)  
 **Live URL:** https://moonlit-horizon.vercel.app  
 **VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
 **Repo:** github.com/anuragkumar7990/moonlit-horizon
@@ -17,11 +17,83 @@
 | **Phase 2 — Agent Layer** | ✅ Complete | All slash commands live |
 | **Phase 2b — Intelligence Layer** | ✅ Complete | Weekly summary, targets, Circleback sync, Top-250, Objectives |
 | **Phase 3 — Supply Module** | ✅ Complete | Trainer pipeline, roster, topic coverage on Ashutosh view |
-| **Phase 4 — People & Accounts** | ❌ Not started | Blocked on ~2–3 weeks of Circleback history |
+| **Phase 4 — Account Intelligence** | ✅ Complete | Email/Circleback/Call/Notes intel, Cumulative Summary, Last Contact Date, event-driven triggers |
+| **Phase 5 — Contact Intelligence** | ✅ Complete | 2,372 contacts from DCT v1, Zoho-matched, historical meetings backfilled |
 
 ---
 
-## 2. What Is Live Today
+## 2. Session Summary (2026-06-07)
+
+### Account Intelligence — Gmail Sync
+- `scripts/sync-gmail-intel.js` syncs Gmail threads for all 177 accounts in the Account Intelligence sheet
+- Searches by contact email (via Zoho word search) + subject line `"The Test Tribe <> <Account Name>"`
+- Excludes newsletters: `-category:promotions -category:social -from:finercircle -from:thriveedschool`
+- Compact format: 2-line summary + numbered dated list per thread
+- Run: `node scripts/sync-gmail-intel.js` (single: `node scripts/sync-gmail-intel.js "AccountName"`)
+
+### Account Intelligence — Last Contact Date
+- New col L in Account Intelligence sheet: auto-detected from latest date across all 4 intel layers
+- Displayed as time-range badge on dashboard (< 1 day → 3+ months)
+- Editable via ✎ inline date picker on dashboard
+- Discord: `/mh intel touch <account> [date]` — defaults to today IST
+- API: `POST /api/account-intel/last-contact { account, date }`
+
+### Account Intelligence — Event-Driven Triggers (new in this session)
+All intelligence layers now update automatically when new data arrives:
+
+| Trigger | What fires | What updates |
+|---------|-----------|--------------|
+| New email in Gmail | `sync-gmail-intel.js` (still manual/cron pending) | Email Intel → Cumulative (`email` priority) |
+| Circleback meeting notes | `/api/circleback-sync` webhook | Circleback Intel + Last Contact Date → Cumulative (`meeting` priority) |
+| `/mh log call` Discord | `/api/intel-triggers/call` (fire-and-forget) | Call Intel + Last Contact Date → Cumulative (`call` priority) |
+| Manual note added | `addManualNote()` server action | Cumulative (`notes` priority — highest weight if recent) |
+
+- `syncCallIntel(account)` — regenerates Call Intelligence from Calls sheet → updates col H
+- `syncCirclebakIntel(account, meetings, date)` — updates col G + Last Contact Date
+- `regenerateCumulative(account, changedLayer?)` — recency-weighted prompt, labels most recent layer as "⬆ LATEST UPDATE"
+- New Sheets functions: `updateCallIntelligence()`, `updateCirclebakIntelligence()`
+- New API: `POST /api/intel-triggers/call`
+
+### Contact Intelligence (new sheet tab)
+- 2,372 unique contacts from DCT v1 (cleaned, deduped) written to "Contact Intelligence" Google Sheet
+- 64% matched to Zoho Lead/Contact IDs; 96% matched to Zoho Deal IDs
+- 23 columns: Zoho IDs, Name, Email, Phone, Title, Company, L1/L2 Source, SDR, call stats, meeting booked, last call date/outcome, Zoho stage, full call history JSON
+- L1/L2 sources mapped to Zoho `Lvl_1_Source` / `Lvl_2_Source` picklists
+- Scripts: `scripts/build-contact-intelligence.js`, `scripts/export-unmatched-prospects.js`
+
+### Historical Meetings Backfill
+- 204 meetings from Jan–Jun 2026 written to Meetings sheet (HIST-001 through HIST-204)
+- 146/204 linked to Circleback meeting URLs (col G)
+- 196/204 linked to Zoho Deal IDs (col H)
+- Source: `Others/Dashboard/Jan-June Meetings-CT - Final Cumulative Meeting Sheet.csv`
+- Script: `scripts/push-historical-meetings.js`
+
+### DCT v1 Data Cleaning (local CRM files)
+All files in `../CRM/`:
+
+| File | Rows | Description |
+|------|------|-------------|
+| `DCT-v1-cleaned.csv` | 2,759 | Source of truth — clean calling history |
+| `never-called-prospects.csv` | 278 | Uploaded but never called — future outreach pool |
+| `rnr-prospects.csv` | 577 | RNR + Not Interested — parked |
+| `excluded-prospects.csv` | 156 | Not Relevant + Wrong Number — archived |
+| `unmatched-prospects.csv` | 125 | Pushed to Zoho Leads (96% match rate) |
+
+### Zoho L2 Source Picklist — 6 new values added
+- `Webinar - Fireside Chat with Revathi Chanda Syren (30.03.26)`
+- `Webinar - Ask Me Anything with Kiran Chandaka (15.04.26)`
+- `Fireside Chat with Aparana Gupta (07.04.26)`
+- `AI Adoption for IT Leaders - Sahil Garg (08.04.26)`
+- `Cutting through the BS of AI: Playwright Agents in Action - Md. Tanweer (22.01.26)`
+- `Boosting QA Productivity Through Copilot - Siva Prasad Reddy (24.02.26)`
+
+### Discord — `/mh intel touch` bug fix
+- Autocomplete was returning Zoho ID instead of account name for the touch command
+- Fixed: account value now resolved via `cache.accounts.find()` same as other intel subcommands
+
+---
+
+## 3. What Is Live Today (updated)
 
 ### Dashboard (Vercel — Next.js 14)
 
@@ -50,7 +122,7 @@
 |---|---|
 | `/book` | Book meeting with existing Zoho contact → Sheets + Google Calendar + Zoho Deal |
 | `/book-prospect` | Convert Zoho lead → contact, book meeting |
-| `/mh log call` | Log call → Sheets Calls tab + Zoho Calls module |
+| `/mh log call` | Log call → Sheets Calls tab + Zoho + triggers Call Intel refresh |
 | `/mh log payment` | Log invoice → Payments sheet; status defaults to Invoiced |
 | `/mh p0 add` | Add manual P0 task |
 | `/mh p0 done` | Mark P0 task done (autocomplete from open tasks) |
@@ -62,6 +134,11 @@
 | `/mh objective update <name> <current>` | Update current progress for an objective |
 | `/mh briefing` | Post composite morning briefing to #general |
 | `/mh sync-meetings` | Explains Circleback webhook status |
+| `/mh intel show <account>` | Show Account Intelligence summary |
+| `/mh intel refresh <account>` | Regenerate all intel layers from scratch |
+| `/mh intel note <account> <text>` | Append manual note → triggers cumulative refresh |
+| `/mh intel status <account> <status>` | Update deal status (Won/Active/Warm/Cold/Dead) |
+| `/mh intel touch <account> [date]` | Set Last Contact Date (defaults to today IST) |
 
 **Scheduled jobs:**
 
@@ -99,9 +176,15 @@
 | `/api/leads` | GET | Zoho leads (autocomplete) |
 | `/api/upload-prospects` | POST | Bulk upload to Sheets + Zoho Leads |
 | `/api/top-250` | POST | Score all Not Contacted leads, tag top 250 in Zoho |
-| `/api/circleback-sync` | POST | Receive Circleback webhook → mark Conducted + write Notes tab |
+| `/api/circleback-sync` | POST | Receive Circleback webhook → mark Conducted + write Notes tab + update Circleback Intel + Last Contact Date |
 | `/api/reports/weekly` | GET | Generate + stream weekly PDF |
 | `/api/reports/monthly` | GET | Generate + stream monthly PDF |
+| `/api/account-intel` | GET | All Account Intelligence rows |
+| `/api/account-intel/refresh` | POST | Regenerate full intel for one account |
+| `/api/account-intel/note` | POST | Append manual note + refresh cumulative |
+| `/api/account-intel/status` | POST | Update deal status field |
+| `/api/account-intel/last-contact` | POST | Set Last Contact Date |
+| `/api/intel-triggers/call` | POST | Triggered after call logged → refresh Call Intel + cumulative |
 
 ---
 
@@ -168,10 +251,35 @@ moonlit-horizon/
 
 Set targets with `/mh objective set`, update progress with `/mh objective update`. Current value is **manually updated** — it does not auto-calculate from Sheets data.
 
-### Circleback Webhook
-Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttribe.com` is an invitee. Now does two things:
+### Account Intelligence Sheet (col A–L)
+| Col | Field | Updated by |
+|-----|-------|-----------|
+| A | Account name | On upsert |
+| B | Updated At | Every intel write |
+| C | Meeting Count | `generateAndSaveIntel()` |
+| D | Last Meeting | `generateAndSaveIntel()` |
+| E | Status | `/mh intel status`, dashboard |
+| F | Email Intelligence | `syncEmailIntel()` |
+| G | Circleback Intelligence | `syncCirclebakIntel()` |
+| H | Call Intelligence | `syncCallIntel()` |
+| I | Manual Notes | `appendManualNote()` |
+| J | Cumulative Summary | `regenerateCumulative()` |
+| K | Next Action | `regenerateCumulative()` |
+| L | Last Contact Date | All triggers + `/mh intel touch` |
+
+### Contact Intelligence Sheet (col A–W)
+New sheet tab written by `scripts/build-contact-intelligence.js`:
+- 2,372 unique contacts, 64% matched to Zoho Lead/Contact IDs
+- Full call history stored as JSON in col U
+- L1/L2 sources mapped to Zoho picklist values
+- 125 contacts pushed to Zoho Leads (Callback Later + Send More Info + Meeting Booked)
+
+### Circleback Webhook (updated)
+Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttribe.com` is an invitee. Now does **four** things:
 1. Marks matching Meetings sheet row as `Conducted` (fuzzy match on account name + 25h date window)
-2. Writes meeting notes + action items to Notes tab (non-blocking — won't break status update if it fails)
+2. Writes meeting notes + action items to Notes tab
+3. **NEW:** Updates Circleback Intelligence layer (col G) via `syncCirclebakIntel()`
+4. **NEW:** Sets Last Contact Date to the meeting date (col L)
 
 ### Reports PDF (`@react-pdf/renderer`)
 - `GET /api/reports/weekly` — streams a styled A4 PDF: calling stats, meetings, pipeline, hot deals, AI summary
@@ -185,9 +293,12 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 
 | Gap | Status |
 |---|---|
-| L1/L2 Conducted | Circleback webhook live; historical meetings need manual backfill if needed |
-| Objective current values | Manual — `/mh objective update` must be run weekly by the relevant person |
-| Payment status (Received) | Manual — update Status column in Payments sheet directly; no `/mh` command yet |
+| Historical meetings (pre-Jan 2026) | 204 meetings backfilled Jan–Jun 2026; pre-Jan requires manual entry |
+| Objective current values | Manual — `/mh objective update` must be run weekly |
+| Payment status (Received) | Manual — update Status column in Payments sheet directly |
+| Gmail push notifications | Still manual/cron — Gmail Watch API + Pub/Sub not yet set up |
+| Contact Intelligence Notes Summary | Column W blank — needs AI enrichment pass |
+| 36% Contact Intelligence unmatched to Zoho | Contacts in DCT not in Zoho (never uploaded) |
 
 ---
 
@@ -195,52 +306,76 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 
 | Issue | Severity | Action |
 |---|---|---|
+| Gmail intel trigger is still pull-based | High | Set up Gmail Watch API + Google Cloud Pub/Sub → `/api/intel-triggers/gmail` |
 | No retry logic on Zoho 429 rate limit | Medium | Add exponential backoff in `lib/zoho.ts` `zohoGet()` |
 | Sheets write failures are silent (only `console.error`) | Low | Add Discord alert to `#sales-ops` on failure |
-| Dead code in `lib/zoho.ts`: `scoreLeadForDashboard()`, `getLeadsByStatus()` | Low | Safe to delete |
-| Objective current values don't auto-populate from Sheets | Medium | Could auto-fill Calls Dialled / L1 Conducted from existing data sources |
+| Contact Intelligence Notes Summary (col W) is blank | Medium | Run AI enrichment pass using call history JSON |
+| Objective current values don't auto-populate | Medium | Could auto-fill Calls Dialled / L1 Conducted from existing data |
 
 ---
 
-## 6. Immediate Action Items (before next build session)
+## 6. Immediate Action Items
 
-1. **Verify Top-250 tags**: Sunday 11pm IST the re-ranker fires — check `#top250` tags appear in Zoho
-2. **Seed objectives**: Run `/mh objective set` for each of the 7 objectives, then update progress weekly with `/mh objective update`
-3. **Test PDF reports**: Open Mahesh view → click Weekly Report / Monthly Report links
-4. **Watch Circleback Notes**: Next meeting with a thetesttribe.com attendee should auto-populate the Notes tab
+1. **VPS Discord bot**: `git pull && pm2 restart moonlit-bot` to get call intel trigger live
+2. **Test intel triggers**: Log a call via `/mh log call` → verify Account Intelligence updates in sheet within ~30s
+3. **Gmail push setup**: Configure Gmail Watch API + Cloud Pub/Sub for auto email intel updates
+4. **Contact Intelligence enrichment**: Run Notes Summary AI pass for the 2,372 contacts
+5. **Review never-called-prospects.csv** (278 rows) — push to Zoho Leads when ready for next calling campaign
 
 ---
 
 ## 7. Next Steps (Priority Order)
 
-### Priority 1 — Objective auto-population
-**Effort**: 1–2 hours  
-Currently objective current values are manual. Three of the seven can be auto-filled from existing data:
-- **Calls Dialled** → read from `callsData.monthly.dialled` (already computed)
-- **L1 Meetings Conducted** → read from `meetingsData.monthly.l1Conducted` (already computed)
-- **Deals Won** → count of Won-stage deals in Zoho
+### Priority 1 — Gmail Push Notifications (Email Intel auto-trigger)
+**Effort**: 2–3 hours  
+Set up `POST /api/intel-triggers/gmail`:
+1. Create a Google Cloud Pub/Sub topic
+2. Call `gmail.users.watch()` on `anurag@thetesttribe.com` pointing to the topic
+3. Create a Pub/Sub push subscription → Vercel endpoint
+4. Set up weekly cron (Vercel Cron) to renew the watch (expires every 7 days)
+5. Handler: decode the notification, find changed thread, extract account from subject, call `syncEmailIntel()`
 
-Build: extend `/api/objectives GET` to also return auto-computed actuals for these three; dashboard displays the auto value with a small "auto" badge; manual update still works for the other four.
-
-### Priority 2 — Payment mark-as-received command
-**Effort**: 1 hour  
-`/mh log payment` creates Invoiced rows. Currently you update Status manually in Sheets. Build:
-- `/mh payment received <account>` — autocomplete from open Payments rows, updates Status to 'Received' and sets a ReceivedAt timestamp
-- Add `updatePaymentStatus()` to `lib/sheets.ts`
-- Add `GET /api/payments/open` for autocomplete cache
-
-### Priority 3 — People & Accounts module (Phase 4)
+### Priority 2 — Contact Intelligence Dashboard Panel
 **Effort**: Full session  
-**Blocked** — needs ~2–3 weeks of Circleback webhook history to have enough meeting notes to build meaningful account intelligence. Start after late June 2026.  
-Will use: Notes tab (now being populated by circleback-sync), Meetings sheet, Zoho Accounts.
+Build a "Contact Intelligence" panel on the dashboard:
+- Search/filter by name, company, L1 source, SDR, last outcome
+- Shows call history timeline per contact
+- Link to Zoho Lead/Contact record
+- Filter: Callback Later + Send More Info contacts for priority follow-up
 
-### Priority 4 — Zoho 429 retry / backoff
-**Effort**: 30 min  
-Add exponential backoff to `zohoGet()` in `lib/zoho.ts`. Currently any rate-limit hits silently fail.
+### Priority 3 — Objective auto-population
+**Effort**: 1–2 hours  
+Auto-fill Calls Dialled, L1 Conducted, Deals Won from existing data sources.
+
+### Priority 4 — Payment mark-as-received command
+**Effort**: 1 hour  
+`/mh payment received <account>` → updates Payments sheet status to Received.
+
+### Priority 5 — Zoho Call Webhook
+**Effort**: 2 hours  
+Configure Zoho CRM Workflow → Webhook → fires `POST /api/intel-triggers/call` when a Call activity is created in Zoho. This covers calls logged directly in Zoho CRM (not via Discord).
 
 ---
 
-## 8. VPS Operations
+## 8. Google Sheet Tabs (complete list)
+
+| Tab | Written by | Read by |
+|---|---|---|
+| Meetings | `/api/book`, `/api/book-prospect`, `scripts/push-historical-meetings.js` | Dashboard, P0 tasks, briefing |
+| Notes | `/api/circleback-sync` | P0 tasks, `generateAndSaveIntel()` |
+| Calls | `/api/log-call` | Dashboard, Call Intelligence, P0 tasks |
+| Targets | `/api/targets` | Dashboard, weekly summary |
+| Tasks | `/api/p0-tasks` | Bot autocomplete, Anurag/Ashutosh views |
+| Summaries | `/api/weekly-summary` | Homepage, Mahesh view |
+| Prospects | `/api/upload-prospects` | Ashutosh view |
+| Payments | `/api/log-payment` | Anurag view |
+| Objectives | `/api/objectives` | Ashutosh + Anurag views |
+| Account Intelligence | All intel triggers + scripts | Dashboard AccountIntelPanel |
+| Contact Intelligence | `scripts/build-contact-intelligence.js` | Future: Contact Intel panel |
+
+---
+
+## 9. VPS Operations
 
 ```bash
 # SSH
@@ -295,7 +430,11 @@ Contents: 30 scored trainers (Tier 1 = 70+, Tier 2 = 50–69, Tier 3 = <50), top
 
 | Decision | Status |
 |---|---|
-| Objective auto-population | Not built — Priority 1 for next session |
-| Payment mark-as-received | Not built — Priority 2 for next session |
-| Ashutosh email status panel | Deferred — needs active email campaigns first |
-| People & Accounts (Phase 4) | Blocked on Circleback history — start late June 2026 |
+| Gmail push notifications (auto Email Intel) | Next priority — needs Google Cloud Pub/Sub setup |
+| Contact Intelligence dashboard panel | After Gmail push — shows call history per contact |
+| Objective auto-population | Not built — Priority 3 |
+| Payment mark-as-received | Not built — Priority 4 |
+| Zoho Call webhook (non-Discord calls) | Not built — Priority 5 |
+| Contact Intelligence Notes Summary enrichment | 2,372 contacts have blank Notes Summary (col W) |
+| Feb 5 2026 webinar L2 source | Mapped to Siva Prasad Reddy (24.02.26) — confirm if same event |
+| Cold - Whatsapp Community L1 | Mapped to Events/TribeQonf'25 — 2 contacts (Deb Ghosh, Sunit Kole) |

@@ -2,7 +2,7 @@
 
 > The Test Tribe · Corporate Training Business  
 > Owner: Anurag Kumar (anurag@thetesttribe.com)  
-> Last updated: 2026-06-06
+> Last updated: 2026-06-07 (synced with HANDOVER.md)
 
 ---
 
@@ -26,6 +26,9 @@
 16. [Token Optimisation Guardrails](#16-token-optimisation-guardrails)
 17. [Build Sequence & Timeline](#17-build-sequence--timeline)
 18. [Zoho CRM Data Cleanup](#18-zoho-crm-data-cleanup)
+19. [Account Intelligence — Full Spec](#19-account-intelligence--full-spec)
+20. [Contact Intelligence — Full Spec](#20-contact-intelligence--full-spec)
+21. [Historical Data — DCT v1 & Meetings](#21-historical-data--dct-v1--meetings)
 
 ---
 
@@ -516,6 +519,8 @@ Every created and updated lead is logged to the `Prospects` tab:
 | **Payments** | Date, Account, Deal, Amount, Invoice Date, Due Date, Status, Notes | Manual + Payments Agent | New |
 | **Trainers** | Trainer ID, Name, LinkedIn, Specialisation, Availability, Day Rate, Rating Score, Status (Prospect/Vetted/Onboarded), Contract Signed, Notes | Supply Agent | New |
 | **People** | Email, First Name, Last Name, Company, Designation, City, Phone, Lvl 1 Source, Lvl 2 Source, Priority, Lead Status, Account Intelligence Summary, Last Updated | People & Accounts Agent | New |
+| **Account Intelligence** | Account Name, Updated At, Meeting Count, Last Meeting, Status, Email Intel, Circleback Intel, Call Intel, Manual Notes, Cumulative Summary, Next Action, Last Contact Date (cols A–L) | All intel triggers + scripts | Live — 177 accounts |
+| **Contact Intelligence** | 23 cols: Zoho IDs, Name, Email, Phone, Title, Company, L1/L2 Source, SDR, call stats, meeting booked, last call date/outcome, Zoho stage, call history JSON (cols A–W) | `scripts/build-contact-intelligence.js` | Live — 2,372 contacts |
 
 **Key data rule — Prospect → Calling transition**: When any call is logged for a prospect, the row moves from the `Prospects` tab → `Calling` tab. The `Prospects` tab always represents uncalled leads only ("calling stock"). Weeks of stock = `COUNT(Prospects rows) ÷ 250` (Tanishq's weekly call capacity).
 
@@ -963,17 +968,25 @@ Generated per account when a new meeting or email arrives:
 
 | Command | Effect |
 |---|---|
-| `/mh status {account}` | Cross-module status for one account (Meetings + Funnel + Emails simultaneously) |
-| `/mh briefing` | Morning briefing on demand |
-| `/mh book meeting` | Trigger meeting booking flow |
-| `/mh log call` | Log a call (bot prompts for details) |
-| `/mh p0 today` | Today's P0 tasks |
-| `/mh funnel` | Current funnel snapshot |
-| `/mh stats` | On-demand current metrics |
-| `/objective update` | Log progress: bot asks short/long-term → objective area → records to Tasks tab |
-| `/reminder {person} {message}` | Add a reminder card to a person's dashboard view |
-| `/book` | Book a meeting with an existing CRM account (existing command ✅) |
-| `/book-prospect` | Convert Lead → Contact and book meeting (existing command ✅) |
+| `/book` | Book meeting with existing Zoho contact → Sheets + Google Calendar + Zoho Deal |
+| `/book-prospect` | Convert Zoho lead → contact, book meeting |
+| `/mh log call` | Log call → Sheets Calls tab + Zoho + triggers Call Intel refresh |
+| `/mh log payment` | Log invoice → Payments sheet; status defaults to Invoiced |
+| `/mh p0 add` | Add manual P0 task |
+| `/mh p0 done` | Mark P0 task done (autocomplete from open tasks) |
+| `/mh p0 today` | Re-post open P0 summary to #p0-tasks |
+| `/mh stats weekly` | Generate + post LLM weekly summary to #stats |
+| `/mh targets set <metric> <value>` | Set monthly target; updates pinned message in #targets |
+| `/mh targets view` | Show current month targets + actuals (ephemeral) |
+| `/mh objective set <name> <target>` | Set monthly target for an objective (7 choices) |
+| `/mh objective update <name> <current>` | Update current progress for an objective |
+| `/mh briefing` | Post composite morning briefing to #general |
+| `/mh sync-meetings` | Explains Circleback webhook status |
+| `/mh intel show <account>` | Show Account Intelligence summary |
+| `/mh intel refresh <account>` | Regenerate all intel layers from scratch |
+| `/mh intel note <account> <text>` | Append manual note → triggers cumulative refresh |
+| `/mh intel status <account> <status>` | Update deal status (Won/Active/Warm/Cold/Dead) |
+| `/mh intel touch <account> [date]` | Set Last Contact Date (defaults to today IST) |
 
 ---
 
@@ -1047,69 +1060,71 @@ OpenClaw model selection: use the cheapest model tier for rule-following tasks (
 
 ## 17. Build Sequence & Timeline
 
-### Phase 0 — Foundation *(now, before Phase 1)*
+### Phase 0 — Foundation ✅ Complete
 
-- [ ] Add Poppins to Next.js via `next/font/google`; update `tailwind.config.ts` with design tokens (colours, font, spacing)
-- [ ] Create new Sheets tabs: `Calls`, `Calling`, `Targets`, `Tasks`, `Payments` (manual entry to start)
-- [ ] Create Discord channels: `#targets`, `#objectives` (all others already exist)
-- [ ] Set up `pm2` on VPS for Discord bot auto-restart
-- [ ] Set up Whisper Docker container on VPS
-- [ ] Add `Assigned To` column to `Notes` tab in Sheets
+- [x] Add Poppins to Next.js via `next/font/google`; update `tailwind.config.ts` with design tokens (colours, font, spacing)
+- [x] Create new Sheets tabs: `Calls`, `Calling`, `Targets`, `Tasks`, `Payments`
+- [x] Create Discord channels: `#targets`, `#objectives`
+- [x] Set up `pm2` on VPS for Discord bot auto-restart
 
-### Phase 1 — Master Tracker UI *(target: 2026-06-08 10:00 IST)*
+### Phase 1 — Master Tracker UI ✅ Complete
 
-- [ ] Replace homepage (`app/page.tsx`) with Master Tracker 5-column layout
-- [ ] Column I: Calls metrics (live from `Calls` tab; hardcoded targets initially)
-- [ ] Column II: Meetings metrics (from `Meetings` tab + Zoho Deals)
-- [ ] Column III: Leads Hot/Warm/Cold counts (from Zoho CRM, scored against rubric)
-- [ ] Column IV: Funnel (from Zoho Deals — all stages)
-- [ ] Column V: Metrics graph (Recharts, filterable by category)
-- [ ] Weekly Summary card (static text placeholder → LLM in Phase 2b)
-- [ ] Person view selector (4 circles at top of every page)
+- [x] Replace homepage (`app/page.tsx`) with Master Tracker 5-column layout
+- [x] Column I: Calls metrics (Zoho Calls + Sheets Calls merged, deduped by date+account)
+- [x] Column II: Meetings metrics (from `Meetings` tab + Zoho Deals)
+- [x] Column III: Leads Hot/Warm/Cold counts (from Zoho CRM)
+- [x] Column IV: Funnel (from Zoho Deals — all stages, count + amount)
+- [x] Column V: Metrics graph (Recharts 8-week line chart)
+- [x] Weekly Summary card (LLM bullets from Summaries sheet)
+- [x] Person view selector (4 circles at top of every page)
 
-### Phase 1b — Person Views UI
+### Phase 1b — Person Views UI ✅ Complete
 
-- [ ] Mahesh's view page
-- [ ] Tanishq's view page (targets toggle + call lists + meetings cards)
-- [ ] Ashutosh's view page (prospect DB health + pipeline + email status)
-- [ ] Anurag's view page (tasks + objectives + meetings + funnel)
-- [ ] Decide PDF report tool (Puppeteer / @react-pdf/renderer / Sheets export)
+- [x] Mahesh's view — Won/Pipeline/Value; Funnel; 6-stat grid; Weekly Summary; Weekly + Monthly PDF links
+- [x] Tanishq's view — Daily/Weekly/Monthly targets with gold glow; Today's Meetings; Follow-ups
+- [x] Ashutosh's view — Leads H/W/C; Funnel; Prospect DB Health; Pending Tasks; Objective Progress bars; Trainer Supply; Monthly PDF link
+- [x] Anurag's view — Today's Meetings; Funnel; Pending Tasks; Payments Pending; Objective Progress bars; Quick Links; Weekly + Monthly PDF links
+- [x] PDF reports via `@react-pdf/renderer` (declared as `serverExternalPackages` in `next.config.js`)
 
-### Phase 2 — Core Agent Layer
+### Phase 2 — Core Agent Layer ✅ Complete
 
-- [ ] Moonlit Horizon master agent (OpenClaw)
-- [ ] Calling Team: Call Logger, Call Monitor, Call Summariser
-- [ ] Meetings Follow-up Reminder Agent (other 2 already built ✅)
-- [ ] Email Draft Agent (Comms Tracker already built ✅)
-- [ ] Funnel Monitor + Stale Deal Alerter
-- [ ] P0 Team: P0 Generator, P0 Notifier, P0 Closer
-- [ ] Stats Team: Daily Stats Agent, Weekly Digest Agent, On-demand Stats Agent
-- [ ] Payments Team: Invoice Tracker, Overdue Alerter
+- [x] All slash commands live (see Section 14)
+- [x] Scheduled cron jobs: P0 scan, daily digest, weekly summary, Top-250, monthly targets, end-of-month review
+- [x] P0 Generator, P0 Notifier, P0 Closer
+- [x] Stats Team: Daily Stats Agent, Weekly Digest Agent
+- [x] Payments: `Payments` tab + `/mh log payment`
 
-### Phase 2b — Intelligence & Automation Layer
+### Phase 2b — Intelligence & Automation Layer ✅ Complete
 
-- [ ] Account Intelligence generator (Circleback MCP + LLM → People tab)
-- [ ] LLM Weekly Summary generation (replaces static placeholder)
-- [ ] `#targets` monthly bot (target setting + end-of-month review)
-- [ ] `/objective update` Discord command
-- [ ] `/reminder` Discord command
-- [ ] Call Recording Pipeline: Google Drive MCP watcher → Whisper → Calls tab → Zoho tagging
-- [ ] Top-250 weekly re-ranker (rule-based, Sunday 11pm cron)
+- [x] LLM Weekly Summary generation (`claude-haiku-4-5-20251001`)
+- [x] `#targets` monthly bot (target setting + end-of-month review)
+- [x] `/mh objective set` + `/mh objective update` Discord commands
+- [x] Top-250 weekly re-ranker (rule-based, Sunday 11pm cron)
+- [x] Circleback webhook sync (marks Conducted + writes Notes + updates intel + Last Contact Date)
 
-### Phase 3 — Supply Module
+### Phase 3 — Supply Module ✅ Complete
 
-- [ ] `Trainers` tab setup in Sheets
-- [ ] Connect Google Form → Trainers tab (Apps Script or Zapier)
-- [ ] Trainer rating rubric integration *(user to share Form + Sheets)*
-- [ ] Trainer recommendation on deal booking
-- [ ] Supply module dashboard view
+- [x] Trainer pipeline + roster + topic coverage data from Trainer Sheets
+- [x] Trainer pipeline panel on Ashutosh's view
+- [x] Sheet A (Outreach & Onboarding): `1Xol3kb_5GDxS-Su-fAs1tIvTSLfGahNXWHv0MKUOY9I`
+- [x] Sheet B (Pricing & Supply): `1R8FqcifveekYZsaS3taHARaQAo3CjZ0FqdHnNOcZg2U`
 
-### Phase 4 — People & Accounts Module
+### Phase 4 — Account Intelligence ✅ Complete
 
-- [ ] `People` and `Accounts` tabs (data collection starts Phase 1)
-- [ ] Account Intelligence surfaced in `/client/[account]` page
-- [ ] People & Accounts module dashboard view
-- [ ] Full contact timeline per person
+- [x] Account Intelligence sheet (cols A–L) for 177 accounts
+- [x] 4 intel layers: Email, Circleback, Call, Manual Notes → Cumulative Summary
+- [x] Event-driven triggers: Circleback webhook, `/mh log call`, `addManualNote()`
+- [x] Gmail intel sync (`scripts/sync-gmail-intel.js`) — pull-based (push pending)
+- [x] Last Contact Date (col L) — auto-detected + editable via dashboard + `/mh intel touch`
+- [x] Full suite of `/mh intel` Discord commands
+
+### Phase 5 — Contact Intelligence ✅ Complete
+
+- [x] 2,372 unique contacts from DCT v1 written to "Contact Intelligence" sheet
+- [x] 64% matched to Zoho Lead/Contact IDs; 96% matched to Zoho Deal IDs
+- [x] 23 columns: Zoho IDs, Name, Email, Phone, Title, Company, L1/L2 Source, SDR, call stats, meeting booked, last call date/outcome, Zoho stage, full call history JSON
+- [x] 125 unmatched contacts pushed to Zoho Leads
+- [x] 204 historical meetings (Jan–Jun 2026) backfilled to Meetings sheet
 
 ---
 
@@ -1125,6 +1140,123 @@ OpenClaw model selection: use the cheapest model tier for rule-following tasks (
 | Reports PDF generation tool decision | Anurag | Before Phase 1b |
 | Person avatar illustrations (initials used in Phase 1) | Anurag | Phase 3 |
 | Ashutosh's weekly report: KPI priorities | Ashutosh / Anurag | Before Phase 1b |
+
+---
+
+---
+
+## 19. Account Intelligence — Full Spec
+
+### Sheet Structure (cols A–L)
+
+| Col | Field | Updated by |
+|-----|-------|------------|
+| A | Account name | On upsert |
+| B | Updated At | Every intel write |
+| C | Meeting Count | `generateAndSaveIntel()` |
+| D | Last Meeting | `generateAndSaveIntel()` |
+| E | Status | `/mh intel status`, dashboard |
+| F | Email Intelligence | `syncEmailIntel()` |
+| G | Circleback Intelligence | `syncCirclebakIntel()` |
+| H | Call Intelligence | `syncCallIntel()` |
+| I | Manual Notes | `appendManualNote()` |
+| J | Cumulative Summary | `regenerateCumulative()` |
+| K | Next Action | `regenerateCumulative()` |
+| L | Last Contact Date | All triggers + `/mh intel touch` |
+
+### Event-Driven Triggers
+
+| Trigger | What fires | What updates |
+|---------|-----------|--------------|
+| New email in Gmail | `sync-gmail-intel.js` (manual/cron — push pending) | Email Intel → Cumulative (`email` priority) |
+| Circleback meeting notes | `/api/circleback-sync` webhook | Circleback Intel + Last Contact Date → Cumulative (`meeting` priority) |
+| `/mh log call` Discord | `/api/intel-triggers/call` (fire-and-forget) | Call Intel + Last Contact Date → Cumulative (`call` priority) |
+| Manual note added | `addManualNote()` server action | Cumulative (`notes` priority — highest weight if recent) |
+
+### Key Functions
+
+- `syncCallIntel(account)` — regenerates Call Intelligence from Calls sheet → updates col H
+- `syncCirclebakIntel(account, meetings, date)` — updates col G + Last Contact Date
+- `regenerateCumulative(account, changedLayer?)` — recency-weighted prompt; labels most recent layer as "⬆ LATEST UPDATE"
+
+### Gmail Sync Script
+
+`scripts/sync-gmail-intel.js` — searches Gmail for all 177 accounts by contact email + subject `"The Test Tribe <> <Account Name>"`. Excludes newsletters. Compact format: 2-line summary + numbered dated list per thread.
+
+Run: `node scripts/sync-gmail-intel.js` (single account: `node scripts/sync-gmail-intel.js "AccountName"`)
+
+### Known Gap — Gmail Push Notifications
+
+Gmail sync is still pull-based. Next priority: Gmail Watch API + Google Cloud Pub/Sub → `POST /api/intel-triggers/gmail`. See HANDOVER.md §7 Priority 1 for full setup steps.
+
+---
+
+## 20. Contact Intelligence — Full Spec
+
+### Overview
+
+2,372 unique contacts from DCT v1 (cleaned, deduped) written to "Contact Intelligence" Google Sheet tab.
+
+### Match Rates
+
+- 64% matched to Zoho Lead/Contact IDs
+- 96% matched to Zoho Deal IDs
+- 125 unmatched contacts pushed to Zoho Leads (Callback Later + Send More Info + Meeting Booked outcomes)
+
+### Sheet Schema (cols A–W)
+
+| Col range | Fields |
+|-----------|--------|
+| A–C | Zoho Lead ID, Zoho Contact ID, Zoho Deal ID |
+| D–H | Name, Email, Phone, Title, Company |
+| I–J | L1 Source, L2 Source (mapped to Zoho picklist values) |
+| K | SDR name |
+| L–N | Total calls, Connected calls, Meeting booked (bool) |
+| O–P | Last call date, Last call outcome |
+| Q | Zoho stage |
+| R–T | Call stats breakdown |
+| U | Full call history (JSON) |
+| V–W | Notes Summary (blank — needs AI enrichment pass) |
+
+### Scripts
+
+- `scripts/build-contact-intelligence.js` — builds and writes the full sheet
+- `scripts/export-unmatched-prospects.js` — exports contacts not matched in Zoho
+
+### Known Gap
+
+Column W (Notes Summary) is blank for all 2,372 contacts. Needs an AI enrichment pass using the call history JSON in col U.
+
+---
+
+## 21. Historical Data — DCT v1 & Meetings
+
+### DCT v1 Calling Data (local `../CRM/` files)
+
+| File | Rows | Description |
+|------|------|-------------|
+| `DCT-v1-cleaned.csv` | 2,759 | Source of truth — clean calling history |
+| `never-called-prospects.csv` | 278 | Uploaded but never called — future outreach pool |
+| `rnr-prospects.csv` | 577 | RNR + Not Interested — parked |
+| `excluded-prospects.csv` | 156 | Not Relevant + Wrong Number — archived |
+| `unmatched-prospects.csv` | 125 | Pushed to Zoho Leads (96% match rate) |
+
+### Historical Meetings Backfill
+
+- 204 meetings from Jan–Jun 2026 written to Meetings sheet (IDs: HIST-001 through HIST-204)
+- 146/204 linked to Circleback meeting URLs (col G)
+- 196/204 linked to Zoho Deal IDs (col H)
+- Source CSV: `Others/Dashboard/Jan-June Meetings-CT - Final Cumulative Meeting Sheet.csv`
+- Script: `scripts/push-historical-meetings.js`
+
+### Zoho L2 Source Picklist — 6 Values Added (2026-06-07)
+
+- `Webinar - Fireside Chat with Revathi Chanda Syren (30.03.26)`
+- `Webinar - Ask Me Anything with Kiran Chandaka (15.04.26)`
+- `Fireside Chat with Aparana Gupta (07.04.26)`
+- `AI Adoption for IT Leaders - Sahil Garg (08.04.26)`
+- `Cutting through the BS of AI: Playwright Agents in Action - Md. Tanweer (22.01.26)`
+- `Boosting QA Productivity Through Copilot - Siva Prasad Reddy (24.02.26)`
 
 ---
 

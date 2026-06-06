@@ -121,6 +121,7 @@ const CALLS_HEADERS = [
   'Recording Drive Link', 'Transcript Summary', 'Auto Tags',
 ]
 
+// Returns the 1-indexed sheet row number that was written (used to back-fill Zoho Call ID).
 export async function appendCallRow(row: {
   date: string
   time: string
@@ -128,10 +129,12 @@ export async function appendCallRow(row: {
   contactName: string
   contactPhone: string
   sdr: string
+  duration?: string
   outcome: string
   notes: string
   followUpDate: string
-}): Promise<void> {
+  zohoCallId?: string
+}): Promise<number> {
   const sheets = getSheets()
 
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
@@ -149,17 +152,112 @@ export async function appendCallRow(row: {
     })
   }
 
-  await sheets.spreadsheets.values.append({
+  const result = await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
     range: 'Calls!A:N',
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [[
         row.date, row.time, row.account, row.contactName, row.contactPhone,
-        row.sdr, '', row.outcome, row.notes, '',
+        row.sdr, row.duration ?? '', row.outcome, row.notes, row.zohoCallId ?? '',
         row.followUpDate, '', '', '',
       ]],
     },
+  })
+
+  // Parse row number from updatedRange e.g. "Calls!A5:N5" → 5
+  const match = result.data.updates?.updatedRange?.match(/!A(\d+)/)
+  return match ? parseInt(match[1]) : -1
+}
+
+export async function updateCallRowZohoId(rowNum: number, zohoCallId: string): Promise<void> {
+  const sheets = getSheets()
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Calls!J${rowNum}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[zohoCallId]] },
+  })
+}
+
+export async function callExistsInSheetByZohoId(zohoCallId: string): Promise<boolean> {
+  const sheets = getSheets()
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Calls!J:J',
+    })
+    return (res.data.values ?? []).some(r => r[0] === zohoCallId)
+  } catch {
+    return false
+  }
+}
+
+const CI_EMAIL_COL   = 4   // E — Email (lookup key)
+const CI_TOTAL_COL   = 12  // M — Total Calls
+const CI_CONNECT_COL = 13  // N — Calls Connected
+const CI_RATE_COL    = 14  // O — Connection Rate %
+const CI_LASTD_COL   = 17  // R — Last Call Date
+const CI_LASTO_COL   = 18  // S — Last Call Outcome
+const CI_HIST_COL    = 20  // U — Call History (JSON)
+const CI_UPDAT_COL   = 23  // X — Updated At
+
+const CI_CONNECTED_OUTCOMES = new Set([
+  'Meeting Scheduled', 'Interested', 'Not Interested', 'Call Back Later', 'Send More Info',
+  'meeting booked', 'connected', 'not interested', 'callback later', 'send more info',
+])
+
+export async function upsertContactIntelRow(email: string, call: {
+  date: string
+  time: string
+  outcome: string
+  notes: string
+  duration: string
+  zohoCallId: string
+}): Promise<void> {
+  if (!email) return
+  const sheets = getSheets()
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Contact Intelligence!A:X',
+  })
+  const rows = res.data.values ?? []
+  // Row index 0 = headers; data rows start at index 1 (sheet row 2)
+  const rowIdx = rows.findIndex((r, i) => i > 0 && (r[CI_EMAIL_COL] ?? '').toLowerCase() === email.toLowerCase())
+  if (rowIdx === -1) return  // contact not in Contact Intelligence — skip silently
+
+  const row = rows[rowIdx]
+  const sheetRowNum = rowIdx + 1  // 1-indexed
+
+  // Append to call history JSON
+  let history: unknown[] = []
+  try { history = JSON.parse(row[CI_HIST_COL] ?? '[]') } catch { /* keep empty */ }
+  history.push({ date: call.date, time: call.time, outcome: call.outcome, notes: call.notes, duration: call.duration, zohoCallId: call.zohoCallId })
+
+  const totalCalls = (Number(row[CI_TOTAL_COL]) || 0) + 1
+  const connected  = (Number(row[CI_CONNECT_COL]) || 0) + (CI_CONNECTED_OUTCOMES.has(call.outcome) ? 1 : 0)
+  const rate       = Math.round((connected / totalCalls) * 100)
+
+  const existingLastDate = String(row[CI_LASTD_COL] ?? '')
+  const isNewer = !existingLastDate || call.date >= existingLastDate
+
+  const now = new Date().toISOString()
+  const updates: { range: string; values: unknown[][] }[] = [
+    { range: `Contact Intelligence!M${sheetRowNum}`, values: [[totalCalls]] },
+    { range: `Contact Intelligence!N${sheetRowNum}`, values: [[connected]] },
+    { range: `Contact Intelligence!O${sheetRowNum}`, values: [[rate]] },
+    { range: `Contact Intelligence!U${sheetRowNum}`, values: [[JSON.stringify(history)]] },
+    { range: `Contact Intelligence!X${sheetRowNum}`, values: [[now]] },
+  ]
+  if (isNewer) {
+    updates.push({ range: `Contact Intelligence!R${sheetRowNum}`, values: [[call.date]] })
+    updates.push({ range: `Contact Intelligence!S${sheetRowNum}`, values: [[call.outcome]] })
+  }
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
   })
 }
 
