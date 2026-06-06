@@ -87,6 +87,18 @@ const mhCommand = new SlashCommandBuilder()
                 { name: 'Mahesh',   value: 'Mahesh'   },
               )
           )
+          .addStringOption(opt =>
+            opt.setName('account')
+              .setDescription('Link to a deal/account (optional)')
+              .setRequired(false)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
+            opt.setName('contact')
+              .setDescription('Link to a contact (optional)')
+              .setRequired(false)
+              .setAutocomplete(true)
+          )
       )
       .addSubcommand(sub =>
         sub

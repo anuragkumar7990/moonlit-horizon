@@ -2,7 +2,7 @@
 
 > The Test Tribe · Corporate Training Business  
 > Owner: Anurag Kumar (anurag@thetesttribe.com)  
-> Last updated: 2026-06-05
+> Last updated: 2026-06-06
 
 ---
 
@@ -25,6 +25,47 @@
 15. [Testing Strategy & Failure Recovery](#15-testing-strategy--failure-recovery)
 16. [Token Optimisation Guardrails](#16-token-optimisation-guardrails)
 17. [Build Sequence & Timeline](#17-build-sequence--timeline)
+18. [Zoho CRM Data Cleanup](#18-zoho-crm-data-cleanup)
+
+---
+
+## 18. Zoho CRM Data Cleanup
+
+> **Status**: Must action before Phase 1 UI build. These data gaps directly affect P0 task accuracy and dashboard metrics.
+
+### Deals to move to Lost
+
+The following deals are dropped and must be moved to **Lost** stage in Zoho CRM:
+
+| Account | Current Stage | Action |
+|---|---|---|
+| Qualizeal | Discovery Call Conducted | Move to Lost |
+| Vivriti Capital | Discovery Call Conducted | Move to Lost |
+
+### Deals with wrong stage
+
+| Account | Current Stage | Correct Stage | Notes |
+|---|---|---|---|
+| Betterworks - AI in PM | Negotiation | Outline Meeting Conducted | Outline + proposal still to be shared; not in negotiation yet |
+
+### Deals missing Contact Name
+
+Most active deals have no `Contact_Name` linked in Zoho. This causes P0 tasks to show `—` for the contact column. For every active deal, link the primary contact in Zoho CRM (Deals → Contact Name field).
+
+Priority accounts to fix first (active pipeline):
+- Aspire Systems, Excelsoft, RxLogix (ISO 42001), Betterworks - AI in PM *(Negotiation)*
+- Autodesk, Gyan, Prolifics, Dataction Analytics, Hewlett Packard, Motorola, Credit Saison, Get Well, Caught Before Ship Pvt Ltd, Bloomreach, CRISIL *(Discovery Call Conducted)*
+- PyxTech, Celestial Systems, Applied Data Finance, Apex IT, Infiniti Software Solutions, Conga, RxLogix - Assignment Creation *(Outline Meeting Conducted)*
+
+### Deals with outdated closing dates
+
+Many active deals have closing dates in the past (they trigger the "overdue closing date" P0 task every day). Update closing dates in Zoho CRM to reflect realistic expected close dates.
+
+### Account Intelligence gaps (to be backfilled)
+
+The following accounts have had outlines/proposals already shared but the intelligence is not captured anywhere. Once the Account Intelligence module is built (Phase 4), these should be the first batch to backfill:
+
+Autodesk, Gyan, Prolifics, Dataction Analytics, Credit Saison, Get Well, Caught Before Ship Pvt Ltd, Bloomreach, CRISIL, PyxTech, Celestial Systems, Applied Data Finance, Apex IT, Infiniti Software Solutions, Conga, RxLogix - Assignment Creation.
 
 ---
 

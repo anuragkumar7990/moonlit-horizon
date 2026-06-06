@@ -10,14 +10,14 @@ const CLOSED_STAGES = new Set(['won', 'lost'])
 // For each active stage: how many days without a logged call before it becomes P0,
 // and how often the task should recur (so it doesn't spam daily).
 const STAGE_RULES = [
-  { match: 'payment pending',           taskPrefix: 'Chase payment',     staleDays: 2, repeatDays: 2, assignedTo: 'Anurag'   },
-  { match: 'negotiation',               taskPrefix: 'Follow up on deal', staleDays: 3, repeatDays: 3, assignedTo: 'Anurag'   },
-  { match: 'outline meeting conducted', taskPrefix: 'Send proposal',     staleDays: 5, repeatDays: 5, assignedTo: 'Anurag'   },
-  { match: 'discovery call conducted',  taskPrefix: 'Book L2 meeting',   staleDays: 5, repeatDays: 5, assignedTo: 'Tanishq'  },
+  { match: 'payment pending',           taskPrefix: 'Chase payment',     staleDays: 2, repeatDays: 2, assignedTo: 'Tanishq' },
+  { match: 'negotiation',               taskPrefix: 'Follow up on deal', staleDays: 3, repeatDays: 3, assignedTo: 'Tanishq' },
+  { match: 'outline meeting conducted', taskPrefix: 'Send proposal',     staleDays: 5, repeatDays: 5, assignedTo: 'Anurag'  },
+  { match: 'discovery call conducted',  taskPrefix: 'Book L2 meeting',   staleDays: 5, repeatDays: 5, assignedTo: 'Anurag'  },
 ] as const
 
 interface P0Task {
-  category: 'no-notes' | 'overdue-closing' | 'overdue-callback' | 'stale-deal'
+  category: 'no-notes' | 'overdue-closing' | 'overdue-callback' | 'stale-deal' | 'other'
   task: string
   detail: string
   linkedDeal: string
@@ -27,6 +27,7 @@ interface P0Task {
   accountName?: string
   stage?: string
   dealName?: string
+  closingDate?: string
 }
 
 export async function GET() {
@@ -179,6 +180,7 @@ export async function GET() {
       accountName: displayName,
       stage:       d.stage,
       dealName:    d.dealName || '',
+      closingDate: d.closingDate || '',
     })
   }
 
@@ -209,20 +211,24 @@ export async function DELETE() {
 
 // POST — add a manual "Other" P0 task
 export async function POST(req: NextRequest) {
-  const { task, detail, assignedTo } = await req.json()
+  const { task, detail, assignedTo, account, contact } = await req.json()
   if (!task) return NextResponse.json({ error: 'task is required' }, { status: 400 })
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const key   = `other:${today}:${task.toLowerCase().slice(0, 40)}`
 
+  // Build display task text — embed account/contact if provided
+  const suffix = [account, contact].filter(Boolean).join(' / ')
+  const taskText = suffix ? `${task} — ${suffix}` : task
+
   await appendTaskRows([{
     date:       today,
-    task,
+    task:       taskText,
     type:       'P0',
     assignedTo: assignedTo || 'Anurag',
     linkedDeal: key,
     status:     'Open',
   }])
 
-  return NextResponse.json({ ok: true, task, detail: detail || '', assignedTo: assignedTo || 'Anurag' })
+  return NextResponse.json({ ok: true, task: taskText, assignedTo: assignedTo || 'Anurag' })
 }

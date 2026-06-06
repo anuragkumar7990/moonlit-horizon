@@ -149,11 +149,23 @@ const STAGE_GROUP = {
   'outline meeting conducted': 'proposal',
 }
 
+function fmtClosingDate(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yy = String(d.getFullYear()).slice(2)
+    return `${dd}/${mm}/${yy}`
+  } catch { return '' }
+}
+
 function dealLine(n, t) {
   const contact = t.contactName || '—'
   const account = t.accountName || '—'
-  const topic   = t.dealName    || ''
-  return `${n}. ${contact}, ${account} _(${t.stage})_${topic ? ' — ' + topic : ''}`
+  const topic   = t.dealName    || account
+  const date    = fmtClosingDate(t.closingDate)
+  return `${n}. ${contact}, ${account} _(${t.stage})_ — ${topic}${date ? ' · ' + date : ''}`
 }
 
 function buildP0Message(data) {
@@ -181,37 +193,37 @@ function buildP0Message(data) {
   const lines = [`⚠️ **P0 Tasks — ${dateStr}** (${tasks.length} item${tasks.length !== 1 ? 's' : ''})`]
 
   if (followup.length > 0) {
-    lines.push('', `**📞 Follow-up calls to be made (${followup.length})**`)
+    lines.push('', `**📞 Follow-up calls to be made (${followup.length}) — Tanishq**`)
     followup.forEach((t, i) => lines.push(dealLine(i + 1, t)))
   }
 
   if (outline.length > 0) {
-    lines.push('', `**📋 Outlines to be sent (${outline.length})**`)
+    lines.push('', `**📋 Outlines to be sent (${outline.length}) — Anurag**`)
     outline.forEach((t, i) => lines.push(dealLine(i + 1, t)))
   }
 
   if (proposal.length > 0) {
-    lines.push('', `**📄 Proposals to be sent (${proposal.length})**`)
+    lines.push('', `**📄 Proposals to be sent (${proposal.length}) — Anurag**`)
     proposal.forEach((t, i) => lines.push(dealLine(i + 1, t)))
   }
 
   if (callback.length > 0) {
-    lines.push('', `**🔁 Overdue callbacks (${callback.length})**`)
+    lines.push('', `**🔁 Overdue callbacks (${callback.length}) — Tanishq**`)
     callback.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Overdue callback: ', '')} — _${t.detail}_`))
   }
 
   if (noNotes.length > 0) {
-    lines.push('', `**📝 Meeting notes pending (${noNotes.length})**`)
+    lines.push('', `**📝 Meeting notes pending (${noNotes.length}) — Tanishq**`)
     noNotes.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Add follow-up notes for ', '')} — _${t.detail}_`))
   }
 
   if (overdue.length > 0) {
-    lines.push('', `**📅 Overdue closing dates (${overdue.length})**`)
+    lines.push('', `**📅 Overdue closing dates (${overdue.length}) — Anurag**`)
     overdue.forEach((t, i) => lines.push(`${i + 1}. ${t.task.replace('Closing date overdue: ', '')} — _${t.detail}_`))
   }
 
   if (others.length > 0) {
-    lines.push('', `**🗂️ Others (${others.length})**`)
+    lines.push('', `**🗂️ Others (${others.length}) — Anurag**`)
     others.forEach((t, i) => lines.push(`${i + 1}. ${t.task}${t.detail ? ' — _' + t.detail + '_' : ''}`))
   }
 
@@ -562,14 +574,27 @@ client.on('interactionCreate', async interaction => {
     if (group === 'p0' && sub === 'add') {
       await interaction.deferReply({ ephemeral: true })
       const task       = interaction.options.getString('task', true)
-      const detail     = interaction.options.getString('detail')     ?? ''
+      const detail     = interaction.options.getString('detail')      ?? ''
       const assignedTo = interaction.options.getString('assigned_to') ?? 'Anurag'
+      const accountVal = interaction.options.getString('account')     ?? ''
+      const contactVal = interaction.options.getString('contact')     ?? ''
+
+      // Resolve display names from cache
+      const accountName = accountVal
+        ? (cache.accounts.find(a => a.id === accountVal || a.accountName === accountVal)?.accountName ?? accountVal)
+        : ''
+      const contactName = contactVal
+        ? (() => { const c = cache.contacts.find(c => c.id === contactVal); return c ? `${c.firstName} ${c.lastName}`.trim() : contactVal })()
+        : ''
 
       try {
-        await vercelPost('/api/p0-tasks', { task, detail, assignedTo })
-        await interaction.editReply(
-          `✅ **P0 task added**\n**Task:** ${task}${detail ? '\n**Detail:** ' + detail : ''}\n**Assigned to:** ${assignedTo}`
-        )
+        await vercelPost('/api/p0-tasks', { task, detail, assignedTo, account: accountName, contact: contactName })
+        const lines = [`✅ **P0 task added**`, `**Task:** ${task}`]
+        if (accountName) lines.push(`**Account:** ${accountName}`)
+        if (contactName) lines.push(`**Contact:** ${contactName}`)
+        if (detail) lines.push(`**Detail:** ${detail}`)
+        lines.push(`**Assigned to:** ${assignedTo}`)
+        await interaction.editReply(lines.join('\n'))
       } catch (err) {
         console.error('/mh p0 add error:', err)
         await interaction.editReply(`❌ Failed to add task: ${err.message}`)
