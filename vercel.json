@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/intel-triggers/gmail/renew",
+      "schedule": "0 2 * * 1"
+    }
+  ]
+}
