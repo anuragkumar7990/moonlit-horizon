@@ -67,6 +67,21 @@ const mhCommand = new SlashCommandBuilder()
           .setName('call')
           .setDescription('Log a call you just made')
           .addStringOption(opt =>
+            opt.setName('type')
+              .setDescription('Are you calling a prospect (cold lead) or an existing contact?')
+              .setRequired(true)
+              .addChoices(
+                { name: '👤 Prospect — cold lead',        value: 'prospect' },
+                { name: '🏢 Contact — existing client',   value: 'contact'  },
+              )
+          )
+          .addStringOption(opt =>
+            opt.setName('name')
+              .setDescription('Name — select type first, then search here')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption(opt =>
             opt.setName('outcome')
               .setDescription('How did the call go?')
               .setRequired(true)
@@ -83,14 +98,8 @@ const mhCommand = new SlashCommandBuilder()
               )
           )
           .addStringOption(opt =>
-            opt.setName('prospect')
-              .setDescription('Cold lead — search by name or company (from Zoho Leads)')
-              .setRequired(false)
-              .setAutocomplete(true)
-          )
-          .addStringOption(opt =>
-            opt.setName('contact')
-              .setDescription('Existing client contact — search by name (from Zoho Contacts)')
+            opt.setName('account')
+              .setDescription('Company / account name (auto-filled, can override)')
               .setRequired(false)
               .setAutocomplete(true)
           )

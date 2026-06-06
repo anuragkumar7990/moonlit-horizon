@@ -84,19 +84,61 @@ client.on('interactionCreate', async interaction => {
     const query = focused.value.toLowerCase()
 
     try {
-      // /mh log call — prospect autocomplete (leads by person name or company)
-      if (interaction.commandName === 'mh' && focused.name === 'prospect') {
-        const choices = cache.leads
-          .filter(l => {
-            const full = `${l.firstName} ${l.lastName}`.toLowerCase()
-            const company = (l.company || '').toLowerCase()
-            return full.includes(query) || company.includes(query) || (l.email || '').toLowerCase().includes(query)
-          })
+      // /mh log call — name autocomplete (searches leads or contacts based on selected type)
+      if (interaction.commandName === 'mh' && focused.name === 'name') {
+        const type = interaction.options.getString('type') // may be null if not yet selected
+
+        if (!type || type === 'prospect') {
+          const leadChoices = cache.leads
+            .filter(l => {
+              const full = `${l.firstName} ${l.lastName}`.toLowerCase()
+              const company = (l.company || '').toLowerCase()
+              return full.includes(query) || company.includes(query)
+            })
+            .slice(0, type ? 25 : 12)
+            .map(l => ({
+              name: `👤 ${l.firstName} ${l.lastName}${l.company ? ' — ' + l.company : ''}`.trim(),
+              value: `prospect:${l.id}`,
+            }))
+          if (type === 'prospect') return interaction.respond(leadChoices)
+
+          // No type selected yet — show both lists
+          const contactChoices = cache.contacts
+            .filter(c => {
+              const full = `${c.firstName} ${c.lastName}`.toLowerCase()
+              return full.includes(query) || (c.accountName || '').toLowerCase().includes(query)
+            })
+            .slice(0, 12)
+            .map(c => ({
+              name: `🏢 ${c.firstName} ${c.lastName}${c.accountName ? ' — ' + c.accountName : ''}`.trim(),
+              value: `contact:${c.id}`,
+            }))
+          return interaction.respond([...leadChoices, ...contactChoices].slice(0, 25))
+        }
+
+        if (type === 'contact') {
+          const choices = cache.contacts
+            .filter(c => {
+              const full = `${c.firstName} ${c.lastName}`.toLowerCase()
+              return full.includes(query) || (c.accountName || '').toLowerCase().includes(query)
+            })
+            .slice(0, 25)
+            .map(c => ({
+              name: `🏢 ${c.firstName} ${c.lastName}${c.accountName ? ' — ' + c.accountName : ''}`.trim(),
+              value: `contact:${c.id}`,
+            }))
+          return interaction.respond(choices)
+        }
+
+        return interaction.respond([])
+      }
+
+      // /mh log call — account autocomplete (Zoho Accounts, for override)
+      if (interaction.commandName === 'mh' && focused.name === 'account') {
+        const choices = cache.accounts
+          .filter(a => a.accountName.toLowerCase().includes(query))
           .slice(0, 25)
-          .map(l => ({
-            name: `${l.firstName} ${l.lastName}${l.company ? ' — ' + l.company : ''}`.trim(),
-            value: l.id,
-          }))
+          .map(a => ({ name: a.accountName, value: a.accountName }))
         return interaction.respond(choices)
       }
 
@@ -276,40 +318,42 @@ client.on('interactionCreate', async interaction => {
     if (group === 'log' && sub === 'call') {
       await interaction.deferReply()
 
-      const prospectId  = interaction.options.getString('prospect')  ?? ''
-      const contactId   = interaction.options.getString('contact')   ?? ''
+      const nameValue   = interaction.options.getString('name', true)
       const outcome     = interaction.options.getString('outcome', true)
+      const accountOvr  = interaction.options.getString('account')   ?? ''
       const phone       = interaction.options.getString('phone')     ?? ''
       const notes       = interaction.options.getString('notes')     ?? ''
       const followUpRaw = interaction.options.getString('follow_up') ?? ''
-
-      if (!prospectId && !contactId) {
-        return interaction.editReply('❌ Select either a **prospect** (cold lead) or a **contact** (existing client) — at least one is required.')
-      }
 
       if (followUpRaw && !/^\d{4}-\d{2}-\d{2}$/.test(followUpRaw)) {
         return interaction.editReply('❌ Follow-up date must be in `YYYY-MM-DD` format, e.g. `2026-06-09`')
       }
 
-      let account = ''
+      // Decode name value — format is "prospect:<id>" or "contact:<id>"
+      const colonIdx  = nameValue.indexOf(':')
+      const nameType  = colonIdx !== -1 ? nameValue.slice(0, colonIdx) : ''
+      const nameId    = colonIdx !== -1 ? nameValue.slice(colonIdx + 1) : ''
+
+      let account = accountOvr
       let contactName = ''
       let contactPhone = phone
 
-      if (prospectId) {
-        const lead = cache.leads.find(l => l.id === prospectId)
+      if (nameType === 'prospect') {
+        const lead = cache.leads.find(l => l.id === nameId)
         if (lead) {
-          account = lead.company || `${lead.firstName} ${lead.lastName}`.trim()
           contactName = `${lead.firstName} ${lead.lastName}`.trim()
+          if (!account) account = lead.company || contactName
         }
-      }
-
-      if (contactId) {
-        const ct = cache.contacts.find(c => c.id === contactId)
+      } else if (nameType === 'contact') {
+        const ct = cache.contacts.find(c => c.id === nameId)
         if (ct) {
-          if (!account) account = ct.accountName || `${ct.firstName} ${ct.lastName}`.trim()
-          if (!contactName) contactName = `${ct.firstName} ${ct.lastName}`.trim()
+          contactName = `${ct.firstName} ${ct.lastName}`.trim()
+          if (!account) account = ct.accountName || contactName
           if (!contactPhone) contactPhone = ct.phone || ''
         }
+      } else {
+        // Typed manually (no autocomplete selection) — use raw value as contact name
+        contactName = nameValue
       }
 
       const sdr = interaction.user.displayName || interaction.user.username
@@ -326,11 +370,13 @@ client.on('interactionCreate', async interaction => {
         })
 
         const outcomeLabel = OUTCOME_LABELS[outcome] ?? outcome
+        const typeLabel = nameType === 'prospect' ? '👤 Prospect' : nameType === 'contact' ? '🏢 Contact' : ''
         const lines = [
           `📞 **Call logged** by ${sdr}`,
+          `**${typeLabel || 'Person'}:** ${contactName || '—'}`,
           `**Account:** ${account || '—'}`,
         ]
-        if (contactName) lines.push(`**Contact:** ${contactName}${contactPhone ? ` · ${contactPhone}` : ''}`)
+        if (contactPhone) lines.push(`**Phone:** ${contactPhone}`)
         lines.push(`**Outcome:** ${outcomeLabel}`)
         if (followUpRaw) lines.push(`**Follow-up:** ${followUpRaw}`)
         if (notes) lines.push(`**Notes:** ${notes}`)
