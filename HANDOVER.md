@@ -1,6 +1,6 @@
 # Moonlit Horizon — Handover Document
-**Last updated:** 2026-06-08 (session 2)  
-**Latest commit:** `7161ae6` (main)  
+**Last updated:** 2026-06-09  
+**Latest commit:** `8c3d1ad` (main)  
 **Live URL:** https://moonlit-horizon.vercel.app  
 **VPS:** 72.61.126.30 (root) · pm2 process: `moonlit-bot`  
 **Repo:** github.com/anuragkumar7990/moonlit-horizon
@@ -20,6 +20,32 @@
 | **Phase 4 — Account Intelligence** | ✅ Complete | Email/Circleback/Call/Notes intel, Cumulative Summary, Last Contact Date, event-driven triggers |
 | **Phase 5 — Contact Intelligence** | ✅ Complete | 2,372 contacts from DCT v1, Zoho-matched, historical meetings backfilled |
 | **Phase 5b — Gmail Push** | ✅ Complete | Gmail Watch API + Pub/Sub → auto Email Intel on new emails |
+| **Phase 6 — Dashboard Modules** | 🔄 In Progress | Tab layout live; Calling module done; Prospect DB / Account Intel / Contact Intel / Payments pending |
+
+---
+
+## 2. Session Summary (2026-06-09)
+
+### Homepage Tab Layout + Calling Module
+
+Refactored the homepage from a single Master Tracker view into a **tab-based layout**. Each module gets its own tab; new modules plug in by adding one entry to the `TABS` array in `HomeTabs`.
+
+**Architecture changes:**
+- `components/HomeTabs.tsx` — new client wrapper; renders tab bar + routes to active module
+- `components/CallingModule.tsx` — new Calling tab (see below)
+- `app/page.tsx` — now renders `HomeTabs` instead of `MasterTrackerGrid` directly; passes `rawCalls` prop
+- `components/PersonSelector.tsx` — changed from initials-in-circles to **named rectangles** (Mahesh / Ashutosh / Anurag / Tanishq); now centred above the tab bar in `HomeTabs` rather than inside each module
+
+**Calling module (`/` → Calling tab):**
+- Period toggle: Daily | Weekly | Monthly
+- 4 stat cards: Dialled, Connected, Meetings Booked, Connection Rate %
+- Outcome breakdown: colour-coded horizontal bars per outcome (Meeting Scheduled = green, Call Back Later = blue, Send More Info = purple, Not Interested = amber, RNR/No Answer = grey, Wrong Number = red)
+- SDR Performance table: per-SDR dialled / connected / rate (green ≥ 50%, amber ≥ 30%)
+- Calls log table: search by account/contact/SDR, filter by outcome, newest-first, capped at 150 rows
+
+Data source: same merged Calls array already fetched on homepage (Sheets + Zoho, deduped by date+account) — no extra API call on tab switch.
+
+**Commits:** `4fae730` (module), `8c3d1ad` (person selector + layout)
 
 ---
 
@@ -414,13 +440,19 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 ### ~~Priority 1 — Gmail Push Notifications~~ ✅ Done (2026-06-08)
 Completed. See Session Summary 2026-06-08 session 2 for full details.
 
-### Priority 2 — Contact Intelligence Dashboard Panel
-**Effort**: Full session  
-Build a "Contact Intelligence" panel on the dashboard:
-- Search/filter by name, company, L1 source, SDR, last outcome
-- Shows call history timeline per contact
-- Link to Zoho Lead/Contact record
-- Filter: Callback Later + Send More Info contacts for priority follow-up
+### ~~Priority — Dashboard Tab Layout + Calling Module~~ ✅ Done (2026-06-09)
+Completed. See Session Summary 2026-06-09 for full details.
+
+### Priority 2 — Remaining Dashboard Modules (tab-by-tab)
+**Effort**: ~1 session per module  
+All plug into `HomeTabs.tsx` via a new entry in the `TABS` array + a new module component.
+
+| Module | Tab label | Key data | Key views |
+|---|---|---|---|
+| Prospect Database | Prospects | `Prospects` Sheets tab | Stock count, weeks-of-stock by source, never-called pool |
+| Account Intelligence | Accounts | `Account Intelligence` sheet (cols A–L) | Searchable table, status badges, last contact date, cumulative summary |
+| Contact Intelligence | Contacts | `Contact Intelligence` sheet (cols A–W) | Search/filter 2,372 contacts, call history timeline, Zoho links |
+| Payments | Payments | `Payments` Sheets tab | Invoiced/received/outstanding, per-deal status, overdue badges |
 
 ### Priority 3 — Objective auto-population
 **Effort**: 1–2 hours  
