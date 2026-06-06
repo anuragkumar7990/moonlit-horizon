@@ -201,6 +201,16 @@ export async function GET() {
   })
 }
 
+// DELETE — wipe all Tasks sheet data rows (test utility, keeps header)
+export async function DELETE() {
+  const sheets = getSheets()
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Tasks!A2:G',
+  })
+  return NextResponse.json({ ok: true })
+}
+
 // POST — add a manual "Other" P0 task
 export async function POST(req: NextRequest) {
   const { task, detail, assignedTo } = await req.json()
