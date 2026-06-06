@@ -1,5 +1,6 @@
 require('dotenv').config()
 const { Client, GatewayIntentBits, InteractionType } = require('discord.js')
+const cron = require('node-cron')
 
 const VERCEL_URL = process.env.VERCEL_URL || 'https://moonlit-horizon.vercel.app'
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || 'thetesttribe'
@@ -71,10 +72,100 @@ async function refreshCache() {
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 
+// ── Stats digest formatter ───────────────────────────────────────
+function fmtStat(achieved, target) {
+  if (target == null) return `**${achieved}**`
+  return `**${achieved}** / ${target}`
+}
+
+function fmtAmount(n) {
+  if (!n) return '₹0'
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`
+  return `₹${n.toLocaleString('en-IN')}`
+}
+
+function buildDigestMessage(data) {
+  const { tanishq, meetingsData, todayMeetings, leads, funnel } = data
+
+  const d   = tanishq.daily
+  const w   = tanishq.weekly
+  const mw  = meetingsData.weekly
+  const mwt = meetingsData.targets.weekly
+
+  // Date header in IST
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  })
+
+  // Connection rate today
+  const connRate = d.dialled.achieved > 0
+    ? ` (${Math.round((d.connected.achieved / d.dialled.achieved) * 100)}%)`
+    : ''
+
+  const lines = [
+    `📊 **Daily Stats — ${dateStr}**`,
+    '',
+    `**📞 Calls Today**`,
+    `Dialled: ${fmtStat(d.dialled.achieved, d.dialled.target)} · Connected: ${fmtStat(d.connected.achieved, d.connected.target)}${connRate} · Booked: ${fmtStat(d.meetingsBooked.achieved, d.meetingsBooked.target)}`,
+    '',
+    `**📅 This Week**`,
+    `Calls: **${w.dialled.achieved}** dialled / ${w.dialled.target ?? '—'} · **${w.connected.achieved}** connected / ${w.connected.target ?? '—'}`,
+    `Meetings: **${mw.l1Booked}** L1 booked / ${mwt.l1Booked ?? '—'} · **${mw.l1Conducted}** L1 conducted / ${mwt.l1Conducted ?? '—'} · **${mw.l2Conducted}** L2`,
+  ]
+
+  if (todayMeetings > 0) {
+    lines.push(`📆 **Meetings today:** ${todayMeetings}`)
+  }
+
+  lines.push(
+    '',
+    `**🔥 Pipeline**`,
+    `🔴 Hot: **${leads.hot}** · 🟡 Warm: **${leads.warm}** · 🔵 Cold: **${leads.cold}** · Total: **${leads.total}**`,
+  )
+
+  if (funnel.stages.length > 0) {
+    const stageStr = funnel.stages
+      .map(s => `${s.stage.replace('Discovery Call', 'DC')}: **${s.count}**`)
+      .join(' · ')
+    lines.push('', `**🔄 Funnel**`, stageStr)
+  }
+
+  if (funnel.won.count > 0 || funnel.lost.count > 0) {
+    lines.push(`✅ Won: **${funnel.won.count}** (${fmtAmount(funnel.won.amount)}) · ❌ Lost: **${funnel.lost.count}**`)
+  }
+
+  return lines.join('\n')
+}
+
+async function postDailyDigest() {
+  try {
+    const data = await vercelGet('/api/stats-digest')
+    const message = buildDigestMessage(data)
+    const statsChannel = client.channels.cache.find(c => c.name === 'stats')
+    if (!statsChannel) {
+      console.error('[digest] #stats channel not found')
+      return
+    }
+    await statsChannel.send(message)
+    console.log('[digest] Daily stats posted to #stats')
+  } catch (err) {
+    console.error('[digest] Failed to post daily stats:', err.message)
+  }
+}
+
 client.on('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`)
   refreshCache()
   setInterval(refreshCache, 5 * 60 * 1000)
+
+  // Daily digest at 9:00am IST = 3:30am UTC
+  cron.schedule('30 3 * * *', () => {
+    console.log('[cron] Firing daily digest...')
+    postDailyDigest()
+  }, { timezone: 'UTC' })
+
+  console.log('📅 Daily digest scheduled for 9:00am IST (3:30am UTC)')
 })
 
 client.on('interactionCreate', async interaction => {
