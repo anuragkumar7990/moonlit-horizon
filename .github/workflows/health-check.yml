@@ -3,141 +3,236 @@ name: Dashboard Health Check
 on:
   schedule:
     - cron: '0 */6 * * *'   # every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC
-  workflow_dispatch:          # allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   health-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
-      - name: Run endpoint checks
-        id: checks
+      - name: Run checks, self-heal, and report
         env:
           BASE_URL: https://moonlit-horizon.vercel.app
-          # Stored as GitHub Secret: value is "Basic <base64(admin:YOUR_PASSWORD)>"
           AUTH_HEADER: ${{ secrets.DASHBOARD_AUTH_HEADER }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
-          set +e   # don't exit on first failure — collect all results
+          set +e
 
-          PASS=0
-          FAIL=0
-          DETAILS=""
+          # ── Helpers ───────────────────────────────────────────────────────────
 
-          check() {
-            local label="$1"
-            local url="$2"
-            local extra_check="$3"   # optional jq expression that must return "true"
+          IST() { TZ='Asia/Kolkata' date '+%d %b %Y, %I:%M %p IST'; }
+          NOW() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 
-            HTTP=$(curl -s -o /tmp/body.json -w "%{http_code}" \
+          # Returns: "OK|<http_code>" or "FAIL|<http_code>|<reason>"
+          probe() {
+            local url="$1" jq_check="$2"
+            local http body reason
+
+            body=$(curl -s -w "\n__HTTP__%{http_code}" \
               -H "Authorization: $AUTH_HEADER" \
               --connect-timeout 10 --max-time 20 \
-              "$url")
+              "$url" 2>&1)
 
-            if [ "$HTTP" -ge 200 ] && [ "$HTTP" -lt 300 ]; then
-              # Optionally validate JSON body
-              if [ -n "$extra_check" ]; then
-                RESULT=$(jq -r "$extra_check" /tmp/body.json 2>/dev/null)
-                if [ "$RESULT" = "true" ]; then
-                  PASS=$((PASS + 1))
-                  echo "✅ $label ($HTTP)"
-                else
-                  FAIL=$((FAIL + 1))
-                  SNIPPET=$(cat /tmp/body.json | head -c 200)
-                  DETAILS="$DETAILS\n• **$label** — HTTP $HTTP but body check failed: \`$SNIPPET\`"
-                  echo "❌ $label ($HTTP) — body check failed"
-                fi
-              else
-                PASS=$((PASS + 1))
-                echo "✅ $label ($HTTP)"
-              fi
-            else
-              FAIL=$((FAIL + 1))
-              SNIPPET=$(cat /tmp/body.json 2>/dev/null | head -c 200)
-              DETAILS="$DETAILS\n• **$label** — HTTP $HTTP: \`$SNIPPET\`"
-              echo "❌ $label ($HTTP)"
+            http=$(echo "$body" | tail -1 | sed 's/__HTTP__//')
+            body=$(echo "$body" | head -n -1)
+
+            if ! [[ "$http" =~ ^[0-9]+$ ]]; then
+              echo "FAIL|000|Connection error: $http"
+              return
             fi
+
+            if [ "$http" -lt 200 ] || [ "$http" -ge 300 ]; then
+              snippet=$(echo "$body" | head -c 120 | tr '\n' ' ')
+              echo "FAIL|$http|$snippet"
+              return
+            fi
+
+            if [ -n "$jq_check" ]; then
+              result=$(echo "$body" | jq -r "$jq_check" 2>/dev/null)
+              if [ "$result" != "true" ]; then
+                snippet=$(echo "$body" | head -c 160 | tr '\n' ' ')
+                echo "FAIL|$http|Body missing expected field — $snippet"
+                return
+              fi
+            fi
+
+            echo "OK|$http"
           }
 
-          # ── Endpoint checks ───────────────────────────────────────────────────
-          check "Home page"         "$BASE_URL/"
-          check "Prospect Stats"    "$BASE_URL/api/prospect-stats"    'has("bySource")'
-          check "Supply API"        "$BASE_URL/api/supply"            'has("pipeline")'
-          check "Targets API"       "$BASE_URL/api/targets"           'has("targets")'
-          check "Luma Events API"   "$BASE_URL/api/luma-events"       'has("configured")'
+          # Run all 5 probes; writes results into parallel arrays
+          declare -a LABELS URLS CHECKS
+          LABELS=("Home page" "Prospect Stats" "Supply API" "Targets API" "Luma Events API")
+          URLS=(
+            "$BASE_URL/"
+            "$BASE_URL/api/prospect-stats"
+            "$BASE_URL/api/supply"
+            "$BASE_URL/api/targets"
+            "$BASE_URL/api/luma-events"
+          )
+          CHECKS=(
+            ""
+            'has("bySource")'
+            'has("pipeline")'
+            'has("targets")'
+            'has("configured")'
+          )
 
-          # ── Write outputs ─────────────────────────────────────────────────────
-          echo "pass=$PASS"    >> "$GITHUB_OUTPUT"
-          echo "fail=$FAIL"    >> "$GITHUB_OUTPUT"
-          # multiline output needs special encoding
-          DETAILS_ENCODED=$(printf '%s' "$DETAILS" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))")
-          echo "details=$DETAILS_ENCODED" >> "$GITHUB_OUTPUT"
+          run_all_probes() {
+            local tag="$1"      # "initial" | "retry" | "post-heal"
+            local -n res_ref=$2 # nameref to results array
 
-          if [ "$FAIL" -gt 0 ]; then
-            exit 1
+            echo "=== $tag probes at $(IST) ==="
+            for i in "${!LABELS[@]}"; do
+              result=$(probe "${URLS[$i]}" "${CHECKS[$i]}")
+              res_ref[$i]="$result"
+              if [[ "$result" == OK* ]]; then
+                echo "  ✅ ${LABELS[$i]} — $result"
+              else
+                echo "  ❌ ${LABELS[$i]} — $result"
+              fi
+            done
+          }
+
+          count_failures() {
+            local -n arr=$1
+            local n=0
+            for r in "${arr[@]}"; do [[ "$r" == FAIL* ]] && n=$((n+1)); done
+            echo $n
+          }
+
+          # ── Phase 1: Initial check ─────────────────────────────────────────────
+          declare -a R1
+          run_all_probes "INITIAL" R1
+          FAIL1=$(count_failures R1)
+
+          HEAL_LOG=""
+          declare -a R_FINAL
+          HEAL_TRIGGERED=false
+          HEAL_STATUS="no action needed"
+
+          if [ "$FAIL1" -eq 0 ]; then
+            R_FINAL=("${R1[@]}")
+            FINAL_FAILS=0
+          else
+            # ── Phase 2: Wait 20s, retry (rule out transient blips) ────────────
+            HEAL_LOG="${HEAL_LOG}**[$(IST)]** $FAIL1 endpoint(s) failed on initial check. Waiting 20s before retry…\n"
+            echo "Sleeping 20s before retry..."
+            sleep 20
+
+            declare -a R2
+            run_all_probes "RETRY" R2
+            FAIL2=$(count_failures R2)
+            HEAL_LOG="${HEAL_LOG}**[$(IST)]** Retry complete — $FAIL2 still failing.\n"
+
+            if [ "$FAIL2" -eq 0 ]; then
+              R_FINAL=("${R2[@]}")
+              FINAL_FAILS=0
+              HEAL_STATUS="resolved on retry (was transient)"
+            else
+              # ── Phase 3: Trigger Vercel redeploy ────────────────────────────
+              if [ -n "$VERCEL_DEPLOY_HOOK" ]; then
+                HEAL_LOG="${HEAL_LOG}**[$(IST)]** Triggering Vercel redeploy via deploy hook…\n"
+                echo "Triggering Vercel deploy hook..."
+                DEPLOY_RESP=$(curl -s -X POST "$VERCEL_DEPLOY_HOOK")
+                DEPLOY_ID=$(echo "$DEPLOY_RESP" | jq -r '.job.id // .id // "unknown"' 2>/dev/null)
+                HEAL_LOG="${HEAL_LOG}**[$(IST)]** Deploy triggered — job \`$DEPLOY_ID\`. Waiting 90s for deployment…\n"
+                echo "Deploy triggered (id: $DEPLOY_ID). Sleeping 90s..."
+                HEAL_TRIGGERED=true
+                sleep 90
+
+                # ── Phase 4: Verify after redeploy ──────────────────────────
+                declare -a R3
+                run_all_probes "POST-HEAL" R3
+                FAIL3=$(count_failures R3)
+                HEAL_LOG="${HEAL_LOG}**[$(IST)]** Post-redeploy check — $FAIL3 still failing.\n"
+                R_FINAL=("${R3[@]}")
+                FINAL_FAILS=$FAIL3
+
+                if [ "$FAIL3" -eq 0 ]; then
+                  HEAL_STATUS="✅ redeploy fixed all issues"
+                else
+                  HEAL_STATUS="⚠️ redeploy did NOT resolve all failures — manual review needed"
+                fi
+              else
+                # No deploy hook configured — just use retry results
+                HEAL_LOG="${HEAL_LOG}**[$(IST)]** No VERCEL_DEPLOY_HOOK secret configured — skipping redeploy.\n"
+                R_FINAL=("${R2[@]}")
+                FINAL_FAILS=$FAIL2
+                HEAL_STATUS="could not auto-heal — deploy hook not configured"
+              fi
+            fi
           fi
 
-      - name: Notify Discord — all good
-        if: success()
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          PASS: ${{ steps.checks.outputs.pass }}
-        run: |
-          NOW=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          IST=$(TZ='Asia/Kolkata' date '+%d %b %Y, %I:%M %p IST')
-          PAYLOAD=$(jq -n \
-            --arg ts "$NOW" \
-            --arg ist "$IST" \
-            --argjson pass "$PASS" \
+          # ── Build Discord embed ────────────────────────────────────────────────
+
+          # Build per-endpoint result lines
+          ENDPOINT_LINES=""
+          for i in "${!LABELS[@]}"; do
+            r="${R_FINAL[$i]}"
+            http=$(echo "$r" | cut -d'|' -f2)
+            if [[ "$r" == OK* ]]; then
+              ENDPOINT_LINES="${ENDPOINT_LINES}✅ **${LABELS[$i]}** — HTTP $http\n"
+            else
+              reason=$(echo "$r" | cut -d'|' -f3-)
+              ENDPOINT_LINES="${ENDPOINT_LINES}❌ **${LABELS[$i]}** — HTTP $http: \`$reason\`\n"
+            fi
+          done
+
+          if [ "$FINAL_FAILS" -eq 0 ] && [ "$FAIL1" -eq 0 ]; then
+            # All clear on first check
+            COLOR=3066993   # green
+            TITLE="✅ Dashboard Health Check — All Systems Go"
+            SUMMARY="All **5 endpoints** responded correctly on first check."
+          elif [ "$FINAL_FAILS" -eq 0 ]; then
+            # Healed
+            COLOR=16776960  # yellow/gold
+            TITLE="⚡ Dashboard Health Check — Healed"
+            SUMMARY="Initial failures detected and resolved. Heal status: $HEAL_STATUS"
+          else
+            # Still broken
+            COLOR=15158332  # red
+            TITLE="🚨 Dashboard Health Check — Action Required"
+            SUMMARY="**$FINAL_FAILS of 5 endpoints** still failing after self-heal attempt. Heal status: $HEAL_STATUS"
+          fi
+
+          RUN_URL="https://github.com/anuragkumar7990/moonlit-horizon/actions/runs/$GITHUB_RUN_ID"
+
+          # Compose full description
+          DESC="$SUMMARY\n\n**Endpoint Results:**\n$ENDPOINT_LINES"
+          if [ -n "$HEAL_LOG" ]; then
+            DESC="${DESC}\n**Self-Heal Log:**\n$HEAL_LOG"
+          fi
+
+          # Truncate if too long for Discord (4096 char limit)
+          DESC=$(echo -e "$DESC" | head -c 3800)
+
+          jq -n \
+            --arg title "$TITLE" \
+            --argjson color "$COLOR" \
+            --arg desc "$DESC" \
+            --arg ist "$(IST)" \
+            --arg run_url "$RUN_URL" \
+            --arg ts "$(NOW)" \
             '{
               embeds: [{
-                title: "✅ Dashboard Health Check — All Systems Go",
-                color: 3066993,
-                description: ("All **" + ($pass | tostring) + " endpoints** responded correctly."),
-                fields: [
-                  { name: "Checked", value: $ist, inline: true },
-                  { name: "Dashboard", value: "[moonlit-horizon.vercel.app](https://moonlit-horizon.vercel.app)", inline: true }
-                ],
-                footer: { text: "Runs every 6 hours · GitHub Actions" },
-                timestamp: $ts
-              }]
-            }')
-          curl -s -X POST "$DISCORD_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
-
-      - name: Notify Discord — failures
-        if: failure()
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          PASS: ${{ steps.checks.outputs.pass }}
-          FAIL: ${{ steps.checks.outputs.fail }}
-          DETAILS_ENCODED: ${{ steps.checks.outputs.details }}
-        run: |
-          NOW=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          IST=$(TZ='Asia/Kolkata' date '+%d %b %Y, %I:%M %p IST')
-          DETAILS=$(python3 -c "import sys,urllib.parse; print(urllib.parse.unquote(sys.stdin.read()))" <<< "$DETAILS_ENCODED")
-
-          PAYLOAD=$(jq -n \
-            --arg ts "$NOW" \
-            --arg ist "$IST" \
-            --argjson pass "$PASS" \
-            --argjson fail "$FAIL" \
-            --arg details "$DETAILS" \
-            '{
-              embeds: [{
-                title: "🚨 Dashboard Health Check — Issues Detected",
-                color: 15158332,
-                description: ("**" + ($fail | tostring) + " of " + (($pass + $fail) | tostring) + " endpoints** failed.\n\n" + $details),
+                title: $title,
+                color: $color,
+                description: $desc,
                 fields: [
                   { name: "Checked", value: $ist, inline: true },
                   { name: "Dashboard", value: "[moonlit-horizon.vercel.app](https://moonlit-horizon.vercel.app)", inline: true },
-                  { name: "Action", value: "[View run logs](https://github.com/anuragkumar7990/moonlit-horizon/actions)", inline: false }
+                  { name: "Full Logs", value: ("[View run](" + $run_url + ")"), inline: true }
                 ],
                 footer: { text: "Runs every 6 hours · GitHub Actions" },
                 timestamp: $ts
               }]
-            }')
+            }' > /tmp/discord_payload.json
+
           curl -s -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
+            -d @/tmp/discord_payload.json
+
+          # Exit with failure if still broken (marks GitHub run as failed)
+          exit $FINAL_FAILS
