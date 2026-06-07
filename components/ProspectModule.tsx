@@ -10,10 +10,16 @@ const LVL1_OPTIONS = [
   'Internal Community Data',
 ]
 
+interface L2BreakdownEntry {
+  source: string
+  count: number
+}
+
 interface SourceStat {
   source: string
   count: number
   weeksOfStock: number
+  l2Breakdown?: L2BreakdownEntry[]
 }
 
 interface ProspectStats {
@@ -66,6 +72,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 export default function ProspectModule() {
   const [stats, setStats] = useState<ProspectStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
+  const [expandedL1, setExpandedL1] = useState<Set<string>>(new Set())
 
   // Upload state
   const [file, setFile] = useState<File | null>(null)
@@ -241,31 +248,63 @@ export default function ProspectModule() {
                 const live = stats?.bySource.find(s => s.source === source)
                 const count = statsLoading ? null : (live?.count ?? 0)
                 const weeksOfStock = live?.weeksOfStock ?? 0
+                const hasL2 = (live?.l2Breakdown?.length ?? 0) > 0
+                const expanded = expandedL1.has(source)
                 return (
-                  <tr key={source}>
-                    <td className="py-3 text-mh-text font-medium">{source}</td>
-                    <td className="py-3 text-right text-mh-text">
-                      {count === null ? <span className="text-mh-muted">—</span> : count.toLocaleString()}
-                    </td>
-                    <td className="py-3 text-right text-mh-text">
-                      {count === null ? <span className="text-mh-muted">—</span> : `${weeksOfStock}w`}
-                    </td>
-                    <td className="py-3 text-right">
-                      {count === null ? (
-                        <span className="text-[11px] text-mh-muted">—</span>
-                      ) : (
-                        <span
-                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                          style={{
-                            color: stockColor(weeksOfStock),
-                            backgroundColor: stockColor(weeksOfStock) + '22',
-                          }}
-                        >
-                          {stockLabel(weeksOfStock)}
+                  <>
+                    <tr
+                      key={source}
+                      className={hasL2 ? 'cursor-pointer hover:bg-mh-surface/40' : ''}
+                      onClick={() => {
+                        if (!hasL2) return
+                        setExpandedL1(prev => {
+                          const next = new Set(prev)
+                          next.has(source) ? next.delete(source) : next.add(source)
+                          return next
+                        })
+                      }}
+                    >
+                      <td className="py-3 text-mh-text font-medium">
+                        <span className="flex items-center gap-1.5">
+                          {hasL2 && (
+                            <span className="text-mh-muted text-xs">{expanded ? '▾' : '▸'}</span>
+                          )}
+                          {source}
                         </span>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="py-3 text-right text-mh-text">
+                        {count === null ? <span className="text-mh-muted">—</span> : count.toLocaleString()}
+                      </td>
+                      <td className="py-3 text-right text-mh-text">
+                        {count === null ? <span className="text-mh-muted">—</span> : `${weeksOfStock}w`}
+                      </td>
+                      <td className="py-3 text-right">
+                        {count === null ? (
+                          <span className="text-[11px] text-mh-muted">—</span>
+                        ) : (
+                          <span
+                            className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{
+                              color: stockColor(weeksOfStock),
+                              backgroundColor: stockColor(weeksOfStock) + '22',
+                            }}
+                          >
+                            {stockLabel(weeksOfStock)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {expanded && live?.l2Breakdown?.map(l2 => (
+                      <tr key={`${source}::${l2.source}`} className="bg-mh-surface/30">
+                        <td className="py-2 pl-7 text-mh-muted text-xs italic">{l2.source}</td>
+                        <td className="py-2 text-right text-mh-muted text-xs">{l2.count.toLocaleString()}</td>
+                        <td className="py-2 text-right text-mh-muted text-xs">
+                          {Math.round((l2.count / 250) * 10) / 10}w
+                        </td>
+                        <td />
+                      </tr>
+                    ))}
+                  </>
                 )
               })}
               {/* Any source in the sheet that's not in LVL1_OPTIONS (e.g. "Unknown") */}

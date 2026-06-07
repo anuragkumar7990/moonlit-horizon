@@ -3,11 +3,15 @@ import { useState } from 'react'
 import MasterTrackerGrid from './MasterTrackerGrid'
 import CallingModule from './CallingModule'
 import ProspectModule from './ProspectModule'
+import EmailsModule from './EmailsModule'
+import TargetsModule from './TargetsModule'
+import EventIntelModule from './EventIntelModule'
+import SupplyModule from './SupplyModule'
 import PersonSelector from './PersonSelector'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
-type Tab = 'tracker' | 'calling' | 'prospects'
+type Tab = 'tracker' | 'calling' | 'prospects' | 'emails' | 'targets' | 'events' | 'supply'
 
 interface Props {
   callsData:     CallsColumnData
@@ -23,6 +27,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'tracker',   label: 'Master Tracker' },
   { id: 'calling',   label: 'Calling' },
   { id: 'prospects', label: 'Prospect Database' },
+  { id: 'emails',    label: 'Emails' },
+  { id: 'targets',   label: 'Targets' },
+  { id: 'events',    label: 'Event Intelligence' },
+  { id: 'supply',    label: 'Supply' },
 ]
 
 export default function HomeTabs({
@@ -70,6 +78,22 @@ export default function HomeTabs({
 
       {tab === 'prospects' && (
         <ProspectModule />
+      )}
+
+      {tab === 'emails' && (
+        <EmailsModule />
+      )}
+
+      {tab === 'targets' && (
+        <TargetsModule />
+      )}
+
+      {tab === 'events' && (
+        <EventIntelModule />
+      )}
+
+      {tab === 'supply' && (
+        <SupplyModule />
       )}
     </div>
   )
