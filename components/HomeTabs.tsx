@@ -3,6 +3,10 @@ import { useState } from 'react'
 import MasterTrackerGrid from './MasterTrackerGrid'
 import CallingModule from './CallingModule'
 import ProspectModule from './ProspectModule'
+import AccountsModule from './AccountsModule'
+import ContactsModule from './ContactsModule'
+import PaymentsModule from './PaymentsModule'
+import UpdatesModule from './UpdatesModule'
 import EmailsModule from './EmailsModule'
 import TargetsModule from './TargetsModule'
 import EventIntelModule from './EventIntelModule'
@@ -11,7 +15,18 @@ import PersonSelector from './PersonSelector'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
-type Tab = 'tracker' | 'calling' | 'prospects' | 'emails' | 'targets' | 'events' | 'supply'
+type Tab =
+  | 'tracker'
+  | 'calling'
+  | 'accounts'
+  | 'contacts'
+  | 'prospects'
+  | 'payments'
+  | 'updates'
+  | 'emails'
+  | 'targets'
+  | 'events'
+  | 'supply'
 
 interface Props {
   callsData:     CallsColumnData
@@ -25,11 +40,15 @@ interface Props {
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'tracker',   label: 'Master Tracker' },
+  { id: 'updates',   label: 'Updates' },
   { id: 'calling',   label: 'Calling' },
-  { id: 'prospects', label: 'Prospect Database' },
+  { id: 'accounts',  label: 'Accounts' },
+  { id: 'contacts',  label: 'Contacts' },
+  { id: 'prospects', label: 'Prospect DB' },
+  { id: 'payments',  label: 'Payments' },
   { id: 'emails',    label: 'Emails' },
   { id: 'targets',   label: 'Targets' },
-  { id: 'events',    label: 'Event Intelligence' },
+  { id: 'events',    label: 'Event Intel' },
   { id: 'supply',    label: 'Supply' },
 ]
 
@@ -45,12 +64,12 @@ export default function HomeTabs({
         <PersonSelector />
       </div>
 
-      <div className="flex gap-0 mb-6 border-b border-mh-border">
+      <div className="flex gap-0 mb-6 border-b border-mh-border overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap
               ${tab === t.id
                 ? 'border-mh-vermillion text-mh-vermillion'
                 : 'border-transparent text-mh-muted hover:text-mh-text'
@@ -71,30 +90,16 @@ export default function HomeTabs({
           weeklySummary={weeklySummary}
         />
       )}
-
-      {tab === 'calling' && (
-        <CallingModule calls={rawCalls} />
-      )}
-
-      {tab === 'prospects' && (
-        <ProspectModule />
-      )}
-
-      {tab === 'emails' && (
-        <EmailsModule />
-      )}
-
-      {tab === 'targets' && (
-        <TargetsModule />
-      )}
-
-      {tab === 'events' && (
-        <EventIntelModule />
-      )}
-
-      {tab === 'supply' && (
-        <SupplyModule />
-      )}
+      {tab === 'updates'   && <UpdatesModule />}
+      {tab === 'calling'   && <CallingModule calls={rawCalls} />}
+      {tab === 'accounts'  && <AccountsModule />}
+      {tab === 'contacts'  && <ContactsModule />}
+      {tab === 'prospects' && <ProspectModule />}
+      {tab === 'payments'  && <PaymentsModule />}
+      {tab === 'emails'    && <EmailsModule />}
+      {tab === 'targets'   && <TargetsModule />}
+      {tab === 'events'    && <EventIntelModule />}
+      {tab === 'supply'    && <SupplyModule />}
     </div>
   )
 }

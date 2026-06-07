@@ -1082,6 +1082,68 @@ export async function appendNoteRow(row: {
   })
 }
 
+// ── Contact Intelligence (light read — skips JSON blob in col U) ─────────────
+
+export interface ContactIntelRow {
+  zohoLeadId:       string
+  zohoContactId:    string
+  zohoDealId:       string
+  name:             string
+  email:            string
+  phone:            string
+  title:            string
+  company:          string
+  l1Source:         string
+  l2Source:         string
+  sdr:              string
+  totalCalls:       number
+  connectedCalls:   number
+  connectionRate:   number
+  lastCallDate:     string
+  lastCallOutcome:  string
+  zohoStage:        string
+}
+
+export async function getContactIntelligence(): Promise<ContactIntelRow[]> {
+  try {
+    // Only read A:S — skips the JSON blob in col U which is large
+    // Column indices match the constants CI_TOTAL_COL=12, CI_CONNECT_COL=13,
+    // CI_RATE_COL=14, CI_LASTD_COL=17, CI_LASTO_COL=18 (all 0-indexed)
+    return readSheet<ContactIntelRow>('Contact Intelligence!A:S', (r) => ({
+      zohoLeadId:      r[0]  ?? '',
+      zohoContactId:   r[1]  ?? '',
+      zohoDealId:      r[2]  ?? '',
+      name:            r[3]  ?? '',
+      email:           r[4]  ?? '',
+      phone:           r[5]  ?? '',
+      title:           r[6]  ?? '',
+      company:         r[7]  ?? '',
+      l1Source:        r[8]  ?? '',
+      l2Source:        r[9]  ?? '',
+      sdr:             r[10] ?? '',
+      totalCalls:      parseInt(r[12] ?? '0', 10) || 0,   // col M
+      connectedCalls:  parseInt(r[13] ?? '0', 10) || 0,   // col N
+      connectionRate:  parseInt(r[14] ?? '0', 10) || 0,   // col O
+      lastCallDate:    r[17] ?? '',                        // col R
+      lastCallOutcome: r[18] ?? '',                        // col S
+      zohoStage:       r[16] ?? '',                        // col Q
+    }))
+  } catch { return [] }
+}
+
+// ── Payments — status update ──────────────────────────────────────────────────
+
+export async function updatePaymentStatus(rowIndex: number, status: Payment['status']): Promise<void> {
+  const sheets = getSheets()
+  // rowIndex is 1-indexed sheet row (including header); data rows start at 2
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Payments!G${rowIndex}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[status]] },
+  })
+}
+
 // ── Objectives sheet ──────────────────────────────────────────────────────────
 // Columns: Period | Objective | Target | Current | Assigned To
 

@@ -2,7 +2,7 @@
 
 > The Test Tribe · Corporate Training Business  
 > Owner: Anurag Kumar (anurag@thetesttribe.com)  
-> Last updated: 2026-06-07 (synced with HANDOVER.md)
+> Last updated: 2026-06-09 (synced with HANDOVER.md + Phase 6 modules)
 
 ---
 
@@ -121,53 +121,107 @@ The system has three distinct runtime environments:
 
 ```
 moonlit-horizon/
-├── app/                          # Next.js App Router pages
+├── app/
 │   ├── layout.tsx                # Root layout with sidebar nav
-│   ├── page.tsx                  # Home — Sales Pipeline (client cards)
-│   ├── book/
-│   │   └── page.tsx              # Manual meeting booking form
-│   ├── upload/
-│   │   └── page.tsx              # Upload Prospects page (CSV → Zoho)
-│   ├── client/
-│   │   └── [account]/
-│   │       └── page.tsx          # Individual client detail page
+│   ├── page.tsx                  # Home — renders HomeTabs (server component, revalidates 60s)
+│   ├── view/
+│   │   ├── mahesh/page.tsx       # Mahesh's person view
+│   │   ├── tanishq/page.tsx      # Tanishq's person view
+│   │   ├── ashutosh/page.tsx     # Ashutosh's person view
+│   │   └── anurag/page.tsx       # Anurag's person view
+│   ├── book/page.tsx             # Manual meeting booking
+│   ├── book-prospect/page.tsx    # Book meeting from lead
+│   ├── client/[account]/page.tsx # Client detail page
+│   ├── actions/intel.ts          # Server actions: addManualNote, changeAccountStatus, updateLastContact
 │   └── api/
-│       ├── book/route.ts         # POST — create meeting (Calendar + CRM + Sheets)
-│       ├── upload-prospects/
-│       │   └── route.ts          # POST — CSV upload pipeline
-│       └── zoho-sources/
-│           └── route.ts          # GET/POST — Lvl 2 Source picklist from Zoho
+│       ├── book/                 # POST — create meeting
+│       ├── book-prospect/        # POST — convert lead + book
+│       ├── upload-prospects/     # POST — CSV → Zoho bulk upload
+│       ├── zoho-sources/         # GET/POST — Lvl 2 Source picklist
+│       ├── accounts/             # GET — Zoho accounts (autocomplete)
+│       ├── contacts/             # GET — Zoho contacts (autocomplete)
+│       ├── leads/                # GET — Zoho leads (autocomplete)
+│       ├── p0-tasks/             # GET/POST — P0 tasks; /open; /done
+│       ├── targets/              # GET/POST — monthly targets
+│       ├── objectives/           # GET/POST — objectives
+│       ├── weekly-summary/       # GET/POST — LLM weekly summary
+│       ├── stats-digest/         # GET — full stats payload
+│       ├── briefing/             # GET — composite morning briefing
+│       ├── log-call/             # POST — write call to Sheets + Zoho
+│       ├── log-payment/          # POST — write payment row
+│       ├── payments/
+│       │   ├── route.ts          # GET — all payments with row indices
+│       │   └── mark-received/    # POST — update payment status
+│       ├── top-250/              # POST — re-rank leads, tag top 250 in Zoho
+│       ├── prospect-stats/       # GET — Prospects tab aggregate stats
+│       ├── account-intel/        # GET/POST — Account Intelligence; /refresh; /note; /status; /last-contact; /sync-email
+│       ├── contact-intel/        # GET — Contact Intelligence (A:S, no JSON blob)
+│       ├── intel-triggers/
+│       │   ├── call/             # POST — refresh Call Intel after call logged
+│       │   └── gmail/
+│       │       ├── route.ts      # POST — Gmail Pub/Sub push receiver
+│       │       └── renew/        # POST — weekly Watch renewal (Vercel cron)
+│       ├── circleback-sync/      # POST — Circleback webhook (mark Conducted + Notes + intel)
+│       ├── updates/              # GET — unified activity feed (calls+meetings+notes+payments)
+│       ├── reports/weekly/       # GET — stream weekly PDF
+│       ├── reports/monthly/      # GET — stream monthly PDF
+│       ├── supply/               # GET — trainer pipeline + roster + topic coverage
+│       └── webhook/
+│           ├── zoho-call/        # POST — Zoho call webhook (legacy)
+│           └── zoho-call-logged/ # POST — Zoho workflow rule webhook (full call pipeline)
 │
 ├── components/
-│   ├── ClientCard.tsx            # Account summary card (pipeline view)
-│   ├── MeetingTimeline.tsx       # Chronological meeting list for a client
-│   ├── NotesPanel.tsx            # Meeting notes from Circleback
-│   └── CommsTimeline.tsx         # Discord + Gmail comms history
+│   ├── HomeTabs.tsx              # Tab bar wrapper; holds tab state; routes to modules
+│   ├── PersonSelector.tsx        # Named rectangles (Mahesh/Ashutosh/Anurag/Tanishq); links to /view/*
+│   ├── MasterTrackerGrid.tsx     # 5-column tracker grid (Master Tracker tab)
+│   ├── MetricCard.tsx            # label/achieved/target + gold glow
+│   ├── FunnelColumn.tsx          # Pipeline funnel bars
+│   ├── MetricsGraph.tsx          # 8-week recharts line chart
+│   ├── CallingModule.tsx         # Calling tab — period toggle, stats, outcome bars, SDR table, log
+│   ├── UpdatesModule.tsx         # Updates tab — unified activity feed grouped by day
+│   ├── AccountsModule.tsx        # Accounts tab — search/filter + AccountIntelPanel
+│   ├── AccountIntelPanel.tsx     # Account intel detail (4 layers + cumulative + manual notes)
+│   ├── ContactsModule.tsx        # Contacts tab — 2,372-contact paginated searchable table
+│   ├── ProspectModule.tsx        # Prospect DB tab — stock health + CSV upload
+│   ├── PaymentsModule.tsx        # Payments tab — summary cards + table + inline status update
+│   ├── EmailsModule.tsx          # Emails tab (placeholder)
+│   ├── TargetsModule.tsx         # Targets tab — monthly targets vs actuals
+│   ├── EventIntelModule.tsx      # Event Intel tab
+│   ├── SupplyModule.tsx          # Supply tab — trainer pipeline + roster + topic coverage
+│   ├── TanishqDashboard.tsx      # Daily/Weekly/Monthly toggle for Tanishq view
+│   ├── NavActions.tsx            # Nav actions
+│   └── pdf/
+│       ├── WeeklyReport.tsx      # react-pdf weekly report
+│       └── MonthlyReport.tsx     # react-pdf monthly report
 │
 ├── lib/
-│   ├── zoho.ts                   # All Zoho CRM API calls
-│   ├── sheets.ts                 # All Google Sheets API calls
-│   ├── booking.ts                # Meeting booking orchestration logic
-│   └── types.ts                  # Shared TypeScript types
+│   ├── zoho.ts                   # Zoho OAuth + all CRM API calls
+│   ├── sheets.ts                 # All Google Sheets reads/writes
+│   ├── dashboard.ts              # Pure aggregation functions
+│   ├── intel.ts                  # Account Intelligence generation (Claude Haiku)
+│   ├── intel-utils.ts            # lastContactRange, RANGE_COLOR
+│   └── types.ts                  # Shared TypeScript interfaces
 │
-├── discord-bot/                  # Runs on Hostinger VPS (NOT on Vercel)
-│   ├── index.js                  # Bot entrypoint — slash command handler
-│   ├── register.js               # One-time command registration script
+├── scripts/
+│   ├── build-contact-intelligence.js    # Builds Contact Intelligence sheet from DCT v1
+│   ├── export-unmatched-prospects.js    # Exports contacts not matched in Zoho
+│   ├── push-historical-meetings.js      # Pushes Jan–Jun 2026 meetings to Meetings sheet
+│   ├── sync-gmail-intel.js              # Pull-based Gmail intel sync (run manually or cron)
+│   └── register-gmail-watch.js          # One-time Gmail Watch API registration
+│
+├── discord-bot/
+│   ├── index.js                  # Bot entrypoint — all slash commands + cron jobs
+│   ├── register.js               # Command registration (run after schema changes)
 │   ├── package.json
-│   └── .env                      # Bot-specific env vars (separate from Vercel)
+│   └── .env
 │
-├── openclaw/                     # AI agent config (runs on Hostinger VPS)
-│   ├── docker-compose.yml        # OpenClaw container config
-│   ├── sheets-setup.gs           # Google Apps Script to create sheet tabs
-│   └── agents/
-│       ├── meeting-booking-agent.md     # Agent: Discord /book flow
-│       ├── notes-summarisation-agent.md # Agent: Circleback → Sheets
-│       └── comms-tracker-agent.md       # Agent: Discord + Gmail → Sheets
-│
+├── vercel.json                   # Vercel cron config (Gmail Watch renewal: Mon 2am UTC)
+├── middleware.ts                 # Basic Auth for all routes (webhook + gmail trigger excluded)
 ├── .env.local                    # Local env vars (never committed)
-├── SETUP.md                      # Step-by-step setup guide
+├── SETUP.md
+├── HANDOVER.md                   # Session-by-session build log (authoritative for recent changes)
 ├── MOONLIT_HORIZON_MASTER.md     # This document
-├── package.json                  # Dependencies
+├── package.json
 ├── tailwind.config.ts
 └── tsconfig.json
 ```
@@ -273,22 +327,32 @@ DASHBOARD_PASSWORD=thetesttribe
 
 ### Pages
 
-#### `/` — Sales Pipeline
-- Pulls from `Accounts`, `Meetings`, `Notes` tabs in Sheets
-- Shows 3 stat cards: Meetings This Week, Open Deals, Notes with Actionables
-- Grid of `ClientCard` components — one per account
-- Revalidates every 60 seconds
+#### `/` — Master Tracker (tab-based homepage)
+Server component (revalidates 60s). Fetches Calls, Meetings, Deals, Targets, ZohoCalls, Summary. Renders `HomeTabs` with merged call data.
+
+Tab bar (rendered by `HomeTabs.tsx`):
+- **Master Tracker** — 5-column metrics grid (Calls / Meetings / Leads / Funnel / Trends) + Weekly Summary
+- **Updates** — unified activity feed (calls, meetings, notes, payments) grouped by day
+- **Calling** — period toggle, stat cards, outcome breakdown, SDR performance, calls log
+- **Accounts** — status filter + search + full Account Intelligence panel (4 intel layers + cumulative summary)
+- **Contacts** — 2,372-contact table with call stats, SDR/outcome filters, pagination
+- **Prospect DB** — stock health by source + inline CSV upload
+- **Payments** — summary cards + payment table with Mark Received / Partial actions
+- **Emails** — email comms view
+- **Targets** — monthly targets vs actuals
+- **Event Intel** — event intelligence module
+- **Supply** — trainer pipeline + roster + topic coverage
+
+`PersonSelector` (named rectangles: Mahesh / Ashutosh / Anurag / Tanishq) sits above the tab bar; clicking navigates to `/view/<name>`.
+
+#### `/view/mahesh|tanishq|ashutosh|anurag` — Person Views
+Each person sees a tailored view of the business data. See Section 11.3 for content.
 
 #### `/client/[account]` — Client Detail
-- Shows `MeetingTimeline`, `NotesPanel`, `CommsTimeline` for one account
-- All data from Google Sheets
+Shows `AccountIntelPanel`, `MeetingTimeline`, `NotesPanel`, `CommsTimeline` for one account.
 
 #### `/book` — Manual Meeting Booking
-- Form UI for booking meetings without using Discord
-- Calls `/api/book`
-
-#### `/upload` — Upload Prospects
-- Full CSV → Zoho CRM lead upload pipeline (see Section 9)
+Form UI for booking meetings without using Discord. Calls `/api/book`.
 
 ### API Routes
 
@@ -314,6 +378,23 @@ DASHBOARD_PASSWORD=thetesttribe
 #### `POST /api/zoho-sources`
 - Adds a new value to Zoho's `Lvl_2_Source` picklist
 - Fetches existing values first, appends new one, PUTs back via Zoho Fields API
+
+#### `GET /api/payments`
+- Returns all rows from `Payments` Sheets tab with `rowIndex` (1-indexed sheet row)
+- Used by PaymentsModule for inline status updates
+
+#### `POST /api/payments/mark-received`
+- Body: `{ rowIndex, status }` where status ∈ `Invoiced | Received | Partial | Overdue`
+- Updates col G of the Payments sheet directly
+
+#### `GET /api/contact-intel`
+- Returns Contact Intelligence sheet rows (A:S only — skips JSON blob in col U)
+- Used by ContactsModule; cached 5 min
+
+#### `GET /api/updates`
+- Aggregates recent calls, meetings, notes, payments into a unified event feed
+- Sorted newest-first, capped at 200 events
+- Cached 60 seconds
 
 ---
 
@@ -1126,20 +1207,51 @@ OpenClaw model selection: use the cheapest model tier for rule-following tasks (
 - [x] 125 unmatched contacts pushed to Zoho Leads
 - [x] 204 historical meetings (Jan–Jun 2026) backfilled to Meetings sheet
 
+### Phase 5b — Gmail Push Notifications ✅ Complete
+
+- [x] Gmail Watch API registered on `anurag@thetesttribe.com` → GCP Pub/Sub topic `moonlit-gmail-notifications`
+- [x] Pub/Sub push subscription → `POST /api/intel-triggers/gmail` (excluded from Basic Auth middleware)
+- [x] `historyId` cursor persisted in `Config` Sheets tab (row 1: `gmail_history_id`)
+- [x] Watch renewal Vercel cron: every Monday 2am UTC → `/api/intel-triggers/gmail/renew`
+- [x] Subject patterns supported: `The Test Tribe <> AccountName`, `… - descriptor`, `… | descriptor`
+- [x] `scripts/register-gmail-watch.js` — one-time watch registration script
+- [x] Middleware updated: `api/intel-triggers/gmail` excluded from Basic Auth
+
+### Phase 6 — Dashboard Modules ✅ Complete
+
+- [x] Homepage refactored from flat Master Tracker → **tab-based layout** (`HomeTabs.tsx`)
+- [x] `PersonSelector.tsx` changed from initials circles → named rectangles (Mahesh / Ashutosh / Anurag / Tanishq)
+- [x] PersonSelector now centred above the tab bar in HomeTabs (not inside each module)
+- [x] **Calling tab** (`CallingModule.tsx`) — period toggle, 4 stat cards, outcome bars, SDR table, calls log (150 rows, searchable/filterable)
+- [x] **Updates tab** (`UpdatesModule.tsx`) — unified activity feed of calls, meetings, notes, payments; grouped by day; type filter; search; pagination
+- [x] **Accounts tab** (`AccountsModule.tsx`) — status filter pills, search, full AccountIntelPanel with all 4 intel layers + cumulative summary + manual notes
+- [x] **Contacts tab** (`ContactsModule.tsx`) — 2,372-contact searchable/sortable/paginated table; SDR + outcome filters; call stats per contact
+- [x] **Payments tab** (`PaymentsModule.tsx`) — 5 summary cards (total/received/invoiced/outstanding/overdue), full table, Mark Received / Partial inline actions
+- [x] **Prospect DB tab** (`ProspectModule.tsx`) — stock health by source + L2 breakdown, upload CSV pipeline (already existed, now in tab)
+- [x] All other tabs preserved: Emails, Targets, Event Intel, Supply
+
+**New API routes added in Phase 6:**
+- `GET /api/payments` — returns all payments with row indices for status updates
+- `POST /api/payments/mark-received` — updates Payments sheet col G for a given row
+- `GET /api/contact-intel` — returns Contact Intelligence sheet (A:S only, skips JSON col U)
+- `GET /api/updates` — aggregated recent activity feed (calls + meetings + notes + payments, newest-first, capped 200)
+
+**New lib/sheets.ts functions added:**
+- `getContactIntelligence()` — reads Contact Intelligence!A:S; returns `ContactIntelRow[]`
+- `updatePaymentStatus(rowIndex, status)` — updates col G of Payments sheet by row index
+
 ---
 
 ## Open Items
 
-| Item | Owner | Needed by |
+| Item | Owner | Notes |
 |---|---|---|
-| Supply Module: share Google Form + rating rubric Sheets | Anurag | Before Phase 3 |
-| Anurag's view: finalize after Phase 1 build | Anurag | After Phase 1b |
-| Mahesh's view: additional items after first weekly use | Mahesh / Anurag | After first Monday |
-| Email open rate tracking mechanism (GMass or equivalent) | Anurag | Before Module 3 build |
-| Lead Conversion Time: historical stage data for existing leads | Anurag | Phase 2b |
-| Reports PDF generation tool decision | Anurag | Before Phase 1b |
-| Person avatar illustrations (initials used in Phase 1) | Anurag | Phase 3 |
-| Ashutosh's weekly report: KPI priorities | Ashutosh / Anurag | Before Phase 1b |
+| Contact Intelligence Notes Summary (col W) | Anurag | Blank for 2,372 contacts — needs AI enrichment pass using call history JSON in col U |
+| Objective current values — auto-populate | Anurag | Calls Dialled + L1 Conducted could auto-fill from Sheets; currently manual via `/mh objective update` |
+| Payment mark-as-received Discord command | Anurag | `/mh payment received <account>` — Priority 4; dashboard button is live |
+| Gmail push edge cases | Anurag | Watch auto-renews weekly; confirm Pub/Sub is live after 7 days |
+| Person avatar illustrations | Anurag | Initials/named rectangles used; face illustrations deferred |
+| Cold - Whatsapp Community L1 | Anurag | 2 contacts (Deb Ghosh, Sunit Kole) mapped to Events/TribeQonf'25 — confirm if correct |
 
 ---
 
