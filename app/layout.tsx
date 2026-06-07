@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={poppins.variable}>
       <body className="min-h-screen bg-mh-bg text-mh-text font-poppins antialiased">
-        <nav className="bg-mh-surface border-b border-mh-border px-6 py-3 flex items-center justify-between sticky top-0 z-10">
+        <nav className="bg-mh-surface border-b border-mh-border px-6 py-3 flex items-center justify-between sticky top-0 z-[100]">
           <div className="flex items-center gap-3">
             <span className="text-base font-semibold text-mh-text">The Test Tribe</span>
             <span className="text-mh-border">|</span>
