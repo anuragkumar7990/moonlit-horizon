@@ -75,15 +75,10 @@ export async function POST(req: NextRequest) {
       contextParts.push(`## Additional Context\n${additionalContext}`)
     }
 
-    if (contextParts.length === 0) {
-      return NextResponse.json({
-        insights: [],
-        accountFound: !!accountIntel,
-        contactFound: !!contactIntel,
-      })
-    }
+    const hasIntel = contextParts.length > 0
 
-    const prompt = `You are a sales intelligence analyst helping a B2B training company prepare for a meeting.
+    const prompt = hasIntel
+      ? `You are a sales intelligence analyst helping a B2B training company prepare for a meeting.
 
 Account: ${accountName}
 Contact: ${contactName}
@@ -91,7 +86,7 @@ Contact: ${contactName}
 Available intelligence:
 ${contextParts.join('\n\n')}
 
-Extract concise, actionable meeting-preparation insights. Return ONLY this JSON structure — no markdown fences, no explanation:
+Extract concise, actionable meeting-preparation insights. Return ONLY this JSON — no markdown fences, no explanation:
 
 {
   "insights": [
@@ -105,10 +100,28 @@ Extract concise, actionable meeting-preparation insights. Return ONLY this JSON 
 }
 
 Rules:
-- Only include a category if you have actual intelligence to support it
-- Max 4 bullet points per category
-- Each point max 18 words, specific and actionable
+- Only include a category if you have actual evidence for it
+- Max 4 bullet points per category, max 18 words each
 - Omit empty categories entirely`
+      : `You are a sales intelligence analyst helping a B2B training company prepare for an outreach / discovery call.
+
+Account: ${accountName}
+Contact: ${contactName}${additionalContext ? `\nAdditional context: ${additionalContext}` : ''}
+
+No prior CRM or call history is available. Generate practical generic meeting-prep insights a well-prepared SDR should consider. Return ONLY this JSON — no markdown fences, no explanation:
+
+{
+  "insights": [
+    { "category": "Talking Points", "points": ["..."] },
+    { "category": "Discovery Questions", "points": ["..."] },
+    { "category": "Potential Objections", "points": ["..."] },
+    { "category": "Opportunities", "points": ["..."] }
+  ]
+}
+
+Rules:
+- Tailor to a QA/testing/AI training company selling corporate upskilling
+- 3–4 bullet points per category, max 18 words each`
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',

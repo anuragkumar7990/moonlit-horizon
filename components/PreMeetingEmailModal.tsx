@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { DraftEmailRequest, DraftEmailResponse } from '@/app/api/draft-email/route'
 import type { MeetingPrepResponse } from '@/app/api/meeting-prep/route'
 import type { ContactOption } from '@/app/api/contacts-list/route'
@@ -15,7 +16,7 @@ const SDR_OPTIONS = ['Anurag Kumar', 'Mahesh', 'Ashutosh', 'Tanishq']
 const INPUT_CLS = 'w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors placeholder:text-[#555]'
 const LABEL_CLS = 'block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1'
 
-// ── Searchable dropdown ──────────────────────────────────────────────────────
+// ── Searchable dropdown (portal-based — escapes overflow:hidden parents) ─────
 
 function SearchableSelect({
   options, value, onChange, placeholder, disabled,
@@ -26,16 +27,22 @@ function SearchableSelect({
   placeholder: string
   disabled?: boolean
 }) {
-  const [query, setQuery]     = useState(value)
-  const [open, setOpen]       = useState(false)
-  const containerRef          = useRef<HTMLDivElement>(null)
+  const [query,  setQuery]  = useState(value)
+  const [open,   setOpen]   = useState(false)
+  const [rect,   setRect]   = useState<DOMRect | null>(null)
+  const inputRef            = useRef<HTMLInputElement>(null)
+  const listRef             = useRef<HTMLDivElement>(null)
 
-  // Keep display in sync when parent sets value
   useEffect(() => { setQuery(value) }, [value])
 
   const filtered = query
     ? options.filter(o => o.toLowerCase().includes(query.toLowerCase())).slice(0, 25)
     : options.slice(0, 25)
+
+  function openDropdown() {
+    if (inputRef.current) setRect(inputRef.current.getBoundingClientRect())
+    setOpen(true)
+  }
 
   function pick(option: string) {
     onChange(option)
@@ -46,38 +53,66 @@ function SearchableSelect({
   // Close on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+      const t = e.target as Node
+      if (inputRef.current?.contains(t) || listRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
   }, [])
 
+  // Reposition on scroll / resize while open
+  useEffect(() => {
+    if (!open) return
+    function reposition() {
+      if (inputRef.current) setRect(inputRef.current.getBoundingClientRect())
+    }
+    window.addEventListener('scroll', reposition, true)
+    window.addEventListener('resize', reposition)
+    return () => {
+      window.removeEventListener('scroll', reposition, true)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [open])
+
+  const dropdown = open && filtered.length > 0 && rect ? createPortal(
+    <div
+      ref={listRef}
+      style={{
+        position: 'fixed',
+        top:   rect.bottom + 4,
+        left:  rect.left,
+        width: rect.width,
+        zIndex: 99999,
+      }}
+      className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg max-h-52 overflow-y-auto shadow-2xl"
+    >
+      {filtered.map(o => (
+        <button
+          key={o}
+          type="button"
+          onMouseDown={() => pick(o)}
+          className="w-full text-left px-3 py-2 text-[13px] text-[#E5E7EB] hover:bg-[#E8341C]/10 hover:text-white transition-colors"
+        >
+          {o}
+        </button>
+      ))}
+    </div>,
+    document.body
+  ) : null
+
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <input
+        ref={inputRef}
         value={query}
-        onChange={e => { setQuery(e.target.value); setOpen(true); if (!e.target.value) onChange('') }}
-        onFocus={() => setOpen(true)}
+        onChange={e => { setQuery(e.target.value); openDropdown(); if (!e.target.value) onChange('') }}
+        onFocus={openDropdown}
         placeholder={placeholder}
         disabled={disabled}
         className={INPUT_CLS + (disabled ? ' opacity-50 cursor-not-allowed' : '')}
       />
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg max-h-48 overflow-y-auto shadow-xl">
-          {filtered.map(o => (
-            <button
-              key={o}
-              type="button"
-              onMouseDown={() => pick(o)}
-              className="w-full text-left px-3 py-2 text-[13px] text-[#E5E7EB] hover:bg-[#E8341C]/10 hover:text-white transition-colors"
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-      )}
+      {dropdown}
     </div>
   )
 }
