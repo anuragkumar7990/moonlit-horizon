@@ -2,11 +2,12 @@
 import { useState } from 'react'
 import MasterTrackerGrid from './MasterTrackerGrid'
 import CallingModule from './CallingModule'
+import ProspectModule from './ProspectModule'
 import PersonSelector from './PersonSelector'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
-type Tab = 'tracker' | 'calling'
+type Tab = 'tracker' | 'calling' | 'prospects'
 
 interface Props {
   callsData:     CallsColumnData
@@ -19,8 +20,9 @@ interface Props {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'tracker', label: 'Master Tracker' },
-  { id: 'calling', label: 'Calling' },
+  { id: 'tracker',   label: 'Master Tracker' },
+  { id: 'calling',   label: 'Calling' },
+  { id: 'prospects', label: 'Prospect Database' },
 ]
 
 export default function HomeTabs({
@@ -64,6 +66,10 @@ export default function HomeTabs({
 
       {tab === 'calling' && (
         <CallingModule calls={rawCalls} />
+      )}
+
+      {tab === 'prospects' && (
+        <ProspectModule />
       )}
     </div>
   )
