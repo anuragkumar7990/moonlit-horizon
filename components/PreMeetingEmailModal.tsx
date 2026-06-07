@@ -106,7 +106,7 @@ function SearchableSelect({
       <input
         ref={inputRef}
         value={query}
-        onChange={e => { setQuery(e.target.value); openDropdown(); if (!e.target.value) onChange('') }}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); openDropdown() }}
         onFocus={openDropdown}
         placeholder={placeholder}
         disabled={disabled}
