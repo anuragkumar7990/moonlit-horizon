@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getCalls, getMeetings, getNotes, getPayments } from '@/lib/sheets'
+import { getCalls, getMeetings, getNotes, getPayments, getCommunications } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
 export interface UpdateEvent {
   id:        string
-  type:      'call' | 'meeting' | 'note' | 'payment' | 'intel'
+  type:      'call' | 'meeting' | 'note' | 'payment' | 'intel' | 'email'
   title:     string
   subtitle:  string
   timestamp: string
@@ -14,17 +14,19 @@ export interface UpdateEvent {
 
 export async function GET() {
   try {
-    const [callsRes, meetingsRes, notesRes, paymentsRes] = await Promise.allSettled([
+    const [callsRes, meetingsRes, notesRes, paymentsRes, commsRes] = await Promise.allSettled([
       getCalls(),
       getMeetings(),
       getNotes(),
       getPayments(),
+      getCommunications(),
     ])
 
     const calls    = callsRes.status    === 'fulfilled' ? callsRes.value    : []
     const meetings = meetingsRes.status === 'fulfilled' ? meetingsRes.value : []
     const notes    = notesRes.status    === 'fulfilled' ? notesRes.value    : []
     const payments = paymentsRes.status === 'fulfilled' ? paymentsRes.value : []
+    const comms    = commsRes.status    === 'fulfilled' ? commsRes.value    : []
 
     const events: UpdateEvent[] = []
 
@@ -77,6 +79,21 @@ export async function GET() {
         subtitle:  `${p.status} · ₹${p.amount.toLocaleString('en-IN')}`,
         timestamp: p.date,
         meta:      p.deal || undefined,
+      })
+    }
+
+    // Emails from Communications sheet
+    for (const c of comms) {
+      if (!c.timestamp) continue
+      events.push({
+        id:        `email-${c.threadId || (c.timestamp + c.accountName)}`,
+        type:      'email',
+        title:     c.accountName || 'Unknown',
+        subtitle:  c.messagePreview
+          ? c.messagePreview.slice(0, 80) + (c.messagePreview.length > 80 ? '…' : '')
+          : 'Email received',
+        timestamp: c.timestamp,
+        meta:      c.source || undefined,
       })
     }
 

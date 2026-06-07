@@ -1,10 +1,12 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import PreMeetingEmailModal from './PreMeetingEmailModal'
 
 export default function NavActions() {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, right: 0 })
+  const [open, setOpen]             = useState(false)
+  const [pos, setPos]               = useState({ top: 0, right: 0 })
+  const [showEmailDraft, setShowEmailDraft] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
 
   // Recalculate position whenever dropdown opens
@@ -26,6 +28,10 @@ export default function NavActions() {
 
   return (
     <>
+      {showEmailDraft && (
+        <PreMeetingEmailModal onClose={() => setShowEmailDraft(false)} />
+      )}
+
       <button
         ref={btnRef}
         onClick={() => setOpen(v => !v)}
@@ -42,7 +48,7 @@ export default function NavActions() {
       {open && (
         <div
           style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
-          className="w-52 bg-mh-surface border border-mh-border rounded-xl shadow-xl overflow-hidden py-1"
+          className="w-56 bg-mh-surface border border-mh-border rounded-xl shadow-xl overflow-hidden py-1"
         >
           <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-mh-muted uppercase tracking-widest">
             Book
@@ -55,6 +61,18 @@ export default function NavActions() {
             className="flex items-center px-4 py-2 text-sm text-mh-text hover:bg-mh-border/30 transition-colors">
             Book Contact
           </Link>
+
+          <div className="border-t border-mh-border my-1" />
+
+          <p className="px-4 pt-1 pb-1 text-[10px] font-semibold text-mh-muted uppercase tracking-widest">
+            Outreach
+          </p>
+          <button
+            onClick={() => { setOpen(false); setShowEmailDraft(true) }}
+            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-mh-text hover:bg-mh-border/30 transition-colors text-left"
+          >
+            <span>✉️</span> Draft Pre-Meeting Email
+          </button>
 
           <div className="border-t border-mh-border my-1" />
 

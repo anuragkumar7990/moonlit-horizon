@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { appendPaymentRow } from '@/lib/sheets'
+import { getDeals, updateDealStage } from '@/lib/zoho'
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +27,16 @@ export async function POST(req: NextRequest) {
     }
 
     await appendPaymentRow({ account, deal: deal ?? '', amount, invoiceDate, dueDate, notes })
+
+    // Cascade: move Zoho deal to "Payment Pending"
+    try {
+      const deals = await getDeals()
+      const matched = deals.find(d =>
+        d.accountName.toLowerCase() === account.toLowerCase() &&
+        (!deal || d.dealName.toLowerCase().includes(deal.toLowerCase()))
+      )
+      if (matched) await updateDealStage(matched.id, 'Payment Pending')
+    } catch { /* non-fatal — Zoho cascade is best-effort */ }
 
     return NextResponse.json({ ok: true })
   } catch (err: unknown) {

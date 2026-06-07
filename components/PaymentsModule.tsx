@@ -30,6 +30,184 @@ function isOverdue(dueDate: string, status: string): boolean {
   return new Date(dueDate) < new Date()
 }
 
+// ── Add Invoice Modal ────────────────────────────────────────────────────────
+
+interface AddInvoiceModalProps {
+  onClose: () => void
+  onAdded: (p: PaymentRow) => void
+}
+
+function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
+  const today = new Date().toISOString().slice(0, 10)
+  const in30  = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+
+  const [account,     setAccount]     = useState('')
+  const [deal,        setDeal]        = useState('')
+  const [amount,      setAmount]      = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(today)
+  const [dueDate,     setDueDate]     = useState(in30)
+  const [notes,       setNotes]       = useState('')
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!account || !amount || !invoiceDate || !dueDate) { setError('Account, amount and dates are required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/log-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: account.trim(),
+          deal: deal.trim(),
+          amount: parseFloat(amount),
+          invoiceDate,
+          dueDate,
+          notes: notes.trim(),
+        }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || data.error) { setError(data.error ?? 'Failed to add invoice'); return }
+      // Optimistically add to local state
+      onAdded({
+        rowIndex: -1, // will refresh
+        date: today,
+        account: account.trim(),
+        deal: deal.trim(),
+        amount: parseFloat(amount),
+        invoiceDate,
+        dueDate,
+        status: 'Invoiced',
+        notes: notes.trim(),
+      })
+      onClose()
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-mh-surface border border-mh-border rounded-2xl w-full max-w-lg shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-mh-border">
+          <h2 className="text-sm font-semibold text-mh-text">Add Invoice / Payment</h2>
+          <button onClick={onClose} className="text-mh-muted hover:text-mh-text transition-colors text-lg leading-none">✕</button>
+        </div>
+
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">Account *</label>
+              <input
+                value={account}
+                onChange={e => setAccount(e.target.value)}
+                placeholder="e.g. Stryker"
+                required
+                className="w-full bg-mh-bg border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text
+                  placeholder:text-mh-muted outline-none focus:border-mh-vermillion transition-colors"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">Deal Name</label>
+              <input
+                value={deal}
+                onChange={e => setDeal(e.target.value)}
+                placeholder="e.g. Agentic AI Training – Batch 1"
+                className="w-full bg-mh-bg border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text
+                  placeholder:text-mh-muted outline-none focus:border-mh-vermillion transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">Amount (₹) *</label>
+              <input
+                type="number"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="0"
+                min="0"
+                required
+                className="w-full bg-mh-bg border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text
+                  placeholder:text-mh-muted outline-none focus:border-mh-vermillion transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">Invoice Date *</label>
+              <input
+                type="date"
+                value={invoiceDate}
+                onChange={e => setInvoiceDate(e.target.value)}
+                required
+                className="w-full bg-mh-bg border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text
+                  outline-none focus:border-mh-vermillion transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">Due Date *</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                required
+                className="w-full bg-mh-bg border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text
+                  outline-none focus:border-mh-vermillion transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">Notes</label>
+              <input
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Optional"
+                className="w-full bg-mh-bg border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text
+                  placeholder:text-mh-muted outline-none focus:border-mh-vermillion transition-colors"
+              />
+            </div>
+          </div>
+
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+
+          <p className="text-[10px] text-mh-muted">
+            Saving will add a row to Payments sheet and move the Zoho deal to <span className="text-blue-400">Payment Pending</span>.
+          </p>
+
+          <div className="flex gap-3 justify-end pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-mh-muted border border-mh-border rounded-lg hover:text-mh-text transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 text-sm font-medium bg-mh-vermillion text-white rounded-lg
+                hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {saving ? 'Saving…' : 'Add Invoice'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Main module ──────────────────────────────────────────────────────────────
+
 export default function PaymentsModule() {
   const [payments, setPayments]   = useState<PaymentRow[]>([])
   const [loading, setLoading]     = useState(true)
@@ -37,8 +215,10 @@ export default function PaymentsModule() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch]       = useState('')
   const [updating, setUpdating]   = useState<number | null>(null)
+  const [showAdd, setShowAdd]     = useState(false)
 
-  useEffect(() => {
+  function loadPayments() {
+    setLoading(true)
     fetch('/api/payments')
       .then(r => r.json())
       .then((d: { payments?: PaymentRow[]; error?: string }) => {
@@ -47,20 +227,20 @@ export default function PaymentsModule() {
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
-  }, [])
+  }
 
-  async function markAs(rowIndex: number, status: Payment['status']) {
-    setUpdating(rowIndex)
+  useEffect(() => { loadPayments() }, [])
+
+  async function markAs(p: PaymentRow, status: Payment['status']) {
+    setUpdating(p.rowIndex)
     try {
       const res = await fetch('/api/payments/mark-received', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rowIndex, status }),
+        body: JSON.stringify({ rowIndex: p.rowIndex, status, account: p.account, deal: p.deal }),
       })
       if (res.ok) {
-        setPayments(prev =>
-          prev.map(p => p.rowIndex === rowIndex ? { ...p, status } : p)
-        )
+        setPayments(prev => prev.map(row => row.rowIndex === p.rowIndex ? { ...row, status } : row))
       }
     } catch { /* ignore */ }
     setUpdating(null)
@@ -108,10 +288,17 @@ export default function PaymentsModule() {
 
   return (
     <div className="space-y-4">
+      {showAdd && (
+        <AddInvoiceModal
+          onClose={() => setShowAdd(false)}
+          onAdded={() => { setShowAdd(false); loadPayments() }}
+        />
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-5 gap-4">
         {[
-          { label: 'Total Invoiced',  value: fmt(summary.total),       color: 'text-mh-text' },
+          { label: 'Total Invoiced',  value: fmt(summary.total),       color: '' },
           { label: 'Received',        value: fmt(summary.received),     color: '#22C55E' },
           { label: 'Invoiced (open)', value: fmt(summary.invoiced),     color: '#60A5FA' },
           { label: 'Outstanding',     value: fmt(summary.outstanding),  color: '#F59E0B' },
@@ -123,12 +310,12 @@ export default function PaymentsModule() {
         ].map(({ label, value, color }) => (
           <div key={label} className="card">
             <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-2">{label}</p>
-            <p className="text-2xl font-semibold" style={{ color }}>{value}</p>
+            <p className="text-2xl font-semibold text-mh-text" style={color ? { color } : {}}>{value}</p>
           </div>
         ))}
       </div>
 
-      {/* Filters */}
+      {/* Filters + Add Invoice */}
       <div className="flex items-center gap-3">
         <input
           type="text"
@@ -151,6 +338,13 @@ export default function PaymentsModule() {
           ))}
         </div>
         <span className="text-xs text-mh-muted ml-auto">{filtered.length} records</span>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-mh-vermillion text-white
+            rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap"
+        >
+          + Add Invoice
+        </button>
       </div>
 
       {/* Table */}
@@ -195,7 +389,7 @@ export default function PaymentsModule() {
                       {p.status !== 'Received' && (
                         <div className="flex gap-1">
                           <button
-                            onClick={() => markAs(p.rowIndex, 'Received')}
+                            onClick={() => markAs(p, 'Received')}
                             disabled={updating === p.rowIndex}
                             className="text-[10px] px-2 py-1 rounded border border-green-500/40 text-green-400
                               hover:bg-green-500/10 disabled:opacity-50 transition-colors whitespace-nowrap"
@@ -204,7 +398,7 @@ export default function PaymentsModule() {
                           </button>
                           {p.status !== 'Partial' && (
                             <button
-                              onClick={() => markAs(p.rowIndex, 'Partial')}
+                              onClick={() => markAs(p, 'Partial')}
                               disabled={updating === p.rowIndex}
                               className="text-[10px] px-2 py-1 rounded border border-purple-500/40 text-purple-400
                                 hover:bg-purple-500/10 disabled:opacity-50 transition-colors"

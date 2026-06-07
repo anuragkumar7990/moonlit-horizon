@@ -8,6 +8,7 @@ const TYPE_META: Record<UpdateEvent['type'], { emoji: string; color: string; lab
   note:    { emoji: '📝', color: '#34D399', label: 'Notes' },
   payment: { emoji: '💰', color: '#22C55E', label: 'Payment' },
   intel:   { emoji: '🧠', color: '#F59E0B', label: 'Intel' },
+  email:   { emoji: '✉️', color: '#F472B6', label: 'Email' },
 }
 
 function relativeTime(ts: string): string {
@@ -113,7 +114,7 @@ export default function UpdatesModule() {
           >
             All {counts.all}
           </button>
-          {(['call', 'meeting', 'note', 'payment'] as const).map(t => (
+          {(['call', 'meeting', 'note', 'payment', 'email'] as const).map(t => (
             <button
               key={t}
               onClick={() => { setTypeFilter(t); setPage(0) }}

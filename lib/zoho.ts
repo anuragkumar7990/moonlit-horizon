@@ -620,3 +620,13 @@ export async function createDeal(payload: {
   }
   return record?.details?.id ?? ''
 }
+
+export async function updateDealStage(dealId: string, stage: string): Promise<void> {
+  const token = await getAccessToken()
+  await fetch(`${BASE_URL}/Deals/${dealId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [{ Stage: stage }] }),
+    cache: 'no-store',
+  })
+}
