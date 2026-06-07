@@ -3,10 +3,10 @@ import { useState, useEffect } from 'react'
 import type { TrainerPipelineSummary, TrainerRosterEntry, TopicCoverageEntry } from '@/lib/sheets'
 
 interface SupplyData {
-  pipeline: TrainerPipelineSummary
-  roster: TrainerRosterEntry[]
-  coverage: TopicCoverageEntry[]
-  fetchedAt: string
+  pipeline?: TrainerPipelineSummary
+  roster?: TrainerRosterEntry[]
+  coverage?: TopicCoverageEntry[]
+  fetchedAt?: string
   error?: string
 }
 
@@ -45,7 +45,26 @@ export default function SupplyModule() {
     return <div className="py-16 text-center text-mh-muted text-sm">Loading supply data…</div>
   }
 
-  const p = data?.pipeline
+  if (!data || data.error) {
+    return (
+      <div className="py-16 text-center space-y-3">
+        <p className="text-red-400 text-sm font-medium">Failed to load supply data</p>
+        <p className="text-mh-muted text-xs max-w-md mx-auto font-mono bg-mh-surface border border-mh-border rounded-lg px-4 py-3">
+          {data?.error ?? 'Network error — could not reach /api/supply'}
+        </p>
+        <p className="text-[11px] text-mh-muted">
+          Check that the Google credentials have access to the trainer Google Sheets.
+        </p>
+      </div>
+    )
+  }
+
+  const EMPTY_PIPELINE: TrainerPipelineSummary = {
+    outreachTotal: 0, connected: 0, formFilled: 0,
+    emailSent: 0, whatsappSent: 0, meetingBooked: 0,
+    meetingConducted: 0, sampleTaken: 0, onboarded: 0,
+  }
+  const p = data.pipeline ?? EMPTY_PIPELINE
   const roster = data?.roster ?? []
   const coverage = data?.coverage ?? []
 
