@@ -227,24 +227,53 @@ export default function ProspectModule() {
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-4">
             Prospect Stock by Source
           </p>
-          {statsLoading ? (
-            <p className="text-mh-muted text-sm italic">Loading…</p>
-          ) : !stats || stats.bySource.length === 0 ? (
-            <p className="text-mh-muted text-sm italic">No prospects in the database yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-mh-muted text-[10px] uppercase tracking-widest">
-                  <th className="text-left pb-3 font-semibold">Source</th>
-                  <th className="text-right pb-3 font-semibold">Count</th>
-                  <th className="text-right pb-3 font-semibold">Weeks of Stock</th>
-                  <th className="text-right pb-3 font-semibold">Health</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-mh-border">
-                {stats.bySource.map(({ source, count, weeksOfStock }) => (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-mh-muted text-[10px] uppercase tracking-widest">
+                <th className="text-left pb-3 font-semibold">Source</th>
+                <th className="text-right pb-3 font-semibold">Count</th>
+                <th className="text-right pb-3 font-semibold">Weeks of Stock</th>
+                <th className="text-right pb-3 font-semibold">Health</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-mh-border">
+              {LVL1_OPTIONS.map(source => {
+                const live = stats?.bySource.find(s => s.source === source)
+                const count = statsLoading ? null : (live?.count ?? 0)
+                const weeksOfStock = live?.weeksOfStock ?? 0
+                return (
                   <tr key={source}>
                     <td className="py-3 text-mh-text font-medium">{source}</td>
+                    <td className="py-3 text-right text-mh-text">
+                      {count === null ? <span className="text-mh-muted">—</span> : count.toLocaleString()}
+                    </td>
+                    <td className="py-3 text-right text-mh-text">
+                      {count === null ? <span className="text-mh-muted">—</span> : `${weeksOfStock}w`}
+                    </td>
+                    <td className="py-3 text-right">
+                      {count === null ? (
+                        <span className="text-[11px] text-mh-muted">—</span>
+                      ) : (
+                        <span
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{
+                            color: stockColor(weeksOfStock),
+                            backgroundColor: stockColor(weeksOfStock) + '22',
+                          }}
+                        >
+                          {stockLabel(weeksOfStock)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {/* Any source in the sheet that's not in LVL1_OPTIONS (e.g. "Unknown") */}
+              {stats?.bySource
+                .filter(s => !LVL1_OPTIONS.includes(s.source))
+                .map(({ source, count, weeksOfStock }) => (
+                  <tr key={source}>
+                    <td className="py-3 text-mh-muted italic">{source}</td>
                     <td className="py-3 text-right text-mh-text">{count.toLocaleString()}</td>
                     <td className="py-3 text-right text-mh-text">{weeksOfStock}w</td>
                     <td className="py-3 text-right">
@@ -260,9 +289,8 @@ export default function ProspectModule() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          )}
+            </tbody>
+          </table>
           {stats && (
             <p className="text-[10px] text-mh-muted mt-4 pt-3 border-t border-mh-border">
               Fetched at{' '}
