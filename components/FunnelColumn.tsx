@@ -17,10 +17,14 @@ export default function FunnelColumn({ data }: { data: FunnelData }) {
             <span className="text-[11px] text-mh-muted truncate max-w-[130px]">{s.stage}</span>
             <span className="text-[11px] font-semibold text-mh-text ml-2 shrink-0">{s.count}</span>
           </div>
-          <div className="h-1.5 bg-mh-surface2 rounded-full overflow-hidden">
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
             <div
-              className="h-full rounded-full bg-mh-vermillion transition-all duration-500"
-              style={{ width: `${(s.count / maxCount) * 100}%` }}
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${(s.count / maxCount) * 100}%`,
+                background: 'linear-gradient(90deg, #E8341C, #FF7A5A)',
+                boxShadow: '0 0 8px rgba(232,52,28,0.4)',
+              }}
             />
           </div>
           {s.amount > 0 && (
@@ -32,11 +36,13 @@ export default function FunnelColumn({ data }: { data: FunnelData }) {
       ))}
 
       {/* Won + Lost */}
-      <div className="border-t border-mh-border pt-3 flex gap-2">
+      <div className="pt-3 flex gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
         <button
           title="Won deals — full table coming soon"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-mh-surface2 border border-mh-border
-            hover:border-mh-gold hover:bg-[#1a1a0e] transition-all cursor-pointer"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+          style={{ background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.12)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.06)')}
         >
           {/* trophy */}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" xmlns="http://www.w3.org/2000/svg">
@@ -50,8 +56,10 @@ export default function FunnelColumn({ data }: { data: FunnelData }) {
 
         <button
           title="Lost deals — full table coming soon"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-mh-surface2 border border-mh-border
-            hover:border-mh-negative hover:bg-[#1a0a0a] transition-all cursor-pointer"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+          style={{ background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.15)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,68,68,0.12)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,68,68,0.06)')}
         >
           {/* thumbs down */}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#FF4444" xmlns="http://www.w3.org/2000/svg">

@@ -41,16 +41,18 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
     <div>
       {/* Row 1: period toggle */}
       <div className="flex items-center justify-end mb-6">
-        <div className="flex items-center gap-1 bg-mh-surface border border-mh-border rounded-full p-1">
+        <div className="flex items-center gap-1 rounded-full p-1"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
           {(['weekly', 'monthly'] as Period[]).map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`text-xs px-4 py-1.5 rounded-full font-medium capitalize transition-colors
-                ${period === p
-                  ? 'bg-mh-vermillion text-white'
-                  : 'text-mh-muted hover:text-mh-text'
-                }`}
+              className="text-xs px-4 py-1.5 rounded-full font-medium capitalize transition-all"
+              style={period === p
+                ? { background: 'linear-gradient(135deg, #E8341C, #FF5A3A)', color: '#fff', boxShadow: '0 0 10px rgba(232,52,28,0.35)' }
+                : { color: '#888899' }
+              }
             >
               {p}
             </button>

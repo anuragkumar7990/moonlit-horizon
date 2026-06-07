@@ -119,8 +119,16 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
       style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-mh-surface border border-mh-border rounded-2xl w-full max-w-lg shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-mh-border">
+      <div className="rounded-2xl w-full max-w-lg"
+        style={{
+          background: 'rgba(8,8,16,0.92)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.06)',
+        }}
+      >
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           <h2 className="text-sm font-semibold text-mh-text">Add Invoice / Payment</h2>
           <button onClick={onClose} className="text-mh-muted hover:text-mh-text transition-colors text-lg leading-none">✕</button>
         </div>

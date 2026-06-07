@@ -23,11 +23,13 @@ const LEGEND_ITEMS: Record<Filter, { name: string; color: string }[]> = {
 }
 
 const TOOLTIP_STYLE = {
-  background: '#111111',
-  border: '1px solid #2A2A2A',
-  borderRadius: '8px',
+  background: 'rgba(10,10,18,0.92)',
+  backdropFilter: 'blur(16px)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '10px',
   color: '#FFFFFF',
   fontSize: '12px',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
 }
 
 export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
@@ -41,11 +43,20 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`text-[11px] px-3 py-1 rounded-full border font-medium transition-colors
-              ${filter === f.key
-                ? 'bg-mh-vermillion border-mh-vermillion text-white'
-                : 'border-mh-border text-mh-muted hover:border-mh-muted hover:text-mh-text'
-              }`}
+            className="text-[11px] px-3 py-1 rounded-full font-medium transition-all"
+            style={filter === f.key
+              ? {
+                  background: 'linear-gradient(135deg, #E8341C, #FF5A3A)',
+                  border: '1px solid rgba(232,52,28,0.6)',
+                  color: '#fff',
+                  boxShadow: '0 0 12px rgba(232,52,28,0.3)',
+                }
+              : {
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.09)',
+                  color: '#888899',
+                }
+            }
           >
             {f.label}
           </button>
@@ -73,16 +84,16 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis
                 dataKey="week"
-                tick={{ fill: '#999999', fontSize: 10 }}
-                axisLine={{ stroke: '#2A2A2A' }}
+                tick={{ fill: '#888899', fontSize: 10 }}
+                axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fill: '#999999', fontSize: 10 }}
-                axisLine={{ stroke: '#2A2A2A' }}
+                tick={{ fill: '#888899', fontSize: 10 }}
+                axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                 tickLine={false}
                 allowDecimals={false}
               />

@@ -4,12 +4,12 @@
 
 @layer base {
   :root {
-    --background: #0A0A0A;
+    --background: #05050A;
     --foreground: #FFFFFF;
-    --surface:    #111111;
-    --surface2:   #161616;
-    --border:     #2A2A2A;
-    --muted:      #999999;
+    --surface:    rgba(255,255,255,0.028);
+    --surface2:   rgba(255,255,255,0.045);
+    --border:     rgba(255,255,255,0.07);
+    --muted:      #888899;
     --vermillion: #E8341C;
     --gold:       #FFD700;
     --positive:   #22C55E;
@@ -17,13 +17,16 @@
   }
   body {
     background-color: var(--background);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232,52,28,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(255,215,0,0.04) 0%, transparent 50%);
     color: var(--foreground);
   }
   /* Scrollbar — dark theme */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #0A0A0A; }
-  ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: #3A3A3A; }
+  ::-webkit-scrollbar-track { background: #05050A; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 }
 
 @layer utilities {
@@ -31,9 +34,12 @@
     box-shadow: 0 0 12px #FFD70088;
   }
   .card {
-    background-color: #111111;
-    border: 1px solid #2A2A2A;
-    border-radius: 12px;
+    background: rgba(255,255,255,0.028);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
     padding: 20px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
   }
 }

@@ -64,18 +64,25 @@ export default function HomeTabs({
         <PersonSelector />
       </div>
 
-      <div className="flex gap-0 mb-6 border-b border-mh-border overflow-x-auto">
+      <div className="relative flex gap-0 mb-6 overflow-x-auto"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+      >
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap
+            className={`relative px-4 py-2.5 text-sm font-medium transition-all -mb-px whitespace-nowrap
               ${tab === t.id
-                ? 'border-mh-vermillion text-mh-vermillion'
-                : 'border-transparent text-mh-muted hover:text-mh-text'
+                ? 'text-white'
+                : 'text-mh-muted hover:text-white'
               }`}
           >
             {t.label}
+            {tab === t.id && (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-t-full"
+                style={{ background: 'linear-gradient(90deg, transparent, #E8341C 30%, #E8341C 70%, transparent)' }}
+              />
+            )}
           </button>
         ))}
       </div>

@@ -13,7 +13,7 @@ interface Props {
 
 const SDR_OPTIONS = ['Anurag Kumar', 'Mahesh', 'Ashutosh', 'Tanishq']
 
-const INPUT_CLS = 'w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors placeholder:text-[#555]'
+const INPUT_CLS = 'w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors placeholder:text-[#555]'
 const LABEL_CLS = 'block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1'
 
 // ── Searchable dropdown (portal-based — escapes overflow:hidden parents) ─────
@@ -78,14 +78,19 @@ function SearchableSelect({
   const dropdown = open && filtered.length > 0 && rect ? createPortal(
     <div
       ref={listRef}
+      className="rounded-lg max-h-52 overflow-y-auto"
       style={{
         position: 'fixed',
         top:   rect.bottom + 4,
         left:  rect.left,
         width: rect.width,
         zIndex: 99999,
+        background: 'rgba(8,8,18,0.97)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.7)',
       }}
-      className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg max-h-52 overflow-y-auto shadow-2xl"
     >
       {filtered.map(o => (
         <button
@@ -265,10 +270,20 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
       style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-[#111111] border border-[#2A2A2A] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="rounded-2xl w-full max-w-2xl flex flex-col max-h-[92vh]"
+        style={{
+          background: 'rgba(8,8,16,0.94)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.06)',
+        }}
+      >
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2A2A2A] shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 shrink-0"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+        >
           <div>
             <h2 className="text-sm font-semibold text-white">Draft Pre-Meeting Email</h2>
             <p className="text-[11px] text-[#999] mt-0.5">Select account + contact → auto-analysis → generate personalised email</p>
@@ -390,8 +405,12 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
 
           {/* ── Insight checkboxes ── */}
           {insights.length > 0 && (
-            <div className="border border-[#2A2A2A] rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A0A0A] border-b border-[#2A2A2A]">
+            <div className="rounded-xl overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.02)' }}
+            >
+              <div className="flex items-center justify-between px-4 py-2.5"
+                style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+              >
                 <p className="text-xs font-semibold text-white">
                   Meeting Intelligence
                   <span className="ml-2 text-[#555] font-normal">{Array.from(checkedInsights).length}/{totalInsights} selected</span>
@@ -445,12 +464,17 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
 
           {/* ── Generated email ── */}
           {draft && (
-            <div className="border border-[#2A2A2A] rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A0A0A] border-b border-[#2A2A2A]">
+            <div className="rounded-xl overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.02)' }}
+            >
+              <div className="flex items-center justify-between px-4 py-2.5"
+                style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+              >
                 <p className="text-xs font-semibold text-white">Generated Email</p>
                 <button
                   onClick={copyAll}
-                  className="text-[11px] px-3 py-1 border border-[#2A2A2A] rounded-lg text-[#999] hover:text-white transition-colors"
+                  className="text-[11px] px-3 py-1 rounded-lg text-[#999] hover:text-white transition-colors"
+                  style={{ border: '1px solid rgba(255,255,255,0.1)' }}
                 >
                   {copied ? '✓ Copied!' : 'Copy All'}
                 </button>
@@ -460,7 +484,7 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
                   <p className="text-[10px] font-semibold text-[#E8341C] uppercase tracking-widest mb-1">Subject</p>
                   <p className="text-sm text-white font-medium">{draft.subject}</p>
                 </div>
-                <div className="border-t border-[#2A2A2A] pt-3">
+                <div className="pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
                   <p className="text-[10px] font-semibold text-[#E8341C] uppercase tracking-widest mb-1">Body</p>
                   <p className="text-sm text-[#bbb] leading-relaxed whitespace-pre-wrap">{draft.body}</p>
                 </div>
@@ -472,18 +496,22 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[#2A2A2A] px-6 py-4 flex items-center gap-3 justify-end shrink-0">
+        <div className="px-6 py-4 flex items-center gap-3 justify-end shrink-0"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+        >
           {draft && (
             <button
               onClick={() => setDraft(null)}
-              className="px-4 py-2 text-sm text-[#999] border border-[#2A2A2A] rounded-lg hover:text-white transition-colors"
+              className="px-4 py-2 text-sm text-[#999] rounded-lg hover:text-white transition-colors"
+              style={{ border: '1px solid rgba(255,255,255,0.1)' }}
             >
               ← Edit
             </button>
           )}
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-[#999] border border-[#2A2A2A] rounded-lg hover:text-white transition-colors"
+            className="px-4 py-2 text-sm text-[#999] rounded-lg hover:text-white transition-colors"
+            style={{ border: '1px solid rgba(255,255,255,0.1)' }}
           >
             Close
           </button>
