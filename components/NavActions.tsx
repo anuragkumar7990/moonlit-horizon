@@ -7,7 +7,8 @@ export default function NavActions() {
   const [open, setOpen]             = useState(false)
   const [pos, setPos]               = useState({ top: 0, right: 0 })
   const [showEmailDraft, setShowEmailDraft] = useState(false)
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const btnRef      = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Recalculate position whenever dropdown opens
   useEffect(() => {
@@ -16,11 +17,14 @@ export default function NavActions() {
     setPos({ top: r.bottom + 8, right: window.innerWidth - r.right })
   }, [open])
 
-  // Close on outside click
+  // Close on outside click — must exclude the dropdown panel itself so item clicks register
   useEffect(() => {
     if (!open) return
     function handle(e: MouseEvent) {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      const insideBtn      = btnRef.current?.contains(target) ?? false
+      const insideDropdown = dropdownRef.current?.contains(target) ?? false
+      if (!insideBtn && !insideDropdown) setOpen(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
@@ -47,6 +51,7 @@ export default function NavActions() {
 
       {open && (
         <div
+          ref={dropdownRef}
           style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
           className="w-56 bg-mh-surface border border-mh-border rounded-xl shadow-xl overflow-hidden py-1"
         >

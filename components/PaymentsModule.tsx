@@ -115,8 +115,8 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="bg-mh-surface border border-mh-border rounded-2xl w-full max-w-lg shadow-2xl">
