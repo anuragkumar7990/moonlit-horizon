@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Poppins } from 'next/font/google'
+import NavActions from '@/components/NavActions'
 import './globals.css'
 
 const poppins = Poppins({
@@ -24,13 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="text-mh-border">|</span>
             <span className="text-sm text-mh-muted font-medium">Mission Control</span>
           </div>
-          <div className="flex items-center gap-6">
-            <a href="/" className="text-sm text-mh-muted hover:text-mh-text font-medium transition-colors">Dashboard</a>
-            <a href="/upload" className="text-sm text-mh-muted hover:text-mh-text font-medium transition-colors">Upload</a>
-            <a href="/book-prospect" className="text-sm text-mh-muted hover:text-mh-text font-medium transition-colors">Book Prospect</a>
-            <a href="/book" className="text-sm bg-mh-vermillion text-white px-4 py-1.5 rounded-full hover:opacity-90 font-medium transition-opacity">
-              + Book Meeting
-            </a>
+          <div className="flex items-center gap-4">
+            <a href="/" className="text-sm text-mh-muted hover:text-mh-text font-medium transition-colors">Home</a>
+            <NavActions />
           </div>
         </nav>
         <main className="max-w-[1440px] mx-auto px-6 py-8">{children}</main>

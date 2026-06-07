@@ -16,7 +16,7 @@ export default async function BookPage({
   return (
     <div className="max-w-lg mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-800">Book a Meeting</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Book Contact</h1>
         <p className="text-slate-500 text-sm mt-1">
           Fills Google Calendar, Zoho CRM, and the dashboard automatically.
         </p>

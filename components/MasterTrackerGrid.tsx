@@ -122,21 +122,27 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         </div>
       </div>
 
-      {/* Weekly summary */}
+      {/* Summary — changes with period toggle */}
       <div className="mt-4">
         <div className="card">
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">
-            Weekly Summary
+            {period === 'weekly' ? 'Weekly Summary' : 'Monthly Summary'}
           </p>
-          {weeklySummary ? (
-            <div className="space-y-2">
-              {weeklySummary.split('\n').filter(l => l.trim()).map((line, i) => (
-                <p key={i} className="text-sm text-mh-text leading-relaxed">{line}</p>
-              ))}
-            </div>
+          {period === 'weekly' ? (
+            weeklySummary ? (
+              <div className="space-y-2">
+                {weeklySummary.split('\n').filter(l => l.trim()).map((line, i) => (
+                  <p key={i} className="text-sm text-mh-text leading-relaxed">{line}</p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-mh-muted text-sm italic leading-relaxed">
+                No summary yet — use <span className="text-mh-text">/mh stats weekly</span> in Discord to generate one.
+              </p>
+            )
           ) : (
             <p className="text-mh-muted text-sm italic leading-relaxed">
-              No summary yet — use <span className="text-mh-text">/mh stats weekly</span> in Discord to generate one.
+              No monthly summary yet — use <span className="text-mh-text">/mh stats monthly</span> in Discord to generate one.
             </p>
           )}
         </div>
