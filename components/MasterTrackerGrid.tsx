@@ -40,7 +40,7 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
   return (
     <div>
       {/* Row 1: period toggle */}
-      <div className="flex items-center justify-end mb-6">
+      <div className="relative z-10 flex items-center justify-end mb-6">
         <div className="flex items-center gap-1 bg-mh-surface border border-mh-border rounded-full p-1">
           {(['weekly', 'monthly'] as Period[]).map(p => (
             <button
