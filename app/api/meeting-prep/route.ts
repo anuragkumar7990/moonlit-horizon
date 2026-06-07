@@ -117,7 +117,9 @@ Rules:
     })
 
     const raw = (message.content[0] as { text: string }).text.trim()
-    const jsonStr = raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{'))
+    const start = raw.indexOf('{')
+    const end   = raw.lastIndexOf('}')
+    const jsonStr = start !== -1 && end !== -1 ? raw.slice(start, end + 1) : raw
     const parsed = JSON.parse(jsonStr) as { insights: InsightCategory[] }
 
     return NextResponse.json({

@@ -103,7 +103,9 @@ Return ONLY a JSON object with exactly two keys: "subject" and "body". No explan
 
     let parsed: DraftEmailResponse
     try {
-      const jsonStr = raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{'))
+      const start = raw.indexOf('{')
+      const end   = raw.lastIndexOf('}')
+      const jsonStr = start !== -1 && end !== -1 ? raw.slice(start, end + 1) : raw
       parsed = JSON.parse(jsonStr) as DraftEmailResponse
     } catch {
       const subjectMatch = raw.match(/"subject"\s*:\s*"([^"]+)"/)
