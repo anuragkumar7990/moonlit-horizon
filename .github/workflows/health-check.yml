@@ -61,9 +61,9 @@ jobs:
 
           # ── Endpoint checks ───────────────────────────────────────────────────
           check "Home page"         "$BASE_URL/"
-          check "Prospect Stats"    "$BASE_URL/api/prospect-stats"    'has("byL1Source")'
+          check "Prospect Stats"    "$BASE_URL/api/prospect-stats"    'has("bySource")'
           check "Supply API"        "$BASE_URL/api/supply"            'has("pipeline")'
-          check "Targets API"       "$BASE_URL/api/targets"           'has("metrics")'
+          check "Targets API"       "$BASE_URL/api/targets"           'has("targets")'
           check "Luma Events API"   "$BASE_URL/api/luma-events"       'has("configured")'
 
           # ── Write outputs ─────────────────────────────────────────────────────
