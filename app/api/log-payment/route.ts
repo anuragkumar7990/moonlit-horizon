@@ -11,9 +11,10 @@ export async function POST(req: NextRequest) {
       invoiceDate: string
       dueDate: string
       notes?: string
+      attachmentUrl?: string
     }
 
-    const { account, deal, amount, invoiceDate, dueDate, notes } = body
+    const { account, deal, amount, invoiceDate, dueDate, notes, attachmentUrl } = body
 
     if (!account || !amount || !invoiceDate || !dueDate) {
       return NextResponse.json(
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Dates must be in YYYY-MM-DD format' }, { status: 400 })
     }
 
-    await appendPaymentRow({ account, deal: deal ?? '', amount, invoiceDate, dueDate, notes })
+    await appendPaymentRow({ account, deal: deal ?? '', amount, invoiceDate, dueDate, notes, attachmentUrl })
 
     // Cascade: move Zoho deal to "Payment Pending"
     try {

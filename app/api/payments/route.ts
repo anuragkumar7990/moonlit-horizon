@@ -17,20 +17,21 @@ export async function GET() {
     const sheets = getSheets()
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEETS_SPREADSHEET_ID!,
-      range: 'Payments!A:H',
+      range: 'Payments!A:I',
     })
     const rows = res.data.values ?? []
 
     const payments = rows.slice(1).map((r, i) => ({
-      rowIndex: i + 2, // 1-indexed sheet row (header = row 1, data starts at row 2)
-      date:        r[0] ?? '',
-      account:     r[1] ?? '',
-      deal:        r[2] ?? '',
-      amount:      parseInt(r[3] ?? '0', 10) || 0,
-      invoiceDate: r[4] ?? '',
-      dueDate:     r[5] ?? '',
-      status:      r[6] ?? 'Invoiced',
-      notes:       r[7] ?? '',
+      rowIndex:      i + 2, // 1-indexed sheet row (header = row 1, data starts at row 2)
+      date:          r[0] ?? '',
+      account:       r[1] ?? '',
+      deal:          r[2] ?? '',
+      amount:        parseInt(r[3] ?? '0', 10) || 0,
+      invoiceDate:   r[4] ?? '',
+      dueDate:       r[5] ?? '',
+      status:        r[6] ?? 'Invoiced',
+      notes:         r[7] ?? '',
+      attachmentUrl: r[8] ?? '',
     })).filter(p => p.account)
 
     return NextResponse.json({ payments })

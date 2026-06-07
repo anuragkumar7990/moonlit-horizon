@@ -4,6 +4,7 @@ import type { Payment } from '@/lib/sheets'
 
 interface PaymentRow extends Payment {
   rowIndex: number
+  attachmentUrl?: string
 }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
@@ -41,21 +42,41 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
   const today = new Date().toISOString().slice(0, 10)
   const in30  = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
 
-  const [account,     setAccount]     = useState('')
-  const [deal,        setDeal]        = useState('')
-  const [amount,      setAmount]      = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(today)
-  const [dueDate,     setDueDate]     = useState(in30)
-  const [notes,       setNotes]       = useState('')
-  const [saving,      setSaving]      = useState(false)
-  const [error,       setError]       = useState<string | null>(null)
+  const [account,        setAccount]        = useState('')
+  const [deal,           setDeal]           = useState('')
+  const [amount,         setAmount]         = useState('')
+  const [invoiceDate,    setInvoiceDate]    = useState(today)
+  const [dueDate,        setDueDate]        = useState(in30)
+  const [notes,          setNotes]          = useState('')
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+  const [saving,         setSaving]         = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null)
+  const [error,          setError]          = useState<string | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!account || !amount || !invoiceDate || !dueDate) { setError('Account, amount and dates are required'); return }
     setSaving(true)
     setError(null)
+    setUploadProgress(null)
     try {
+      // 1. Upload attachment if provided
+      let attachmentUrl: string | undefined
+      if (attachmentFile) {
+        setUploadProgress('Uploading attachment…')
+        const fd = new FormData()
+        fd.append('file', attachmentFile)
+        const uploadRes = await fetch('/api/upload-attachment', { method: 'POST', body: fd })
+        const uploadData = await uploadRes.json() as { url?: string; error?: string }
+        if (!uploadRes.ok || uploadData.error) {
+          setError(uploadData.error ?? 'File upload failed')
+          return
+        }
+        attachmentUrl = uploadData.url
+        setUploadProgress(null)
+      }
+
+      // 2. Save invoice
       const res = await fetch('/api/log-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,13 +87,13 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
           invoiceDate,
           dueDate,
           notes: notes.trim(),
+          attachmentUrl,
         }),
       })
       const data = await res.json() as { ok?: boolean; error?: string }
       if (!res.ok || data.error) { setError(data.error ?? 'Failed to add invoice'); return }
-      // Optimistically add to local state
       onAdded({
-        rowIndex: -1, // will refresh
+        rowIndex: -1,
         date: today,
         account: account.trim(),
         deal: deal.trim(),
@@ -81,12 +102,14 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
         dueDate,
         status: 'Invoiced',
         notes: notes.trim(),
+        attachmentUrl,
       })
       onClose()
     } catch (err) {
       setError(String(err))
     } finally {
       setSaving(false)
+      setUploadProgress(null)
     }
   }
 
@@ -177,6 +200,31 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
             </div>
           </div>
 
+          {/* Attachment */}
+          <div>
+            <label className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1 block">
+              Attach Invoice (PDF / Image)
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <span className="px-3 py-2 text-xs border border-mh-border rounded-lg text-mh-muted hover:text-mh-text
+                hover:border-mh-vermillion transition-colors whitespace-nowrap">
+                {attachmentFile ? '↩ Change file' : '+ Attach file'}
+              </span>
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.webp"
+                className="hidden"
+                onChange={e => setAttachmentFile(e.target.files?.[0] ?? null)}
+              />
+              {attachmentFile ? (
+                <span className="text-xs text-mh-text truncate max-w-[200px]">{attachmentFile.name}</span>
+              ) : (
+                <span className="text-xs text-mh-muted">No file chosen · max 20 MB</span>
+              )}
+            </label>
+          </div>
+
+          {uploadProgress && <p className="text-xs text-mh-muted">{uploadProgress}</p>}
           {error && <p className="text-red-400 text-xs">{error}</p>}
 
           <p className="text-[10px] text-mh-muted">
@@ -195,9 +243,10 @@ function AddInvoiceModal({ onClose, onAdded }: AddInvoiceModalProps) {
               type="submit"
               disabled={saving}
               className="px-5 py-2 text-sm font-medium bg-mh-vermillion text-white rounded-lg
-                hover:opacity-90 disabled:opacity-50 transition-opacity"
+                hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
             >
-              {saving ? 'Saving…' : 'Add Invoice'}
+              {saving && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {saving ? (uploadProgress ? 'Uploading…' : 'Saving…') : 'Add Invoice'}
             </button>
           </div>
         </form>
@@ -362,6 +411,7 @@ export default function PaymentsModule() {
                 <th className="text-left pb-3 pr-4 font-semibold">Due Date</th>
                 <th className="text-left pb-3 pr-4 font-semibold">Status</th>
                 <th className="text-left pb-3 pr-4 font-semibold">Notes</th>
+                <th className="text-left pb-3 pr-4 font-semibold">Attachment</th>
                 <th className="text-left pb-3 font-semibold">Action</th>
               </tr>
             </thead>
@@ -385,6 +435,21 @@ export default function PaymentsModule() {
                     </td>
                     <td className="py-2.5 pr-4"><StatusBadge status={p.status} /></td>
                     <td className="py-2.5 pr-4 text-mh-muted text-xs max-w-[150px] truncate" title={p.notes}>{p.notes || '—'}</td>
+                    <td className="py-2.5 pr-4">
+                      {p.attachmentUrl ? (
+                        <a
+                          href={p.attachmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] px-2 py-1 rounded border border-mh-border text-mh-muted
+                            hover:text-mh-text hover:border-mh-vermillion transition-colors whitespace-nowrap"
+                        >
+                          📎 View
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-mh-border">—</span>
+                      )}
+                    </td>
                     <td className="py-2.5">
                       {p.status !== 'Received' && (
                         <div className="flex gap-1">

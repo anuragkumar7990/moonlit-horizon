@@ -122,11 +122,11 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-mh-surface border border-mh-border rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="bg-[#111111] border border-[#2A2A2A] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-mh-border shrink-0">
           <div>
@@ -141,12 +141,12 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
           {/* ── Step 1: Inputs ── */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="field-label">Account Name *</label>
+              <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">Account Name *</label>
               <input
                 value={accountName}
                 onChange={e => setAccountName(e.target.value)}
                 placeholder="e.g. Stryker"
-                className="mh-input w-full"
+                className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
               />
               {intelLoading && (
                 <p className="text-[10px] text-mh-muted mt-1">Loading intelligence…</p>
@@ -160,63 +160,63 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
             </div>
 
             <div>
-              <label className="field-label">Contact Name *</label>
+              <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">Contact Name *</label>
               <input
                 value={contactName}
                 onChange={e => setContactName(e.target.value)}
                 placeholder="e.g. Gurdeep Singh"
-                className="mh-input w-full"
+                className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
               />
             </div>
 
             <div>
-              <label className="field-label">Contact Email</label>
+              <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">Contact Email</label>
               <input
                 type="email"
                 value={contactEmail}
                 onChange={e => setContactEmail(e.target.value)}
                 placeholder="gurdeep@company.com"
-                className="mh-input w-full"
+                className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
               />
             </div>
 
             <div>
-              <label className="field-label">From (SDR) *</label>
+              <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">From (SDR) *</label>
               <select
                 value={sdrName}
                 onChange={e => setSdrName(e.target.value)}
-                className="mh-input w-full"
+                className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
               >
-                {SDR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                {SDR_OPTIONS.map(s => <option key={s} value={s} style={{ background: '#1A1A1A' }}>{s}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="field-label">Meeting Date</label>
+              <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">Meeting Date</label>
               <input
                 type="date"
                 value={meetingDate}
                 onChange={e => setMeetingDate(e.target.value)}
-                className="mh-input w-full"
+                className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
               />
             </div>
 
             <div>
-              <label className="field-label">Meeting Time &amp; Type</label>
+              <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">Meeting Time &amp; Type</label>
               <div className="flex gap-2">
                 <input
                   type="time"
                   value={meetingTime}
                   onChange={e => setMeetingTime(e.target.value)}
-                  className="mh-input flex-1"
+                  className="flex-1 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
                 />
                 <select
                   value={meetingType}
                   onChange={e => setMeetingType(e.target.value as 'L1' | 'L2+')}
-                  className="mh-input w-20"
+                  className="w-20 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
                 >
-                  <option value="L1">L1</option>
-                  <option value="L2+">L2+</option>
+                  <option value="L1" style={{ background: '#1A1A1A' }}>L1</option>
+                  <option value="L2+" style={{ background: '#1A1A1A' }}>L2+</option>
                 </select>
               </div>
             </div>
@@ -224,7 +224,7 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
 
           {/* ── Intel checklist ── */}
           <div>
-            <label className="field-label mb-2 block">Include in email (select intel layers)</label>
+            <p className="text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-2">Include in email (select intel layers)</p>
             <div className="grid grid-cols-2 gap-2">
               {INTEL_KEYS.map(({ key, label, field }) => {
                 const hasContent = intel ? !!intel[field] : false
@@ -234,8 +234,8 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
                     key={key}
                     className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors
                       ${checked
-                        ? 'border-mh-vermillion bg-mh-vermillion/5'
-                        : 'border-mh-border hover:border-mh-border/80'
+                        ? 'border-[#E8341C] bg-[#E8341C]/5'
+                        : 'border-[#2A2A2A] hover:border-[#3A3A3A]'
                       }
                       ${!hasContent ? 'opacity-50' : ''}`}
                   >
@@ -247,13 +247,13 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
                       className="mt-0.5 shrink-0 accent-[#E8341C]"
                     />
                     <div className="min-w-0">
-                      <p className={`text-xs font-medium ${checked ? 'text-mh-text' : 'text-mh-muted'}`}>{label}</p>
+                      <p className={`text-xs font-medium ${checked ? 'text-white' : 'text-[#999]'}`}>{label}</p>
                       {intel && intel[field] ? (
-                        <p className="text-[10px] text-mh-muted mt-0.5 line-clamp-2 leading-relaxed">
+                        <p className="text-[10px] text-[#999] mt-0.5 line-clamp-2 leading-relaxed">
                           {String(intel[field]).slice(0, 80)}…
                         </p>
                       ) : (
-                        <p className="text-[10px] text-mh-muted mt-0.5">No data</p>
+                        <p className="text-[10px] text-[#999] mt-0.5">No data</p>
                       )}
                     </div>
                   </label>
@@ -264,37 +264,37 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
 
           {/* ── Additional context ── */}
           <div>
-            <label className="field-label">Additional Context</label>
+            <label className="block text-[10px] font-semibold text-[#E8341C] uppercase tracking-[0.1em] mb-1">Additional Context</label>
             <textarea
               value={addlContext}
               onChange={e => setAddlContext(e.target.value)}
               rows={2}
               placeholder="e.g. They mentioned budget approval in Dec, focus on ROI angle"
-              className="mh-input w-full resize-none"
+              className="w-full resize-none bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-[13px] text-[#E5E7EB] outline-none focus:border-[#E8341C] transition-colors"
             />
           </div>
 
           {/* ── Generated email ── */}
           {step === 2 && draft && (
-            <div className="border border-mh-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-mh-bg border-b border-mh-border">
-                <p className="text-xs font-semibold text-mh-text">Generated Email</p>
+            <div className="border border-[#2A2A2A] rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A0A0A] border-b border-[#2A2A2A]">
+                <p className="text-xs font-semibold text-white">Generated Email</p>
                 <button
                   onClick={copyAll}
-                  className="text-[11px] px-3 py-1 border border-mh-border rounded-lg text-mh-muted
-                    hover:text-mh-text transition-colors"
+                  className="text-[11px] px-3 py-1 border border-[#2A2A2A] rounded-lg text-[#999]
+                    hover:text-white transition-colors"
                 >
                   {copied ? '✓ Copied!' : 'Copy All'}
                 </button>
               </div>
               <div className="p-4 space-y-3">
                 <div>
-                  <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1">Subject</p>
-                  <p className="text-sm text-mh-text font-medium">{draft.subject}</p>
+                  <p className="text-[10px] font-semibold text-[#E8341C] uppercase tracking-widest mb-1">Subject</p>
+                  <p className="text-sm text-white font-medium">{draft.subject}</p>
                 </div>
-                <div className="border-t border-mh-border pt-3">
-                  <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1">Body</p>
-                  <p className="text-sm text-mh-muted leading-relaxed whitespace-pre-wrap">{draft.body}</p>
+                <div className="border-t border-[#2A2A2A] pt-3">
+                  <p className="text-[10px] font-semibold text-[#E8341C] uppercase tracking-widest mb-1">Body</p>
+                  <p className="text-sm text-[#999] leading-relaxed whitespace-pre-wrap">{draft.body}</p>
                 </div>
               </div>
             </div>
@@ -306,25 +306,25 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
         </div>
 
         {/* Footer */}
-        <div className="border-t border-mh-border px-6 py-4 flex items-center gap-3 justify-end shrink-0">
+        <div className="border-t border-[#2A2A2A] px-6 py-4 flex items-center gap-3 justify-end shrink-0">
           {step === 2 && (
             <button
               onClick={() => { setStep(1); setDraft(null) }}
-              className="px-4 py-2 text-sm text-mh-muted border border-mh-border rounded-lg hover:text-mh-text transition-colors"
+              className="px-4 py-2 text-sm text-[#999] border border-[#2A2A2A] rounded-lg hover:text-white transition-colors"
             >
               ← Edit
             </button>
           )}
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-mh-muted border border-mh-border rounded-lg hover:text-mh-text transition-colors"
+            className="px-4 py-2 text-sm text-[#999] border border-[#2A2A2A] rounded-lg hover:text-white transition-colors"
           >
             Close
           </button>
           <button
             onClick={generate}
             disabled={!hasRequiredFields || generating}
-            className="px-5 py-2 text-sm font-medium bg-mh-vermillion text-white rounded-lg
+            className="px-5 py-2 text-sm font-medium bg-[#E8341C] text-white rounded-lg
               hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
           >
             {generating && (
@@ -334,13 +334,6 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
           </button>
         </div>
       </div>
-
-      <style jsx>{`
-        .field-label { display: block; font-size: 10px; font-weight: 600; color: #E8341C; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
-        .mh-input { background: #0A0A0A; border: 1px solid #2A2A2A; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #E5E7EB; outline: none; transition: border-color 0.15s; }
-        .mh-input:focus { border-color: #E8341C; }
-        .mh-input option { background: #1A1A1A; }
-      `}</style>
     </div>
   )
 }

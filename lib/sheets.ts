@@ -579,21 +579,23 @@ export interface Payment {
   dueDate: string
   status: 'Invoiced' | 'Received' | 'Partial' | 'Overdue'
   notes: string
+  attachmentUrl?: string
 }
 
-const PAYMENTS_HEADERS = ['Date', 'Account', 'Deal', 'Amount', 'Invoice Date', 'Due Date', 'Status', 'Notes']
+const PAYMENTS_HEADERS = ['Date', 'Account', 'Deal', 'Amount', 'Invoice Date', 'Due Date', 'Status', 'Notes', 'Attachment URL']
 
 export async function getPayments(): Promise<Payment[]> {
   try {
-    return readSheet<Payment>('Payments!A:H', (r) => ({
-      date:        r[0] ?? '',
-      account:     r[1] ?? '',
-      deal:        r[2] ?? '',
-      amount:      parseInt(r[3] ?? '0', 10) || 0,
-      invoiceDate: r[4] ?? '',
-      dueDate:     r[5] ?? '',
-      status:      (r[6] as Payment['status']) ?? 'Invoiced',
-      notes:       r[7] ?? '',
+    return readSheet<Payment>('Payments!A:I', (r) => ({
+      date:          r[0] ?? '',
+      account:       r[1] ?? '',
+      deal:          r[2] ?? '',
+      amount:        parseInt(r[3] ?? '0', 10) || 0,
+      invoiceDate:   r[4] ?? '',
+      dueDate:       r[5] ?? '',
+      status:        (r[6] as Payment['status']) ?? 'Invoiced',
+      notes:         r[7] ?? '',
+      attachmentUrl: r[8] ?? undefined,
     }))
   } catch { return [] }
 }
@@ -605,6 +607,7 @@ export async function appendPaymentRow(row: {
   invoiceDate: string
   dueDate: string
   notes?: string
+  attachmentUrl?: string
 }): Promise<void> {
   const sheets = getSheets()
 
@@ -632,7 +635,7 @@ export async function appendPaymentRow(row: {
     range: 'Payments!A:H',
     valueInputOption: 'USER_ENTERED',
     requestBody: {
-      values: [[date, row.account, row.deal, row.amount, row.invoiceDate, row.dueDate, 'Invoiced', row.notes ?? '']],
+      values: [[date, row.account, row.deal, row.amount, row.invoiceDate, row.dueDate, 'Invoiced', row.notes ?? '', row.attachmentUrl ?? '']],
     },
   })
 }
