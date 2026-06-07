@@ -39,8 +39,12 @@ export default function NavActions() {
       <button
         ref={btnRef}
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 bg-mh-vermillion text-white px-4 py-1.5 rounded-full
-          hover:opacity-90 font-medium text-sm transition-opacity select-none"
+        className="btn-shimmer flex items-center gap-1.5 text-white px-4 py-1.5 rounded-full
+          font-medium text-sm select-none transition-all hover:shadow-[0_0_16px_rgba(232,52,28,0.5)]"
+        style={{
+          background: 'linear-gradient(135deg, #E8341C, #FF5A3A)',
+          boxShadow: '0 2px 12px rgba(232,52,28,0.35)',
+        }}
       >
         Quick Actions
         <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}

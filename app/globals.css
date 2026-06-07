@@ -29,10 +29,31 @@
   ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 }
 
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1;   transform: scale(1);    box-shadow: 0 0 0 0 currentColor; }
+  50%       { opacity: 0.7; transform: scale(0.85); box-shadow: 0 0 0 4px transparent; }
+}
+
+@keyframes pulseRing {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
 @layer utilities {
   .glow-gold {
     box-shadow: 0 0 12px #FFD70088;
   }
+
   .card {
     background: rgba(255,255,255,0.028);
     backdrop-filter: blur(12px);
@@ -41,5 +62,45 @@
     border-radius: 16px;
     padding: 20px;
     box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.25s ease;
+    animation: fadeInUp 0.45s ease both;
+  }
+
+  .card:hover {
+    border-color: rgba(232,52,28,0.25);
+    box-shadow: 0 8px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(232,52,28,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
+    transform: translateY(-2px);
+  }
+
+  /* Shimmer sweep on CTA buttons */
+  .btn-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
+    background-size: 200% auto;
+    animation: shimmer 2.4s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Pulse dot for live indicators */
+  .pulse-dot {
+    position: relative;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .pulse-dot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: inherit;
+    animation: pulseRing 1.6s ease-out infinite;
   }
 }

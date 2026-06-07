@@ -64,42 +64,51 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
       <div className="grid grid-cols-[180px_180px_160px_200px_1fr] gap-4 items-start">
 
         {/* I — Calls */}
-        <div className="card">
+        <div className="card" style={{ animationDelay: '0ms' }}>
           <ColHeader>Calls</ColHeader>
-          <MetricCard label="Dialled"        achieved={calls.dialled}        target={callTargets.dialled}        />
+          <MetricCard label="Dialled"     achieved={calls.dialled}       target={callTargets.dialled}       animationDelay={0}   />
           <Divider />
-          <MetricCard label="Connected"      achieved={calls.connected}       target={callTargets.connected}      />
+          <MetricCard label="Connected"   achieved={calls.connected}      target={callTargets.connected}     animationDelay={120} />
           <Divider />
-          <MetricCard label="Mtgs Booked"    achieved={calls.meetingsBooked}  target={callTargets.meetingsBooked} />
+          <MetricCard label="Mtgs Booked" achieved={calls.meetingsBooked} target={callTargets.meetingsBooked} animationDelay={240} />
         </div>
 
         {/* II — Meetings */}
-        <div className="card">
+        <div className="card" style={{ animationDelay: '80ms' }}>
           <ColHeader>Meetings</ColHeader>
-          <MetricCard label="L1 Booked"    achieved={mtgs.l1Booked}    target={mtgTargets.l1Booked}    />
+          <MetricCard label="L1 Booked"    achieved={mtgs.l1Booked}    target={mtgTargets.l1Booked}    animationDelay={80}  />
           <Divider />
-          <MetricCard label="L1 Conducted" achieved={mtgs.l1Conducted} target={mtgTargets.l1Conducted} />
+          <MetricCard label="L1 Conducted" achieved={mtgs.l1Conducted} target={mtgTargets.l1Conducted} animationDelay={200} />
           <Divider />
-          <MetricCard label="L2 Conducted" achieved={mtgs.l2Conducted} target={mtgTargets.l2Conducted} />
+          <MetricCard label="L2 Conducted" achieved={mtgs.l2Conducted} target={mtgTargets.l2Conducted} animationDelay={320} />
         </div>
 
         {/* III — Leads */}
-        <div className="card">
+        <div className="card" style={{ animationDelay: '160ms' }}>
           <ColHeader>Leads</ColHeader>
           <div className="space-y-3">
             <div>
-              <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Hot</p>
-              <p className="text-3xl font-semibold text-mh-text mt-1">{leads.hot}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="pulse-dot bg-[#E8341C]" style={{ color: '#E8341C' }} />
+                <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Hot</p>
+              </div>
+              <p className="text-3xl font-semibold text-mh-text" style={{ textShadow: '0 0 20px rgba(232,52,28,0.4)' }}>{leads.hot}</p>
             </div>
             <Divider />
             <div>
-              <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Warm</p>
-              <p className="text-3xl font-semibold text-mh-text mt-1">{leads.warm}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="pulse-dot bg-[#FFD700]" style={{ color: '#FFD700', animationDelay: '0.5s' }} />
+                <p className="text-[10px] font-semibold text-mh-gold uppercase tracking-widest">Warm</p>
+              </div>
+              <p className="text-3xl font-semibold text-mh-text">{leads.warm}</p>
             </div>
             <Divider />
             <div>
-              <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Cold</p>
-              <p className="text-3xl font-semibold text-mh-text mt-1">{leads.cold}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="pulse-dot bg-[#3A6AE0]" style={{ color: '#3A6AE0', animationDelay: '1s' }} />
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6699FF]">Cold</p>
+              </div>
+              <p className="text-3xl font-semibold text-mh-text">{leads.cold}</p>
             </div>
             <Divider />
             <div>
@@ -110,13 +119,13 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         </div>
 
         {/* IV — Pipeline funnel */}
-        <div className="card">
+        <div className="card" style={{ animationDelay: '240ms' }}>
           <ColHeader>Pipeline</ColHeader>
           <FunnelColumn data={funnel} />
         </div>
 
         {/* V — Metrics graph */}
-        <div className="card" style={{ minHeight: '340px' }}>
+        <div className="card" style={{ minHeight: '340px', animationDelay: '320ms' }}>
           <ColHeader>Trends</ColHeader>
           <div style={{ height: '280px' }}>
             <MetricsGraph data={weeklyTrend} />

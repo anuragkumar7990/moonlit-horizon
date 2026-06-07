@@ -518,8 +518,12 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
           <button
             onClick={generate}
             disabled={!hasRequiredFields || generating}
-            className="px-5 py-2 text-sm font-medium bg-[#E8341C] text-white rounded-lg
-              hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
+            className="btn-shimmer px-5 py-2 text-sm font-medium text-white rounded-lg
+              disabled:opacity-50 transition-all flex items-center gap-2"
+            style={{
+              background: 'linear-gradient(135deg, #E8341C, #FF5A3A)',
+              boxShadow: hasRequiredFields && !generating ? '0 2px 14px rgba(232,52,28,0.4)' : undefined,
+            }}
           >
             {generating && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
             {generating ? 'Generating…' : draft ? 'Regenerate' : 'Generate Email'}

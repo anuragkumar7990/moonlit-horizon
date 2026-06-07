@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import MasterTrackerGrid from './MasterTrackerGrid'
 import CallingModule from './CallingModule'
 import ProspectModule from './ProspectModule'
@@ -56,6 +56,14 @@ export default function HomeTabs({
   callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, rawCalls,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tracker')
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
+
+  useEffect(() => {
+    const idx = TABS.findIndex(t => t.id === tab)
+    const el = btnRefs.current[idx]
+    if (el) setIndicator({ left: el.offsetLeft, width: el.offsetWidth })
+  }, [tab])
 
   return (
     <div>
@@ -67,22 +75,33 @@ export default function HomeTabs({
       <div className="relative flex gap-0 mb-6 overflow-x-auto"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
       >
-        {TABS.map(t => (
+        {/* Sliding underline indicator */}
+        {indicator && (
+          <span
+            className="absolute bottom-0 h-0.5 rounded-t-full pointer-events-none"
+            style={{
+              left: indicator.left,
+              width: indicator.width,
+              background: 'linear-gradient(90deg, transparent, #E8341C 30%, #E8341C 70%, transparent)',
+              transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1), width 0.25s cubic-bezier(0.4,0,0.2,1)',
+              boxShadow: '0 0 8px rgba(232,52,28,0.6)',
+            }}
+          />
+        )}
+
+        {TABS.map((t, i) => (
           <button
             key={t.id}
+            ref={el => { btnRefs.current[i] = el }}
             onClick={() => setTab(t.id)}
             className={`relative px-4 py-2.5 text-sm font-medium transition-all -mb-px whitespace-nowrap
               ${tab === t.id
                 ? 'text-white'
                 : 'text-mh-muted hover:text-white'
               }`}
+            style={tab === t.id ? { textShadow: '0 0 12px rgba(255,255,255,0.4)' } : undefined}
           >
             {t.label}
-            {tab === t.id && (
-              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-t-full"
-                style={{ background: 'linear-gradient(90deg, transparent, #E8341C 30%, #E8341C 70%, transparent)' }}
-              />
-            )}
           </button>
         ))}
       </div>
