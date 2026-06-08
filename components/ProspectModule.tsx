@@ -213,10 +213,8 @@ export default function ProspectModule() {
     const total     = prospects.length
     const called    = prospects.filter(c => c.totalCalls > 0).length
     const connected = prospects.filter(c => c.connectedCalls > 0).length
-    const withMtg   = prospects.filter(c =>
-      (c.lastCallOutcome || '').toLowerCase().includes('meeting')
-    ).length
-    return { total, called, connected, withMtg }
+    const converted = prospects.filter(c => c.zohoContactId).length
+    return { total, called, connected, converted }
   }, [prospects])
 
   const lowStockSources = stats?.bySource.filter(s => s.weeksOfStock < 2) ?? []
@@ -399,7 +397,7 @@ export default function ProspectModule() {
               { label: 'Total',       value: tableStats.total.toLocaleString() },
               { label: 'Called',      value: tableStats.called.toLocaleString(), sub: tableStats.total > 0 ? `${Math.round(tableStats.called / tableStats.total * 100)}% of total` : undefined },
               { label: 'Connected',   value: tableStats.connected.toLocaleString() },
-              { label: 'Mtg Booked',  value: tableStats.withMtg.toLocaleString() },
+              { label: 'Converted',   value: tableStats.converted.toLocaleString(), sub: 'became a contact' },
             ].map(({ label, value, sub }) => (
               <div key={label} className="card py-3">
                 <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1">{label}</p>

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
-import type { ContactIntelRow } from '@/lib/sheets'
+import type { EnrichedContact } from '@/app/api/contacts/route'
 import BookMeetingModal from './BookMeetingModal'
 
 function StageBadge({ stage }: { stage: string }) {
@@ -40,23 +40,22 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
 }
 
 export default function ContactsModule() {
-  const [contacts, setContacts] = useState<ContactIntelRow[]>([])
+  const [contacts, setContacts] = useState<EnrichedContact[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [search, setSearch]     = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [sort, setSort]         = useState<'name' | 'date' | 'stage' | 'calls'>('name')
   const [page, setPage]         = useState(0)
-  const [bookTarget, setBookTarget] = useState<ContactIntelRow | null>(null)
+  const [bookTarget, setBookTarget] = useState<EnrichedContact | null>(null)
   const PAGE_SIZE = 50
 
   useEffect(() => {
-    fetch('/api/contact-intel')
+    fetch('/api/contacts')
       .then(r => r.json())
-      .then((d: { contacts?: ContactIntelRow[]; error?: string }) => {
+      .then((d: { contacts?: EnrichedContact[]; error?: string }) => {
         if (d.error) { setError(d.error); return }
-        // Only show actual CRM contacts (those who have had a meeting booked)
-        setContacts((d.contacts ?? []).filter(c => c.zohoContactId))
+        setContacts(d.contacts ?? [])
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
@@ -74,7 +73,7 @@ export default function ContactsModule() {
       const q = search.toLowerCase()
       list = list.filter(c =>
         c.name.toLowerCase().includes(q) ||
-        c.company.toLowerCase().includes(q) ||
+        c.accountName.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.title.toLowerCase().includes(q)
       )
@@ -98,10 +97,10 @@ export default function ContactsModule() {
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
 
   const stats = useMemo(() => ({
-    total:      contacts.length,
-    withStage:  contacts.filter(c => c.zohoStage).length,
-    withCalls:  contacts.filter(c => c.totalCalls > 0).length,
-    connected:  contacts.filter(c => c.connectedCalls > 0).length,
+    total:     contacts.length,
+    withStage: contacts.filter(c => c.zohoStage).length,
+    withCalls: contacts.filter(c => c.totalCalls > 0).length,
+    connected: contacts.filter(c => c.connectedCalls > 0).length,
   }), [contacts])
 
   if (loading) return (
@@ -115,10 +114,10 @@ export default function ContactsModule() {
     <div className="space-y-4">
       {bookTarget && (
         <BookMeetingModal
-          accountName={bookTarget.company || bookTarget.name}
+          accountName={bookTarget.accountName || bookTarget.name}
           contactName={bookTarget.name}
           contactEmail={bookTarget.email}
-          contactId={bookTarget.zohoContactId || undefined}
+          contactId={bookTarget.id}
           onClose={() => setBookTarget(null)}
         />
       )}
@@ -144,7 +143,7 @@ export default function ContactsModule() {
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
-            placeholder="Search name, company, email, title…"
+            placeholder="Search name, account, email, title…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
             className="flex-1 min-w-[200px] bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs
@@ -195,16 +194,18 @@ export default function ContactsModule() {
           </thead>
           <tbody className="divide-y divide-mh-border">
             {pageData.map((c, i) => (
-              <tr key={`${c.email || i}-${c.name}`} className="hover:bg-mh-surface/40 transition-colors">
+              <tr key={`${c.id || i}`} className="hover:bg-mh-surface/40 transition-colors">
                 <td className="py-2 pr-4">
-                  <div className="text-mh-text font-medium text-sm leading-tight truncate max-w-[160px]">{c.name || '—'}</div>
+                  <div className="text-mh-text font-medium text-sm leading-tight truncate max-w-[160px]">{c.name}</div>
                   <div className="text-[10px] text-mh-muted truncate max-w-[160px]">{c.email}</div>
                 </td>
-                <td className="py-2 pr-4 text-mh-muted text-xs max-w-[130px] truncate">{c.company || '—'}</td>
+                <td className="py-2 pr-4 text-mh-muted text-xs max-w-[130px] truncate">{c.accountName || '—'}</td>
                 <td className="py-2 pr-4 text-mh-muted text-xs max-w-[130px] truncate">{c.title || '—'}</td>
                 <td className="py-2 pr-4 text-mh-muted text-xs whitespace-nowrap">{c.phone || '—'}</td>
                 <td className="py-2 pr-4"><StageBadge stage={c.zohoStage} /></td>
-                <td className="py-2 pr-4 text-right text-mh-text font-semibold text-sm">{c.totalCalls || '—'}</td>
+                <td className="py-2 pr-4 text-right text-mh-text font-semibold text-sm">
+                  {c.totalCalls > 0 ? c.totalCalls : <span className="text-mh-muted">—</span>}
+                </td>
                 <td className="py-2 pr-4 text-right">
                   {c.totalCalls > 0 ? (
                     <span
@@ -217,7 +218,10 @@ export default function ContactsModule() {
                 </td>
                 <td className="py-2 pr-4 text-mh-muted text-xs whitespace-nowrap">{c.lastCallDate || '—'}</td>
                 <td className="py-2 pr-4">
-                  {c.lastCallOutcome ? <OutcomeBadge outcome={c.lastCallOutcome} /> : <span className="text-mh-muted text-xs">—</span>}
+                  {c.lastCallOutcome
+                    ? <OutcomeBadge outcome={c.lastCallOutcome} />
+                    : <span className="text-mh-muted text-xs">—</span>
+                  }
                 </td>
                 <td className="py-2">
                   {c.email && (
