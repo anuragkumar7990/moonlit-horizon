@@ -6,6 +6,10 @@ const BASE_URL = 'https://www.zohoapis.in/crm/v3'
 const APP_URL  = process.env.NEXT_PUBLIC_APP_URL ?? 'https://moonlit-horizon.vercel.app'
 const SECRET   = process.env.DASHBOARD_PASSWORD ?? 'thetesttribe'
 
+// Channel IDs — fixed so we can identify/replace them
+const CHANNEL_CALL_LOGGED = 100101
+const CHANNEL_AUTO_MEETING = 100102
+
 async function getAccessToken(): Promise<string> {
   const params = new URLSearchParams({
     refresh_token: process.env.ZOHO_REFRESH_TOKEN!,
@@ -19,22 +23,32 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
-async function listWorkflowRules(token: string) {
-  const res  = await fetch(`${BASE_URL}/settings/automation/workflow_rules?module=Calls`, {
+async function listChannels(token: string) {
+  const res  = await fetch(`${BASE_URL}/actions/watch`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
   })
-  const data = await res.json() as { workflow_rules?: { id: string; name: string }[]; status?: string; message?: string }
-  return data
+  return res.json() as Promise<{ watch?: { channel_id: string; events?: string[]; notify_url: string }[]; code?: string; message?: string }>
 }
 
-async function createWorkflowRule(token: string, rule: Record<string, unknown>) {
-  const res  = await fetch(`${BASE_URL}/settings/automation/workflow_rules`, {
+async function registerChannel(token: string, channelId: number, events: string[], notifyUrl: string) {
+  const expiry = new Date()
+  expiry.setFullYear(expiry.getFullYear() + 1)
+  const expiryStr = expiry.toISOString().replace('Z', '+00:00')
+
+  const res  = await fetch(`${BASE_URL}/actions/watch`, {
     method:  'POST',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ workflow_rules: [rule] }),
+    body:    JSON.stringify({
+      watch: [{
+        channel_id:     channelId,
+        events,
+        channel_expiry: expiryStr,
+        notify_url:     notifyUrl,
+        token:          SECRET,
+      }],
+    }),
   })
-  const data = await res.json() as { workflow_rules?: { code: string; status: string; details?: Record<string, unknown> }[] }
-  return data
+  return res.json() as Promise<{ watch?: { code: string; status: string; details?: Record<string, unknown> }[] }>
 }
 
 export async function GET(req: NextRequest) {
@@ -44,64 +58,37 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const token = await getAccessToken()
+    const token    = await getAccessToken()
+    const existing = await listChannels(token)
+    const channels = existing.watch ?? []
+    const existingIds = new Set(channels.map(c => String(c.channel_id)))
 
-    // List existing rules to check if already set up
-    const existing = await listWorkflowRules(token)
-    const existingNames = (existing.workflow_rules ?? []).map(r => r.name)
-
-    const results: Record<string, unknown> = { existing: existingNames }
-
-    // Webhook 1 — sync every new call to Sheets
-    const callSyncName = 'MH: Sync Call to Sheets'
-    if (!existingNames.includes(callSyncName)) {
-      const r1 = await createWorkflowRule(token, {
-        name:        callSyncName,
-        description: 'Auto-sync every logged call to Moonlit Horizon Sheets',
-        module:      { api_name: 'Calls' },
-        trigger:     { fields: [{ api_name: 'Created_Time' }] },
-        conditions:  [],
-        actions:     [{
-          type:       'webhook',
-          parameters: {
-            url:          `${APP_URL}/api/webhook/zoho-call-logged?secret=${SECRET}`,
-            method:       'post',
-            content_type: 'application/x-www-form-urlencoded',
-            parameters:   [{ key: 'callId', value: '${zoho_id}' }],
-          },
-        }],
-      })
-      results.callSyncWebhook = r1
-    } else {
-      results.callSyncWebhook = 'already_exists'
+    const results: Record<string, unknown> = {
+      existingChannels: channels.map(c => ({ id: c.channel_id, events: c.events, url: c.notify_url })),
     }
 
-    // Webhook 2 — auto-book meeting when Call_Result = Meeting Scheduled
-    const autoMeetingName = 'MH: Auto-Book Meeting on Call'
-    if (!existingNames.includes(autoMeetingName)) {
-      const r2 = await createWorkflowRule(token, {
-        name:        autoMeetingName,
-        description: 'Auto-book Google Meet + Zoho Deal when Call_Result set to Meeting Scheduled',
-        module:      { api_name: 'Calls' },
-        trigger:     { fields: [{ api_name: 'Call_Result' }] },
-        conditions:  [{
-          field: { api_name: 'Call_Result' },
-          comparator: 'equals',
-          value: 'Meeting Scheduled',
-        }],
-        actions:     [{
-          type:       'webhook',
-          parameters: {
-            url:          `${APP_URL}/api/webhook/zoho-call?secret=${SECRET}`,
-            method:       'post',
-            content_type: 'application/x-www-form-urlencoded',
-            parameters:   [{ key: 'callId', value: '${zoho_id}' }],
-          },
-        }],
-      })
-      results.autoMeetingWebhook = r2
+    // Channel 1: sync every logged call to Sheets
+    if (!existingIds.has(String(CHANNEL_CALL_LOGGED))) {
+      results.callLoggedChannel = await registerChannel(
+        token,
+        CHANNEL_CALL_LOGGED,
+        ['Calls.create', 'Calls.edit'],
+        `${APP_URL}/api/webhook/zoho-call-logged?secret=${SECRET}`,
+      )
     } else {
-      results.autoMeetingWebhook = 'already_exists'
+      results.callLoggedChannel = 'already_registered'
+    }
+
+    // Channel 2: auto-book meeting when Call_Result = Meeting Scheduled
+    if (!existingIds.has(String(CHANNEL_AUTO_MEETING))) {
+      results.autoMeetingChannel = await registerChannel(
+        token,
+        CHANNEL_AUTO_MEETING,
+        ['Calls.edit'],
+        `${APP_URL}/api/webhook/zoho-call?secret=${SECRET}`,
+      )
+    } else {
+      results.autoMeetingChannel = 'already_registered'
     }
 
     return NextResponse.json({ ok: true, ...results })

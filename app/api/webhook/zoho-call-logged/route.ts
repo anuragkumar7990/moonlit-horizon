@@ -56,10 +56,13 @@ async function extractCallId(req: NextRequest): Promise<string | null> {
     if (!text) return fromUrl
     const body = JSON.parse(text) as Record<string, unknown>
     const calls = (body?.data as Record<string, unknown>)?.Calls
+    // Zoho Notifications API sends { ids: ["callId"], operation: "insert"|"update" }
+    const fromIds = Array.isArray(body.ids) && body.ids[0] ? String(body.ids[0]) : null
     return (
       fromUrl ??
       (body.callId ? String(body.callId) : null) ??
       (body.id ? String(body.id) : null) ??
+      fromIds ??
       (Array.isArray(calls) && calls[0]?.id ? String(calls[0].id) : null)
     )
   } catch { /* fall through */ }

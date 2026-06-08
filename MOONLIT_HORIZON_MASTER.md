@@ -2,7 +2,7 @@
 
 > The Test Tribe · Corporate Training Business  
 > Owner: Anurag Kumar (anurag@thetesttribe.com)  
-> Last updated: 2026-06-09 (synced with HANDOVER.md + Phase 6 modules)
+> Last updated: 2026-06-08 (Phase 6b — glass design, interactivity, bug fixes batch)
 
 ---
 
@@ -29,6 +29,7 @@
 19. [Account Intelligence — Full Spec](#19-account-intelligence--full-spec)
 20. [Contact Intelligence — Full Spec](#20-contact-intelligence--full-spec)
 21. [Historical Data — DCT v1 & Meetings](#21-historical-data--dct-v1--meetings)
+22. [Phase 6b — Glass Design, Interactivity & Bug Fixes](#22-phase-6b--glass-design-interactivity--bug-fixes)
 
 ---
 
@@ -1240,6 +1241,27 @@ OpenClaw model selection: use the cheapest model tier for rule-following tasks (
 - `getContactIntelligence()` — reads Contact Intelligence!A:S; returns `ContactIntelRow[]`
 - `updatePaymentStatus(rowIndex, status)` — updates col G of Payments sheet by row index
 
+### Phase 6b — Glass Design, Interactivity & Bug Fixes ✅ Complete (2026-06-08)
+
+**Commit:** `52d67c3` (pushed to `main`)
+
+#### Glass Design Overhaul
+- Body background: `#05050A` with radial gradient (vermillion hint top-centre, gold hint bottom-right)
+- `.card` class: `backdrop-filter: blur(12px)`, `rgba(255,255,255,0.028)` background, `rgba(255,255,255,0.07)` border, deep box-shadow + inset highlight; hover lifts + shows vermillion glow
+- Nav: `rgba(4,4,10,0.82)` + `blur(24px)` glass
+- `PaymentsModule` + `PreMeetingEmailModal` modals: full glass treatment (`rgba(8,8,16,0.92–0.94)`, `blur(24px)`, inset border)
+- MetricsGraph: glass tooltip + gradient filter pills
+- FunnelColumn: gradient progress bars + glass Won/Lost buttons
+
+#### Interactivity Layer
+- **Number count-up**: `useCountUp` hook in `MetricCard.tsx` — ease-out-cubic `requestAnimationFrame` loop, staggered 0–320ms delay per card
+- **Animated progress bars**: spring `cubic-bezier(0.34,1.56,0.64,1)` transition from 0 on mount
+- **Sliding tab indicator**: `useRef` array measures `offsetLeft`/`offsetWidth`, animated `left` + `width` CSS transition
+- **Button shimmer**: `btn-shimmer` class — `::after` linear-gradient sweep, 2.4s loop
+- **Pulse dots**: `.pulse-dot` + `::before` ring animation on Hot/Warm/Cold lead tiers
+- **Staggered card entrance**: `fadeInUp` keyframe, `animationDelay` 0–320ms per card in MasterTrackerGrid
+- **Card hover lift**: `translateY(-2px)` + vermillion border glow on `.card:hover`
+
 ---
 
 ## Open Items
@@ -1369,6 +1391,185 @@ Column W (Notes Summary) is blank for all 2,372 contacts. Needs an AI enrichment
 - `AI Adoption for IT Leaders - Sahil Garg (08.04.26)`
 - `Cutting through the BS of AI: Playwright Agents in Action - Md. Tanweer (22.01.26)`
 - `Boosting QA Productivity Through Copilot - Siva Prasad Reddy (24.02.26)`
+
+---
+
+---
+
+## 22. Phase 6b — Glass Design, Interactivity & Bug Fixes
+
+> Commit: `52d67c3` · Date: 2026-06-08 · All changes on `main` branch
+
+### 22.1 — Glass Design System (Current)
+
+The design was fully overhauled from flat dark cards to a glassmorphism aesthetic.
+
+**Colour tokens (tailwind.config.ts `mh.*`):**
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `mh-bg` | `#05050A` | Page background |
+| `mh-surface` | `rgba(255,255,255,0.028)` | Card/glass backgrounds |
+| `mh-surface2` | `rgba(255,255,255,0.045)` | Hover/active surfaces |
+| `mh-border` | `rgba(255,255,255,0.07)` | Card borders |
+| `mh-muted` | `#888899` | Secondary text |
+| `mh-vermillion` | `#E8341C` | Accent / labels |
+| `mh-gold` | `#FFD700` | Target-achieved glow |
+
+**Body radial gradients (globals.css):**
+```css
+radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232,52,28,0.08) 0%, transparent 60%)
+radial-gradient(ellipse 60% 40% at 80% 100%, rgba(255,215,0,0.04) 0%, transparent 50%)
+```
+These are required for `backdrop-filter` to be visible on glass cards — without a non-solid background, blur has nothing to filter.
+
+**`.card` class (globals.css):**
+```css
+background: rgba(255,255,255,0.028);
+backdrop-filter: blur(12px);
+border: 1px solid rgba(255,255,255,0.07);
+border-radius: 16px;
+box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.25s ease;
+animation: fadeInUp 0.45s ease both;
+```
+Card hover: `translateY(-2px)` + vermillion border glow + deeper shadow.
+
+**Glass modal pattern** (used in PaymentsModule + PreMeetingEmailModal + BookMeetingModal):
+```tsx
+style={{
+  background: 'rgba(8,8,16,0.92–0.94)',
+  backdropFilter: 'blur(24px)',
+  WebkitBackdropFilter: 'blur(24px)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  boxShadow: '0 24px 80px rgba(0,0,0,0.8–0.85), inset 0 1px 0 rgba(255,255,255,0.06)',
+}}
+```
+All glass modals must use `overflow-hidden` on the outer container to clip content to rounded corners correctly.
+
+**Critical CSS rule:** `backdrop-filter` creates a new CSS stacking context. Any element with `backdrop-filter` that also has `z-index` will contain all children in its stacking context. Dropdowns inside such elements must be rendered via `createPortal` at `document.body` to escape the stacking context.
+
+---
+
+### 22.2 — Interactivity Components
+
+**`useCountUp` hook** (`components/MetricCard.tsx`):
+- `requestAnimationFrame` loop with ease-out-cubic easing: `1 - Math.pow(1 - progress, 3)`
+- Accepts `delay` param (ms) for staggered card entrance
+- Cancels RAF + setTimeout on cleanup to prevent memory leaks
+
+**Animated progress bar** (`MetricCard.tsx`):
+- `barWidth` state starts at 0; `useEffect` sets to `pct` after `animationDelay + 120ms`
+- CSS transition: `width 1s cubic-bezier(0.34,1.56,0.64,1)` (spring overshoot)
+
+**Sliding tab indicator** (`HomeTabs.tsx`):
+- `btnRefs` = `useRef<(HTMLButtonElement | null)[]>([])`
+- `useEffect` measures `el.offsetLeft` + `el.offsetWidth` on tab change
+- Absolute-positioned `<span>` with `transition: left 0.25s, width 0.25s`
+
+**CSS animations** (`globals.css`):
+
+| Name | Effect |
+|------|--------|
+| `fadeInUp` | `opacity: 0 → 1`, `translateY(14px → 0)`, 0.45s ease |
+| `shimmer` | `background-position` sweep on `.btn-shimmer::after` pseudo-element, 2.4s |
+| `pulseDot` | Scale 1 → 0.85 pulse on `::before`, 1.6s |
+| `pulseRing` | Scale 1 → 2.2, opacity 0.8 → 0 ring expand on Hot/Warm/Cold dots |
+
+**Quick Actions shimmer button** (`NavActions.tsx`):
+```tsx
+className="btn-shimmer ..."
+style={{ background: 'linear-gradient(135deg,#E8341C,#FF5A3A)', boxShadow: '0 2px 12px rgba(232,52,28,0.35)' }}
+```
+
+---
+
+### 22.3 — Bug Fixes Batch (2026-06-08)
+
+**Bug 6 — Quick Actions dropdown z-index (NavActions.tsx)**
+- Root cause: The `<nav>` has `backdrop-filter: blur(24px)` which creates a CSS stacking context at `z-[100]`. The dropdown div (even at `zIndex: 9999`) was contained within that stacking context and could be painted over by `.card` elements (which also have `backdrop-filter`).
+- Fix: Wrapped the dropdown in `createPortal(content, document.body)`. The `position: fixed` + `getBoundingClientRect()` positioning is preserved; the portal puts the DOM node at body level, outside all stacking contexts.
+- File: `components/NavActions.tsx`
+
+---
+
+**Bug 5 — Generate Email button cut off in PreMeetingEmailModal**
+- Root cause: The outer modal container (`rounded-2xl flex flex-col max-h-[92vh]`) lacked `overflow: hidden`. Without it, the rounded corners don't clip children, and on shorter screens the footer could render outside the visible box boundary.
+- Fix: Added `overflow-hidden` class to the outer modal div.
+- File: `components/PreMeetingEmailModal.tsx` line 273
+
+---
+
+**Bug 8 — No Google Meet invitation email sent to attendees**
+- Root cause: `calendar.events.insert()` in `lib/booking.ts` did not specify `sendUpdates`. Google Calendar API defaults to `'false'` — attendees are added but receive no email.
+- Fix: Added `sendUpdates: 'all'` parameter. Now all attendees (the prospect/contact + all 4 TTT team members) receive the standard Google Calendar invitation email with the Meet link.
+- File: `lib/booking.ts` — one-line addition at the `calendar.events.insert()` call
+
+---
+
+**Bug 2 — Book Prospect throws "conversion failed" for already-converted leads**
+- Root cause: `convertLead()` in `lib/zoho.ts` calls `POST /Leads/{id}/actions/convert`. When the lead was previously converted, Zoho returns `code: "ALREADY_CONVERTED"` with no `Contacts.id`. The function returned `null`, causing the API to 500 with a generic error.
+- Fix (two parts):
+  1. Added `findContactByEmail(email)` helper — calls `GET /Contacts/search?criteria=(Email:equals:...)&fields=id,Full_Name,Account_Name,Account_Id`
+  2. `convertLead()` now accepts an optional `leadEmail` parameter. If the response code is `ALREADY_CONVERTED`, it falls back to `findContactByEmail()` and returns the existing contact data.
+- Both `/api/book-prospect` and `/api/webhook/zoho-call` now pass `lead.email` to `convertLead()`
+- Files: `lib/zoho.ts`, `app/api/book-prospect/route.ts`, `app/api/webhook/zoho-call/route.ts`
+
+---
+
+**Bug 4b — `/mh p0 done` shows "No options" despite open tasks**
+- Root cause: The Discord bot autocomplete used `cache.p0Tasks` (populated from `/api/p0-tasks/open` every 5 minutes). If the bot restarted after the 8:30am P0 cron run, the cache was empty for up to 5 minutes. Tasks existed in Sheets but the cache hadn't refreshed.
+- Fix: The autocomplete handler (`discord-bot/index.js` lines ~640–648) now calls `/api/p0-tasks/open` directly on every autocomplete interaction, falling back to `cache.p0Tasks` only if the API call fails. Always fresh.
+- File: `discord-bot/index.js`
+
+---
+
+**Bugs 1, 4a, 9 — Zoho webhooks not syncing calls / no auto-meeting / no deals**
+- Root cause: The webhook handler routes existed and were correct, but the Zoho CRM Workflow Rules were not registered to fire them.
+- Two webhook routes:
+  - `POST /api/webhook/zoho-call-logged?secret=thetesttribe` — syncs every logged call to Sheets + Contact Intelligence
+  - `POST /api/webhook/zoho-call?secret=thetesttribe` — converts Lead → Contact and auto-books meeting when `Call_Result = "Meeting Scheduled"`
+- Fix:
+  1. Added `GET /api/setup-zoho-webhooks?password=thetesttribe` — calls Zoho CRM Workflow Rules API to programmatically create both rules. Safe to call repeatedly (checks for existing rules by name before creating).
+  2. Added `GET /api/webhook/status` — reads last 5 calls from Sheets to confirm webhook is receiving data.
+- **Action required**: Call `/api/setup-zoho-webhooks?password=thetesttribe` once from browser after deploy to register the webhooks.
+- Files: `app/api/setup-zoho-webhooks/route.ts` (new), `app/api/webhook/status/route.ts` (new)
+
+---
+
+**Bug 7 — No in-dashboard meeting booking from Contacts**
+- Root cause: Meeting booking existed only as standalone full pages (`/book`, `/book-prospect`). No modal-based flow from within dashboard tabs.
+- Fix: Added `BookMeetingModal` component and wired it into the Contacts tab.
+  - `BookMeetingModal` props: `accountName`, `contactName`, `contactEmail`, `leadId?`, `contactId?`, `onClose`, `onSuccess`
+  - Glass design consistent with `PreMeetingEmailModal`
+  - L1/L2+ toggle, date picker, time picker
+  - Routes to `/api/book-prospect` (if `leadId`) or `/api/book` (if contact)
+  - Success state shows Google Meet link + "Invites sent to all attendees"
+  - `ContactsModule` table now has a "Book" button column per contact row; clicking opens the modal pre-filled with that contact's data
+- Files: `components/BookMeetingModal.tsx` (new), `components/ContactsModule.tsx`
+
+---
+
+### 22.4 — New API Routes Added in Phase 6b
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/setup-zoho-webhooks` | GET | Programmatically registers both Zoho Workflow Rule webhooks. Pass `?password=thetesttribe`. Safe to call repeatedly. |
+| `/api/webhook/status` | GET | Returns last 5 synced calls from Sheets — use to verify the zoho-call-logged webhook is firing. |
+
+Both routes are excluded from Basic Auth (consistent with existing webhook paths in middleware.ts matcher pattern).
+
+---
+
+### 22.5 — Stacking Context Rules (Important for Future UI Work)
+
+Any element with `backdrop-filter`, `filter`, `transform`, `opacity < 1`, `will-change: transform`, or `isolation: isolate` creates a new CSS stacking context. Children of such elements — even with `position: fixed` and very high `z-index` — are constrained to that stacking context's z-level.
+
+**In Moonlit Horizon specifically:**
+- `<nav>` has `backdrop-filter: blur(24px)` → stacking context at `z-[100]`
+- Every `.card` has `backdrop-filter: blur(12px)` → each creates its own stacking context
+
+**Rule**: Any dropdown, tooltip, or popup that must appear above all content must be rendered via `createPortal(content, document.body)`. Never render these as children of elements with `backdrop-filter`. See `NavActions.tsx` and the `SearchableSelect` in `PreMeetingEmailModal.tsx` for the correct pattern.
 
 ---
 

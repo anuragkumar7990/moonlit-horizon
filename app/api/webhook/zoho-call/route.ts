@@ -30,8 +30,10 @@ async function parseRequest(req: NextRequest): Promise<{
     if (!text) return { callId: fromUrl, contactId: '', accountId: '' }
     const body = JSON.parse(text) as Record<string, unknown>
     const calls = (body?.data as Record<string, unknown>)?.Calls
+    // Zoho Notifications API sends { ids: ["callId"], operation: "insert"|"update" }
+    const fromIds = Array.isArray(body.ids) && body.ids[0] ? String(body.ids[0]) : null
     return {
-      callId: fromUrl ?? (body.callId ? String(body.callId) : null) ?? (body.id ? String(body.id) : null) ?? (Array.isArray(calls) && calls[0]?.id ? String(calls[0].id) : null),
+      callId: fromUrl ?? (body.callId ? String(body.callId) : null) ?? (body.id ? String(body.id) : null) ?? fromIds ?? (Array.isArray(calls) && calls[0]?.id ? String(calls[0].id) : null),
       contactId: body.contactId ? String(body.contactId) : '',
       accountId: body.accountId ? String(body.accountId) : '',
     }
