@@ -266,11 +266,12 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
 
   return (
     <div
-      className="fixed inset-0 z-[200] overflow-y-auto p-4"
+      className="fixed inset-0 z-[200] overflow-y-auto"
       style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="rounded-2xl w-full max-w-2xl flex flex-col mx-auto my-8 max-h-[90vh]"
+      <div className="flex min-h-full items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="rounded-2xl w-full max-w-2xl flex flex-col max-h-[85vh]"
         style={{
           background: 'rgba(8,8,16,0.94)',
           backdropFilter: 'blur(24px)',
@@ -529,6 +530,7 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
             {generating ? 'Generating…' : draft ? 'Regenerate' : 'Generate Email'}
           </button>
         </div>
+      </div>
       </div>
     </div>
   )
