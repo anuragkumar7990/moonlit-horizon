@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import type { ContactIntelRow } from '@/lib/sheets'
+import BookMeetingModal from './BookMeetingModal'
 
 const CONNECTED_OUTCOMES = new Set([
   'meeting scheduled', 'interested', 'not interested', 'call back later',
@@ -38,6 +39,7 @@ export default function ContactsModule() {
   const [outcomeFilter, setOutcomeFilter] = useState('all')
   const [sort, setSort]         = useState<'name' | 'calls' | 'rate' | 'date'>('calls')
   const [page, setPage]         = useState(0)
+  const [bookTarget, setBookTarget] = useState<ContactIntelRow | null>(null)
   const PAGE_SIZE = 100
 
   useEffect(() => {
@@ -110,6 +112,15 @@ export default function ContactsModule() {
 
   return (
     <div className="space-y-4">
+      {bookTarget && (
+        <BookMeetingModal
+          accountName={bookTarget.company || bookTarget.name}
+          contactName={bookTarget.name}
+          contactEmail={bookTarget.email}
+          contactId={bookTarget.zohoContactId || undefined}
+          onClose={() => setBookTarget(null)}
+        />
+      )}
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
@@ -185,7 +196,8 @@ export default function ContactsModule() {
               <th className="text-right pb-3 pr-4 font-semibold">Conn.</th>
               <th className="text-right pb-3 pr-4 font-semibold">Rate</th>
               <th className="text-left pb-3 pr-4 font-semibold">Last Call</th>
-              <th className="text-left pb-3 font-semibold">Last Outcome</th>
+              <th className="text-left pb-3 pr-4 font-semibold">Last Outcome</th>
+              <th className="pb-3 font-semibold"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-mh-border">
@@ -202,7 +214,18 @@ export default function ContactsModule() {
                 <td className="py-2 pr-4 text-right text-mh-muted">{c.connectedCalls}</td>
                 <td className="py-2 pr-4 text-right"><RateBadge rate={c.connectionRate} /></td>
                 <td className="py-2 pr-4 text-mh-muted text-xs whitespace-nowrap">{c.lastCallDate || '—'}</td>
-                <td className="py-2"><OutcomeBadge outcome={c.lastCallOutcome} /></td>
+                <td className="py-2 pr-4"><OutcomeBadge outcome={c.lastCallOutcome} /></td>
+                <td className="py-2">
+                  {c.email && (
+                    <button
+                      onClick={() => setBookTarget(c)}
+                      className="text-[10px] px-2 py-1 rounded-md font-medium transition-all hover:opacity-90 whitespace-nowrap"
+                      style={{ background: 'rgba(232,52,28,0.12)', color: '#E8341C', border: '1px solid rgba(232,52,28,0.2)' }}
+                    >
+                      Book
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

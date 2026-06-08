@@ -50,6 +50,7 @@ export async function bookMeeting(payload: {
   const calEvent = await calendar.events.insert({
     calendarId: process.env.GOOGLE_CALENDAR_ID ?? 'primary',
     conferenceDataVersion: 1,
+    sendUpdates: 'all',
     requestBody: {
       summary: title,
       start: { dateTime: startTime.toISOString(), timeZone: 'Asia/Kolkata' },

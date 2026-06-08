@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       const lead = await getLeadById(resolvedId)
       if (lead) {
         console.log(`[webhook/zoho-call] Converting Lead ${resolvedId}`)
-        const converted = await convertLead(resolvedId)
+        const converted = await convertLead(resolvedId, lead.email ?? undefined)
         if (!converted) {
           return NextResponse.json({ error: `Failed to convert Lead ${resolvedId}` }, { status: 500 })
         }

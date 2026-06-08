@@ -404,7 +404,29 @@ export async function removeTagFromLeads(ids: string[], tagName: string): Promis
   }
 }
 
-export async function convertLead(leadId: string): Promise<{
+export async function findContactByEmail(email: string): Promise<{
+  contactId: string
+  accountId: string
+  contactName?: string
+  accountName?: string
+} | null> {
+  const token = await getAccessToken()
+  const res = await fetch(
+    `${BASE_URL}/Contacts/search?criteria=(Email:equals:${encodeURIComponent(email)})&fields=id,Full_Name,Account_Name,Account_Id`,
+    { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
+  )
+  const data = await res.json() as { data?: { id: string; Full_Name?: string; Account_Name?: string; Account_Id?: string }[] }
+  const c = data.data?.[0]
+  if (!c?.id) return null
+  return {
+    contactId: c.id,
+    contactName: c.Full_Name,
+    accountId: c.Account_Id ?? '',
+    accountName: c.Account_Name,
+  }
+}
+
+export async function convertLead(leadId: string, leadEmail?: string): Promise<{
   contactId: string
   accountId: string
   contactName?: string
@@ -435,7 +457,13 @@ export async function convertLead(leadId: string): Promise<{
       }
     }[]
   }
-  const details = data.data?.[0]?.details
+  const item = data.data?.[0]
+  // Lead already converted — look up the existing contact by email
+  if (item?.code === 'ALREADY_CONVERTED' && leadEmail) {
+    console.log(`[convertLead] Lead ${leadId} already converted — looking up contact by email ${leadEmail}`)
+    return findContactByEmail(leadEmail)
+  }
+  const details = item?.details
   if (!details?.Contacts?.id) return null
   return {
     contactId: details.Contacts.id,

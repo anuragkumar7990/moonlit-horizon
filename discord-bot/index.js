@@ -636,13 +636,15 @@ client.on('interactionCreate', async interaction => {
     const query = focused.value.toLowerCase()
 
     try {
-      // /mh p0 done — task autocomplete (today's open P0 tasks)
+      // /mh p0 done — task autocomplete (today's open P0 tasks, always fetched fresh)
       if (interaction.commandName === 'mh' && focused.name === 'task' &&
           interaction.options.getSubcommand(false) === 'done') {
-        const choices = cache.p0Tasks
+        const fresh = await vercelGet('/api/p0-tasks/open')
+        const tasks = fresh.tasks ?? cache.p0Tasks
+        const choices = tasks
           .filter(t => t.task.toLowerCase().includes(query))
           .slice(0, 25)
-          .map(t => ({ name: t.task.slice(0, 100), value: t.linkedDeal }))
+          .map(t => ({ name: t.task.slice(0, 100), value: t.linkedDeal || t.task.slice(0, 100) }))
         return interaction.respond(choices)
       }
 

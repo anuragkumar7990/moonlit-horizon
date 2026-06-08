@@ -29,10 +29,13 @@ export async function POST(req: NextRequest) {
     // Find or create the Account
     const account = await findOrCreateAccount(companyName)
 
-    // Convert Lead → Contact
-    const converted = await convertLead(leadId)
+    // Convert Lead → Contact (pass email so ALREADY_CONVERTED case falls back to contact lookup)
+    const converted = await convertLead(leadId, lead.email)
     if (!converted) {
-      return NextResponse.json({ error: `Failed to convert Lead ${leadId}` }, { status: 500 })
+      return NextResponse.json(
+        { error: `Failed to convert Lead ${leadId} — check Zoho logs for details` },
+        { status: 500 }
+      )
     }
 
     // Link Contact to Account if Zoho didn't do it automatically

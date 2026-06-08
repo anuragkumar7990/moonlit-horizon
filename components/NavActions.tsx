@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import PreMeetingEmailModal from './PreMeetingEmailModal'
 
@@ -53,7 +54,7 @@ export default function NavActions() {
         </svg>
       </button>
 
-      {open && (
+      {open && typeof window !== 'undefined' && createPortal(
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
@@ -89,7 +90,8 @@ export default function NavActions() {
             className="flex items-center px-4 py-2.5 text-sm text-mh-text hover:bg-mh-border/30 transition-colors">
             Upload Prospect CSV
           </Link>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
