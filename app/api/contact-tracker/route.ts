@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getContacts, getLeads } from '@/lib/zoho'
-import { getContactIntelligence, getAccountIntelligence, getManualTouchpoints } from '@/lib/sheets'
+import { getContactIntelligence, getAccountIntelligence, getManualTouchpoints, type ManualTouchpoint } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,19 +30,19 @@ function daysBetween(dateStr: string): number {
 
 export async function GET() {
   const [contacts, leads, ciRows, aiRows, touchpoints] = await Promise.all([
-    getContacts(),
-    getLeads(),
-    getContactIntelligence(),
-    getAccountIntelligence(),
-    getManualTouchpoints(),
+    getContacts().catch(() => []),
+    getLeads().catch(() => []),
+    getContactIntelligence().catch(() => []),
+    getAccountIntelligence().catch(() => []),
+    getManualTouchpoints().catch(() => []),
   ])
 
   // Build lookup maps (all email keys lowercased)
-  const ciMap = new Map(ciRows.map(r => [r.email.toLowerCase(), r]))
+  const ciMap = new Map(ciRows.filter(r => r.email).map(r => [r.email.toLowerCase(), r]))
   const aiMap = new Map(aiRows.map(r => [r.account.toLowerCase(), r]))
 
   // Group manual touchpoints by email, sorted desc by date
-  const mtMap = new Map<string, typeof touchpoints>()
+  const mtMap = new Map<string, ManualTouchpoint[]>()
   for (const tp of touchpoints) {
     const key = tp.email.toLowerCase()
     if (!mtMap.has(key)) mtMap.set(key, [])
@@ -50,16 +50,17 @@ export async function GET() {
   }
   mtMap.forEach(arr => arr.sort((a, b) => b.date.localeCompare(a.date)))
 
-  // Deduplicate: contacts first, then leads not already represented
-  const seen = new Set<string>()
+  // Deduplicate: contacts by ID, leads by email (skip if contact with same email exists)
+  const seenIds  = new Set<string>()
+  const seenEmails = new Set<string>()
   const people: { name: string; accountName: string; phone: string; email: string }[] = []
 
   for (const c of contacts) {
-    const emailKey = c.email.toLowerCase()
-    if (!emailKey || seen.has(emailKey)) continue
-    seen.add(emailKey)
+    if (seenIds.has(c.id)) continue
+    seenIds.add(c.id)
+    if (c.email) seenEmails.add(c.email.toLowerCase())
     people.push({
-      name: `${c.firstName} ${c.lastName}`.trim() || c.email,
+      name: `${c.firstName} ${c.lastName}`.trim() || c.email || c.id,
       accountName: c.accountName,
       phone: c.phone,
       email: c.email,
@@ -67,11 +68,9 @@ export async function GET() {
   }
 
   for (const l of leads) {
-    const emailKey = l.email.toLowerCase()
-    if (!emailKey || seen.has(emailKey)) continue
-    seen.add(emailKey)
+    if (l.email && seenEmails.has(l.email.toLowerCase())) continue
     people.push({
-      name: `${l.firstName} ${l.lastName}`.trim() || l.email,
+      name: `${l.firstName} ${l.lastName}`.trim() || l.email || l.id,
       accountName: l.company,
       phone: l.phone,
       email: l.email,
@@ -81,16 +80,16 @@ export async function GET() {
   const today = todayIST()
 
   const result: TrackerContact[] = people.map(person => {
-    const emailKey = person.email.toLowerCase()
+    const emailKey   = person.email.toLowerCase()
     const accountKey = person.accountName.toLowerCase()
 
-    const ci = ciMap.get(emailKey)
-    const ai = aiMap.get(accountKey)
-    const latestManual = mtMap.get(emailKey)?.[0] ?? null
+    const ci          = emailKey ? ciMap.get(emailKey) : undefined
+    const ai          = accountKey ? aiMap.get(accountKey) : undefined
+    const latestManual = emailKey ? (mtMap.get(emailKey)?.[0] ?? null) : null
 
-    const callDate     = ci?.lastCallDate ?? ''
-    const accountDate  = ai?.lastContactDate ?? ''
-    const manualDate   = latestManual?.date ?? ''
+    const callDate    = ci?.lastCallDate ?? ''
+    const accountDate = ai?.lastContactDate ?? ''
+    const manualDate  = latestManual?.date ?? ''
 
     const lastContactDate = maxDate(callDate, accountDate, manualDate)
 
@@ -99,26 +98,16 @@ export async function GET() {
     if (lastContactDate) {
       if (manualDate && manualDate === lastContactDate) {
         lastTouchpointType = latestManual!.type
-      } else if (accountDate && accountDate === lastContactDate) {
-        // Infer from which Account Intel layer contains this date
-        const ai2 = ai!
-        if (ai2.emailIntelligence?.includes(accountDate)) {
-          lastTouchpointType = 'Email'
-        } else if (ai2.circlebakIntelligence?.includes(accountDate)) {
-          lastTouchpointType = 'Google Meet'
-        } else {
-          lastTouchpointType = 'Call'
-        }
-      } else if (callDate && callDate === lastContactDate) {
+      } else if (accountDate && accountDate === lastContactDate && ai) {
+        if (ai.emailIntelligence?.includes(accountDate)) lastTouchpointType = 'Email'
+        else if (ai.circlebakIntelligence?.includes(accountDate)) lastTouchpointType = 'Google Meet'
+        else lastTouchpointType = 'Call'
+      } else if (callDate) {
         lastTouchpointType = 'Call'
       }
     }
 
-    const daysSinceContact = lastContactDate
-      ? daysBetween(lastContactDate)
-      : null
-
-    // Prefer phone from Contact Intelligence (may have more complete data)
+    const daysSinceContact = lastContactDate ? daysBetween(lastContactDate) : null
     const phone = ci?.phone || person.phone
 
     return {
@@ -132,10 +121,10 @@ export async function GET() {
     }
   })
 
-  // Sort: never-contacted last; otherwise oldest first (highest daysSinceContact first)
+  // Oldest contact first; never-contacted at the end
   result.sort((a, b) => {
-    const da = a.daysSinceContact ?? Infinity
-    const db = b.daysSinceContact ?? Infinity
+    const da = a.daysSinceContact ?? -1
+    const db = b.daysSinceContact ?? -1
     return db - da
   })
 

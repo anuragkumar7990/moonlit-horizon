@@ -117,7 +117,7 @@ export default function ContactTrackerModule() {
       <div className="space-y-4">
         {/* Header row */}
         <div className="card flex flex-wrap items-center gap-3">
-          <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Follow Up Tracker</p>
+          <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Follow-Ups</p>
           <span className="text-xs text-mh-muted">{contacts.length} contacts</span>
           {/* Search */}
           <input
