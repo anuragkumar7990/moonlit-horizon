@@ -22,5 +22,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhook/|api/intel-triggers/gmail).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhook/|api/intel-triggers/gmail|api/sync-account-rename|api/setup-zoho-webhooks|api/webhook/status).*)'],
 }
