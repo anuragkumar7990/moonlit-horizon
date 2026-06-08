@@ -43,13 +43,26 @@ function isConnected(outcome: string): boolean {
   return o !== '' && !NOT_CONNECTED.has(o)
 }
 
+// Server runs in UTC; all dates in sheets/Zoho are IST (UTC+5:30).
+// Shift now to IST so week/month boundaries align with IST calendar dates.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+
+function nowIST(): Date {
+  return new Date(Date.now() + IST_OFFSET_MS)
+}
+
 function safeParseDate(d: string): Date | null {
   if (!d) return null
-  try { return parseISO(d) } catch { return null }
+  try {
+    const parsed = parseISO(d)
+    // date-only strings (YYYY-MM-DD) parse as UTC midnight; shift to IST
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return new Date(parsed.getTime() + IST_OFFSET_MS)
+    return parsed
+  } catch { return null }
 }
 
 function getTarget(targets: Target[], metricName: string): number | null {
-  const currentMonth = format(new Date(), 'yyyy-MM')
+  const currentMonth = format(nowIST(), 'yyyy-MM')
   const t = targets.find(t => t.month === currentMonth && t.metricName === metricName)
   return t != null ? t.targetValue : null
 }
@@ -97,7 +110,7 @@ export function buildCallsData(
   meetings: Meeting[],
   targets: Target[],
 ): CallsColumnData {
-  const now = new Date()
+  const now = nowIST()
   const weekStart  = startOfWeek(now, { weekStartsOn: 1 })
   const weekEnd    = endOfWeek(now,   { weekStartsOn: 1 })
   const monthStart = startOfMonth(now)
@@ -142,7 +155,7 @@ export function buildMeetingsData(
   meetings: Meeting[],
   targets: Target[],
 ): MeetingsColumnData {
-  const now = new Date()
+  const now = nowIST()
   const weekStart  = startOfWeek(now, { weekStartsOn: 1 })
   const weekEnd    = endOfWeek(now,   { weekStartsOn: 1 })
   const monthStart = startOfMonth(now)
@@ -277,7 +290,7 @@ export function buildTanishqMetrics(
   meetings: Meeting[],
   targets: Target[],
 ): TanishqMetrics {
-  const now = new Date()
+  const now = nowIST()
   const todayStart = startOfDay(now)
   const todayEnd   = endOfDay(now)
   const weekStart  = startOfWeek(now, { weekStartsOn: 1 })
@@ -327,7 +340,7 @@ export function buildTanishqMetrics(
 }
 
 export function buildTodaysMeetings(meetings: Meeting[]): TodayMeeting[] {
-  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const todayStr = format(nowIST(), 'yyyy-MM-dd')
   return meetings
     .filter(m => m.meetingTime.startsWith(todayStr))
     .sort((a, b) => a.meetingTime.localeCompare(b.meetingTime))
@@ -342,7 +355,7 @@ export function buildTodaysMeetings(meetings: Meeting[]): TodayMeeting[] {
 }
 
 export function buildFollowUps(calls: Call[]): FollowUpItem[] {
-  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const todayStr = format(nowIST(), 'yyyy-MM-dd')
   return calls
     .filter(c => c.followUpDate?.startsWith(todayStr))
     .map(c => ({
@@ -355,7 +368,7 @@ export function buildFollowUps(calls: Call[]): FollowUpItem[] {
 }
 
 export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoint[] {
-  const now = new Date()
+  const now = nowIST()
   return Array.from({ length: 8 }, (_, i) => {
     const ref    = subWeeks(now, 7 - i)
     const wStart = startOfWeek(ref, { weekStartsOn: 1 })
