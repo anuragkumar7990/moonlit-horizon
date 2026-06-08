@@ -107,6 +107,8 @@ export async function POST(req: NextRequest) {
         accountName = lead.company
       }
     }
+    // Fallback: use What_Id name if lead fetch returned nothing (converted/deleted lead)
+    if (!contactName && whatId?.name) contactName = whatId.name
   } else {
     // Contact call — contact is in Who_Id; account may be in What_Id
     if (whoId?.id) {
@@ -117,10 +119,10 @@ export async function POST(req: NextRequest) {
         accountName = contact.accountName
       }
     }
+    // Fallback: use Who_Id name if contact fetch returned nothing
+    if (!contactName && whoId?.name) contactName = whoId.name
     // Fallback: account name from What_Id if contact had none
-    if (!accountName && whatId?.name) {
-      accountName = whatId.name
-    }
+    if (!accountName && whatId?.name) accountName = whatId.name
   }
 
   // Fallback: infer company from email domain when Zoho Company_Name is blank
@@ -137,9 +139,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!accountName && !email) {
-    console.warn(`[webhook/zoho-call-logged] No contact, email, or company — cannot process callId=${callId}`)
-    return NextResponse.json({ error: 'Could not resolve any contact or account' }, { status: 400 })
+  // Last resort: always log the call even if we can't resolve account/email.
+  // Use Untagged Company so nothing is silently dropped.
+  if (!accountName) {
+    accountName = `Untagged Company #${callId.slice(-6).toUpperCase()}`
+    console.warn(`[webhook/zoho-call-logged] No account resolved — using "${accountName}" for callId=${callId}`)
   }
 
   const { date, time } = parseZohoDateTime(call.callStartTime)
