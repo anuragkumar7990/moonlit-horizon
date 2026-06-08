@@ -2,7 +2,7 @@
 
 > The Test Tribe · Corporate Training Business  
 > Owner: Anurag Kumar (anurag@thetesttribe.com)  
-> Last updated: 2026-06-08 (Phase 6b — glass design, interactivity, bug fixes batch)
+> Last updated: 2026-06-08 (Phase 6c — Zoho webhook integration, company resolution, UI fixes)
 
 ---
 
@@ -30,6 +30,7 @@
 20. [Contact Intelligence — Full Spec](#20-contact-intelligence--full-spec)
 21. [Historical Data — DCT v1 & Meetings](#21-historical-data--dct-v1--meetings)
 22. [Phase 6b — Glass Design, Interactivity & Bug Fixes](#22-phase-6b--glass-design-interactivity--bug-fixes)
+23. [Phase 6c — Zoho Webhook Integration, Company Resolution & UI Fixes](#23-phase-6c--zoho-webhook-integration-company-resolution--ui-fixes)
 
 ---
 
@@ -167,9 +168,12 @@ moonlit-horizon/
 │       ├── reports/weekly/       # GET — stream weekly PDF
 │       ├── reports/monthly/      # GET — stream monthly PDF
 │       ├── supply/               # GET — trainer pipeline + roster + topic coverage
+│       ├── setup-zoho-webhooks/  # GET — programmatic Zoho webhook registration (falls back to manual)
+│       ├── sync-account-rename/  # POST — bulk rename Account col in Calls tab when Zoho account renamed
 │       └── webhook/
-│           ├── zoho-call/        # POST — Zoho call webhook (legacy)
-│           └── zoho-call-logged/ # POST — Zoho workflow rule webhook (full call pipeline)
+│           ├── zoho-call/        # POST — auto-book Google Meet when Call_Result = Meeting Scheduled
+│           ├── zoho-call-logged/ # POST — sync every logged call to Sheets + Contact/Account Intel
+│           └── status/           # GET — verify last N webhook-synced calls
 │
 ├── components/
 │   ├── HomeTabs.tsx              # Tab bar wrapper; holds tab state; routes to modules
@@ -1241,6 +1245,18 @@ OpenClaw model selection: use the cheapest model tier for rule-following tasks (
 - `getContactIntelligence()` — reads Contact Intelligence!A:S; returns `ContactIntelRow[]`
 - `updatePaymentStatus(rowIndex, status)` — updates col G of Payments sheet by row index
 
+### Phase 6c — Zoho Webhook Integration, Company Resolution & UI Fixes ✅ Complete (2026-06-08)
+
+- [x] Manual Zoho CRM Workflow Rules registered (Rule 1: sync all calls to Sheets; Rule 2: auto-book meeting on Meeting Scheduled)
+- [x] `inferCompanyFromDomain()` — extracts brand name from corporate email domain; returns `''` for free providers
+- [x] `Untagged Company #XYZ` fallback — deterministic unique name per call when no company can be inferred
+- [x] Lead→Contact race condition fix — Contact path in `zoho-call/route.ts` now has full account resolution
+- [x] `POST /api/sync-account-rename` — bulk-rename account in Calls Sheets tab; OAuth2 auth
+- [x] `GET /api/webhook/status` — verify last N webhook-synced calls
+- [x] Middleware exclusions updated for `sync-account-rename` + `setup-zoho-webhooks`
+- [x] Quick Actions dropdown: solid `#1a1a1a` background (was transparent `bg-mh-surface`)
+- [x] PreMeetingEmailModal: scrollable backdrop so full modal is visible on short screens
+
 ### Phase 6b — Glass Design, Interactivity & Bug Fixes ✅ Complete (2026-06-08)
 
 **Commit:** `52d67c3` (pushed to `main`)
@@ -1570,6 +1586,211 @@ Any element with `backdrop-filter`, `filter`, `transform`, `opacity < 1`, `will-
 - Every `.card` has `backdrop-filter: blur(12px)` → each creates its own stacking context
 
 **Rule**: Any dropdown, tooltip, or popup that must appear above all content must be rendered via `createPortal(content, document.body)`. Never render these as children of elements with `backdrop-filter`. See `NavActions.tsx` and the `SearchableSelect` in `PreMeetingEmailModal.tsx` for the correct pattern.
+
+---
+
+---
+
+## 23. Phase 6c — Zoho Webhook Integration, Company Resolution & UI Fixes
+
+> Commits: `416cb31`, `850eafa`, `3773dad` · Date: 2026-06-08 · All changes on `main` branch
+
+---
+
+### 23.1 — Zoho Webhook Setup (Manual UI)
+
+Programmatic registration via Zoho API was attempted but blocked:
+- **Workflow Rules API** (`/settings/automation/workflow_rules`) → `API_NOT_SUPPORTED` (plan restriction)
+- **Notifications API** (`/actions/watch`) → `OAUTH_SCOPE_MISMATCH`
+
+**Working solution: two manual Workflow Rules in Zoho CRM admin UI.**
+
+| Rule | Name | Module | Trigger | Condition | Action |
+|------|------|--------|---------|-----------|--------|
+| 1 | MH: Sync Call to Sheets | Calls | Record Created | (none — all calls) | Webhook POST `https://moonlit-horizon.vercel.app/api/webhook/zoho-call-logged?secret=thetesttribe` |
+| 2 | MH: Auto-Book Meeting on Call | Calls | Record Created | `Call_Result IS Meeting Scheduled` | Webhook POST `https://moonlit-horizon.vercel.app/api/webhook/zoho-call?secret=thetesttribe` |
+
+**Webhook body format (Zoho Form-Data):** One parameter under "Module Parameters" → field: `callId` → merge field: `Call ID`. Do **not** add a duplicate under Headers.
+
+**Auth**: Both webhook routes check `?secret=thetesttribe` (or `x-webhook-secret` header). They are excluded from Basic Auth middleware.
+
+**`GET /api/setup-zoho-webhooks`**: The programmatic registration route still exists and attempts Zoho Notifications API. It currently returns `OAUTH_SCOPE_MISMATCH`. Do not rely on it — use the manual Zoho rules above.
+
+---
+
+### 23.2 — Company Name Resolution (inferCompanyFromDomain + Untagged)
+
+Both webhook routes (`zoho-call` and `zoho-call-logged`) now resolve a company name even when the Zoho record has no `Company` field set.
+
+**Resolution order:**
+1. Use `lead.company` / `contact.accountName` if already set in Zoho
+2. Call `inferCompanyFromDomain(email)` — extracts brand from corporate email domain
+3. Fall back to `Untagged Company #XXXXXX` (last 6 chars of the Zoho Call ID, uppercased)
+
+**`inferCompanyFromDomain(email: string): string`** (defined in both webhook routes):
+```typescript
+function inferCompanyFromDomain(email: string): string {
+  const domain = email.split('@')[1]?.toLowerCase()
+  if (!domain || FREE_EMAIL_DOMAINS.has(domain)) return ''
+  const label = domain.split('.')[0]
+  if (!label) return ''
+  return label.length <= 4
+    ? label.toUpperCase()
+    : label.charAt(0).toUpperCase() + label.slice(1)
+}
+```
+- `ptc.com` → `PTC`, `indusface.com` → `Indusface`
+- `gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `rediffmail.com`, `icloud.com`, `protonmail.com`, `aol.com`, and 8 other free providers → returns `''` (caller falls back to Untagged)
+
+**Untagged Company naming**: `Untagged Company #${callId.slice(-6).toUpperCase()}`
+- Deterministic per call — each call creates a unique untagged entry
+- Human-correctable: rename the account in Zoho CRM → trigger `/api/sync-account-rename` to propagate
+
+**Write-back to Zoho**: If an inferred (non-Untagged) name is resolved, it is written back to the lead's `Company` field via `updateLeadCompany()` so future calls from the same lead resolve correctly. Untagged names are **not** written back — they need human review.
+
+---
+
+### 23.3 — Lead→Contact Race Condition Fix
+
+**Root cause**: When an SDR logs a call from the Zoho CRM UI with `Call_Result = Meeting Scheduled`, Zoho converts the Lead to a Contact **before** the webhook fires. By the time our handler calls `getCallById()`, the call's `$se_module` is `"Contacts"`, not `"Leads"`.
+
+**Effect**: The webhook's Lead path was never reached for meeting-scheduled calls. The Contact path had no account resolution logic, so it returned "Could not resolve Account."
+
+**Fix in `app/api/webhook/zoho-call/route.ts`**: Added full account fallback to the Contact path:
+```typescript
+// Contact path — triggered when Zoho has already converted the Lead
+if (!accountId) {
+  const resolvedCompany = inferCompanyFromDomain(contact.email)
+    || `Untagged Company #${contactId.slice(-6).toUpperCase()}`
+  const acct = await findOrCreateAccount(resolvedCompany)
+  accountId = acct.id
+  accountName = acct.accountName
+  await linkContactToAccount(contactId, accountId)
+}
+```
+The Contact path now mirrors the Lead path: infer company → find-or-create account → link contact to account.
+
+---
+
+### 23.4 — sync-account-rename Route
+
+**File**: `app/api/sync-account-rename/route.ts` (new)
+
+**Purpose**: When a user renames an "Untagged Company" (or any account) in Zoho CRM, this endpoint bulk-updates all matching rows in the `Calls` tab of Google Sheets (Column C = Account). This keeps Sheets, the dashboard, Discord bot, and Contact Intelligence in sync.
+
+**Endpoint**: `POST /api/sync-account-rename`
+
+**Auth**: `?password=thetesttribe` or `x-dashboard-password` header
+
+**Request body**:
+```json
+{ "oldName": "Untagged Company #826200", "newName": "ABC Test Company" }
+```
+
+**Response**:
+```json
+{ "ok": true, "updated": 3, "oldName": "Untagged Company #826200", "newName": "ABC Test Company" }
+```
+
+**Implementation details**:
+- Reads `Calls!A:N` (all rows)
+- Case-insensitive match on Column C (index 2)
+- `batchUpdate` all matched cells to `newName` in a single API call
+- Uses OAuth2 (`GOOGLE_CLIENT_ID / SECRET / REFRESH_TOKEN`) — same auth as `lib/sheets.ts`
+- Excluded from Basic Auth middleware (has its own password check)
+
+**Propagation**: Renaming in Zoho CRM updates Zoho. This route updates Sheets. The dashboard reads from Sheets, so it inherits the new name automatically. Discord bot reads from Sheets via API, so it also inherits.
+
+---
+
+### 23.5 — zoho-call-logged Route (Full Pipeline)
+
+**File**: `app/api/webhook/zoho-call-logged/route.ts`
+
+Triggered by Zoho Workflow Rule 1 on every call created. Full pipeline:
+
+1. **Extract Call ID** — from query param `?callId=`, form body `callId`, JSON body `id`, or Notifications API `ids[0]`
+2. **Fetch call from Zoho** — `getCallById(callId)` returns: `seModule`, `whoId`, `whatId`, `callResult`, `callStartTime`, `callDuration`, `ownerName`, `description`
+3. **Resolve contact/lead**:
+   - `seModule = "Leads"` → fetch Lead from `whatId.id`
+   - `seModule = "Contacts"` → fetch Contact from `whoId.id`
+4. **Resolve company name** — in order: Zoho field → `inferCompanyFromDomain` → `Untagged Company #XYZ`
+5. **Deduplication** — `callExistsInSheetByZohoId(callId)` checks Calls tab for existing row; skips Sheets write if already present (prevents double-write when Discord `/mh log call` was used first)
+6. **Write to Sheets** — `appendCallRow({ date, time, account, contactName, sdr, duration, outcome, notes, zohoCallId })`
+7. **Refresh Account Intelligence** — `syncCallIntel(accountName, date)` — fire-and-forget
+8. **Upsert Contact Intelligence** — `upsertContactIntelRow(email, { date, time, outcome, notes, duration, zohoCallId })` — fire-and-forget
+
+---
+
+### 23.6 — zoho-call Route (Auto-Meeting Pipeline)
+
+**File**: `app/api/webhook/zoho-call/route.ts`
+
+Triggered by Zoho Workflow Rule 2 only when `Call_Result = "Meeting Scheduled"`. Full pipeline:
+
+1. **Verify** `call.callResult === 'Meeting Scheduled'`; skip otherwise
+2. **Verify** `call.proposedMeetingTime` is set; return 400 if blank
+3. **Resolve lead or contact** — handles both `seModule = "Leads"` and `"Contacts"` (race condition fix in 23.3)
+4. **Convert lead** (if not already a Contact) — `convertLead(leadId, leadEmail)` handles `ALREADY_CONVERTED` gracefully (see Bug 2 fix)
+5. **Find or create Account** — `findOrCreateAccount(companyName)` — idempotent
+6. **Link Contact to Account** — `linkContactToAccount(contactId, accountId)`
+7. **Book meeting** — `bookMeeting({ accountId, accountName, contactName, contactEmail, contactPhone, meetingTime, meetingType: 'L1' })`
+   - Creates Google Calendar event with Google Meet link
+   - `sendUpdates: 'all'` — all attendees receive email invite
+   - Creates Zoho Deal (stage: "Meeting Booked")
+   - Writes row to `Meetings` Sheets tab
+
+---
+
+### 23.7 — Middleware Exclusions (Updated)
+
+`middleware.ts` matcher excludes the following routes from Basic Auth (they have their own auth or are public webhooks):
+
+```typescript
+matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhook/|api/intel-triggers/gmail|api/sync-account-rename|api/setup-zoho-webhooks|api/webhook/status).*)']
+```
+
+| Excluded path | Reason |
+|---------------|--------|
+| `api/webhook/*` | Zoho sends no Basic Auth — uses `?secret=` param |
+| `api/intel-triggers/gmail` | GCP Pub/Sub push — no Basic Auth support |
+| `api/sync-account-rename` | Has its own `?password=` check |
+| `api/setup-zoho-webhooks` | Has its own `?password=` check |
+| `api/webhook/status` | Read-only status endpoint |
+
+---
+
+### 23.8 — UI Bug Fixes
+
+**Quick Actions dropdown — transparent background**
+- Root cause: `bg-mh-surface` resolves to `rgba(255,255,255,0.028)` — essentially invisible. The dropdown content was readable but had no solid background, causing bleed-through from page content behind it.
+- Fix: Replaced `bg-mh-surface` with `style={{ backgroundColor: '#1a1a1a' }}` on the portal dropdown div.
+- File: `components/NavActions.tsx`
+
+---
+
+**PreMeetingEmailModal — top of modal cut off on shorter screens**
+- Root cause: The outer backdrop used `flex items-center justify-center`. On screens shorter than the modal's natural height, `items-center` centered the overflow vertically — clipping the top (header + close button) above the viewport with no way to scroll to it.
+- Fix: Changed backdrop from `flex items-center justify-center` to `overflow-y-auto`. The inner modal div uses `mx-auto my-auto` so it still centers when there's room; on short screens the user can scroll to the top.
+- File: `components/PreMeetingEmailModal.tsx`
+
+---
+
+**PreMeetingEmailModal — build failure (duplicate `style` prop)**
+- Root cause: The fix above accidentally left the old `style={{ minHeight: 0 }}` attribute on the div alongside the existing `style={{ background: ... }}`, producing a TypeScript/JSX error ("JSX elements cannot have multiple attributes with the same name").
+- Fix: Merged both into a single `style` object (removed `minHeight: 0`; kept the background/blur/border styles).
+- File: `components/PreMeetingEmailModal.tsx`
+- Commit: `3773dad`
+
+---
+
+### 23.9 — New API Routes Added in Phase 6c
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/sync-account-rename` | POST | `?password=` | Bulk-rename account in Calls tab of Sheets when Zoho account is renamed |
+| `/api/setup-zoho-webhooks` | GET | `?password=` | Attempts programmatic Zoho webhook registration (currently blocked by OAuth scope) |
+| `/api/webhook/status` | GET | none | Returns last 5 webhook-synced calls from Sheets for verification |
 
 ---
 
