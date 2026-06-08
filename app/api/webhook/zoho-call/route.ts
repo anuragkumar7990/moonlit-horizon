@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { convertLead, findOrCreateAccount, linkContactToAccount, getContactById, getLeadById, getZohoAccounts, getCallById } from '@/lib/zoho'
+import { convertLead, findOrCreateAccount, linkContactToAccount, getContactById, getLeadById, getZohoAccounts, getCallById, updateLeadCompany } from '@/lib/zoho'
 import { bookMeeting } from '@/lib/booking'
+
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com','yahoo.com','yahoo.in','yahoo.co.in','hotmail.com','hotmail.co.in',
+  'outlook.com','live.com','rediffmail.com','icloud.com','me.com','mac.com',
+  'protonmail.com','proton.me','aol.com','ymail.com',
+])
+
+function inferCompanyFromDomain(email: string): string {
+  const domain = email.split('@')[1]?.toLowerCase()
+  if (!domain || FREE_EMAIL_DOMAINS.has(domain)) return ''
+  const label = domain.split('.')[0]
+  if (!label) return ''
+  return label.length <= 4 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1)
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -101,13 +115,19 @@ export async function POST(req: NextRequest) {
         console.log(`[webhook/zoho-call] Converted → Contact ${contactId} Account ${accountId || 'none'}`)
 
         // Zoho often returns Accounts:null on conversion — find/create account and link the contact
-        if (!accountId && lead.company) {
-          console.log(`[webhook/zoho-call] No account from conversion, finding/creating for "${lead.company}"`)
-          const acct = await findOrCreateAccount(lead.company)
+        // Fall back to email-domain inference if company name is blank
+        const resolvedCompany = lead.company || inferCompanyFromDomain(lead.email ?? '')
+        if (!accountId && resolvedCompany) {
+          console.log(`[webhook/zoho-call] No account from conversion, finding/creating for "${resolvedCompany}"`)
+          const acct = await findOrCreateAccount(resolvedCompany)
           accountId = acct.id
           accountName = acct.accountName
           await linkContactToAccount(contactId, accountId)
           console.log(`[webhook/zoho-call] Linked Contact ${contactId} → Account ${accountId}`)
+          // Write inferred name back to the lead in Zoho for future use
+          if (!lead.company && resolvedCompany) {
+            updateLeadCompany(resolvedId, resolvedCompany).catch(() => {/* best-effort */})
+          }
         }
       }
     }
