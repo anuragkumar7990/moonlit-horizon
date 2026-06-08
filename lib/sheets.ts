@@ -1229,6 +1229,67 @@ export async function getObjectives(period?: string): Promise<Objective[]> {
   } catch { return [] }
 }
 
+// ── Manual Touchpoints sheet ─────────────────────────────────────────────────
+// Columns A:F — Email | Date | Type | Notes | Logged By | Timestamp
+
+export interface ManualTouchpoint {
+  email:     string
+  date:      string   // YYYY-MM-DD
+  type:      'WhatsApp' | 'In-person'
+  notes:     string
+  loggedBy:  string
+  timestamp: string
+}
+
+const MANUAL_TP_HEADERS = ['Email', 'Date', 'Type', 'Notes', 'Logged By', 'Timestamp']
+
+export async function getManualTouchpoints(): Promise<ManualTouchpoint[]> {
+  try {
+    return readSheet<ManualTouchpoint>('Manual Touchpoints!A:F', (r) => ({
+      email:     r[0] ?? '',
+      date:      r[1] ?? '',
+      type:      (r[2] as ManualTouchpoint['type']) ?? 'WhatsApp',
+      notes:     r[3] ?? '',
+      loggedBy:  r[4] ?? '',
+      timestamp: r[5] ?? '',
+    }))
+  } catch { return [] }
+}
+
+export async function appendManualTouchpoint(
+  email: string,
+  date: string,
+  type: 'WhatsApp' | 'In-person',
+  notes: string,
+  loggedBy: string
+): Promise<void> {
+  const sheets = getSheets()
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Manual Touchpoints')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Manual Touchpoints' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Manual Touchpoints!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [MANUAL_TP_HEADERS] },
+    })
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Manual Touchpoints!A:F',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[email, date, type, notes, loggedBy, istNowSheets()]],
+    },
+  })
+}
+
 export async function upsertObjective(
   period: string,
   objective: string,

@@ -13,6 +13,7 @@ import EventIntelModule from './EventIntelModule'
 import SupplyModule from './SupplyModule'
 import P0TasksModule from './P0TasksModule'
 import FollowUpsModule from './FollowUpsModule'
+import ContactTrackerModule from './ContactTrackerModule'
 import PersonSelector from './PersonSelector'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
@@ -31,6 +32,7 @@ type Tab =
   | 'supply'
   | 'p0tasks'
   | 'followups'
+  | 'contacttracker'
 
 interface Props {
   callsData:     CallsColumnData
@@ -44,8 +46,9 @@ interface Props {
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'tracker',   label: 'Master Tracker' },
-  { id: 'p0tasks',   label: 'P0 Tasks' },
-  { id: 'followups', label: 'Follow-Ups' },
+  { id: 'p0tasks',        label: 'P0 Tasks' },
+  { id: 'followups',      label: 'Follow-Ups' },
+  { id: 'contacttracker', label: 'Follow Up Tracker' },
   { id: 'updates',   label: 'Updates' },
   { id: 'calling',   label: 'Calling' },
   { id: 'accounts',  label: 'Accounts' },
@@ -132,8 +135,9 @@ export default function HomeTabs({
       {tab === 'targets'   && <TargetsModule />}
       {tab === 'events'    && <EventIntelModule />}
       {tab === 'supply'    && <SupplyModule />}
-      {tab === 'p0tasks'   && <P0TasksModule />}
-      {tab === 'followups' && <FollowUpsModule />}
+      {tab === 'p0tasks'        && <P0TasksModule />}
+      {tab === 'followups'      && <FollowUpsModule />}
+      {tab === 'contacttracker' && <ContactTrackerModule />}
     </div>
   )
 }

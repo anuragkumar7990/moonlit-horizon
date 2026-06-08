@@ -51,19 +51,32 @@ export async function getDealByAccount(accountName: string): Promise<ZohoDeal | 
 }
 
 export async function getContacts(): Promise<ZohoContact[]> {
-  const data = await zohoGet('/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact&per_page=200') as { data?: Record<string, unknown>[] }
-  return (data.data ?? []).map((c) => {
-    const acct = typeof c.Account_Contact === 'object' && c.Account_Contact !== null ? c.Account_Contact as Record<string, unknown> : null
-    return {
-      id: String(c.id ?? ''),
-      firstName: String(c.First_Name ?? ''),
-      lastName: String(c.Last_Name ?? ''),
-      email: String(c.Email ?? ''),
-      phone: String(c.Phone ?? c.Mobile ?? ''),
-      accountId: String(acct?.id ?? ''),
-      accountName: String(acct?.name ?? ''),
+  const token = await getAccessToken()
+  const results: ZohoContact[] = []
+  let page = 1
+  while (true) {
+    const res = await fetch(
+      `${BASE_URL}/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact&per_page=200&page=${page}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
+    )
+    const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    const rows = data.data ?? []
+    for (const c of rows) {
+      const acct = typeof c.Account_Contact === 'object' && c.Account_Contact !== null ? c.Account_Contact as Record<string, unknown> : null
+      results.push({
+        id:          String(c.id ?? ''),
+        firstName:   String(c.First_Name ?? ''),
+        lastName:    String(c.Last_Name ?? ''),
+        email:       String(c.Email ?? ''),
+        phone:       String(c.Phone ?? c.Mobile ?? ''),
+        accountId:   String(acct?.id ?? ''),
+        accountName: String(acct?.name ?? ''),
+      })
     }
-  })
+    if (!data.info?.more_records || rows.length < 200) break
+    page++
+  }
+  return results
 }
 
 export async function getZohoAccounts(): Promise<ZohoAccount[]> {
@@ -141,17 +154,32 @@ export async function createLeads(leads: {
   return { results: allResults }
 }
 
-export async function getLeads(): Promise<{ id: string; firstName: string; lastName: string; email: string; company: string }[]> {
-  const data = await zohoGet('/Leads?fields=First_Name,Last_Name,Email,Company,Company_Name,Converted__s&per_page=200') as { data?: Record<string, unknown>[] }
-  return (data.data ?? [])
-    .filter(l => !l.Converted__s)
-    .map(l => ({
-      id: String(l.id ?? ''),
-      firstName: String(l.First_Name ?? ''),
-      lastName: String(l.Last_Name ?? ''),
-      email: String(l.Email ?? ''),
-      company: String(l.Company ?? l.Company_Name ?? ''),
-    }))
+export async function getLeads(): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string }[]> {
+  const token = await getAccessToken()
+  const results: { id: string; firstName: string; lastName: string; email: string; phone: string; company: string }[] = []
+  let page = 1
+  while (true) {
+    const res = await fetch(
+      `${BASE_URL}/Leads?fields=First_Name,Last_Name,Email,Phone,Mobile,Company,Company_Name,Converted__s&per_page=200&page=${page}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
+    )
+    const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    const rows = data.data ?? []
+    for (const l of rows) {
+      if (l.Converted__s) continue
+      results.push({
+        id:        String(l.id ?? ''),
+        firstName: String(l.First_Name ?? ''),
+        lastName:  String(l.Last_Name ?? ''),
+        email:     String(l.Email ?? ''),
+        phone:     String(l.Phone ?? l.Mobile ?? ''),
+        company:   String(l.Company ?? l.Company_Name ?? ''),
+      })
+    }
+    if (!data.info?.more_records || rows.length < 200) break
+    page++
+  }
+  return results
 }
 
 export async function getLeadById(id: string): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string } | null> {
