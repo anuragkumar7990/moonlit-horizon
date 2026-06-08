@@ -15,6 +15,7 @@ import EventIntelModule from './EventIntelModule'
 import SupplyModule from './SupplyModule'
 import P0TasksModule from './P0TasksModule'
 import ContactTrackerModule from './ContactTrackerModule'
+import DealsModule from './DealsModule'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
@@ -220,7 +221,7 @@ export default function HomeTabs({
       {tab === 'p0tasks'    && <P0TasksModule />}
       {tab === 'followups'  && <ContactTrackerModule />}
       {tab === 'updates'    && <UpdatesModule />}
-      {tab === 'deals'      && <ComingSoon label="Deals" />}
+      {tab === 'deals'      && <DealsModule />}
       {tab === 'calendar'   && <ComingSoon label="Calendar" />}
       {tab === 'objectives' && <ComingSoon label="Objectives" />}
       {tab === 'scrum'      && <ComingSoon label="Daily Scrum" />}

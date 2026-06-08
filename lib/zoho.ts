@@ -33,16 +33,51 @@ async function zohoGet(path: string): Promise<unknown> {
 }
 
 export async function getDeals(): Promise<ZohoDeal[]> {
-  const data = await zohoGet('/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Full_Name&per_page=200') as { data?: Record<string, unknown>[] }
-  return (data.data ?? []).map((d) => ({
-    id: String(d.id ?? ''),
-    dealName: String(d.Deal_Name ?? ''),
-    stage: String(d.Stage ?? ''),
-    amount: String(d.Amount ?? ''),
-    closingDate: String(d.Closing_Date ?? ''),
-    accountName: typeof d.Account_Name === 'object' && d.Account_Name !== null ? String((d.Account_Name as Record<string, unknown>).name ?? '') : String(d.Account_Name ?? ''),
-    contactName: String(d.Contact_Full_Name ?? ''),
-  }))
+  const data = await zohoGet('/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Full_Name,Tag&per_page=200') as { data?: Record<string, unknown>[] }
+  return (data.data ?? []).map((d) => {
+    const tags = Array.isArray(d.Tag) ? (d.Tag as Record<string, unknown>[]).map(t => String(t.name ?? '')) : []
+    const temperature: ZohoDeal['temperature'] = tags.includes('Hot') ? 'Hot' : tags.includes('Warm') ? 'Warm' : tags.includes('Cold') ? 'Cold' : null
+    return {
+      id: String(d.id ?? ''),
+      dealName: String(d.Deal_Name ?? ''),
+      stage: String(d.Stage ?? ''),
+      amount: String(d.Amount ?? ''),
+      closingDate: String(d.Closing_Date ?? ''),
+      accountName: typeof d.Account_Name === 'object' && d.Account_Name !== null ? String((d.Account_Name as Record<string, unknown>).name ?? '') : String(d.Account_Name ?? ''),
+      contactName: String(d.Contact_Full_Name ?? ''),
+      temperature,
+    }
+  })
+}
+
+export async function addTagToDeals(ids: string[], tagName: string): Promise<void> {
+  if (ids.length === 0) return
+  const token = await getAccessToken()
+  const BATCH = 50
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH)
+    const params = new URLSearchParams({ tag_names: tagName })
+    batch.forEach(id => params.append('ids[]', id))
+    await fetch(`${BASE_URL}/Deals/actions/add_tags?${params.toString()}`, {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    })
+  }
+}
+
+export async function removeTagFromDeals(ids: string[], tagName: string): Promise<void> {
+  if (ids.length === 0) return
+  const token = await getAccessToken()
+  const BATCH = 50
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH)
+    const params = new URLSearchParams({ tag_names: tagName })
+    batch.forEach(id => params.append('ids[]', id))
+    await fetch(`${BASE_URL}/Deals/actions/remove_tags?${params.toString()}`, {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    })
+  }
 }
 
 export async function getDealByAccount(accountName: string): Promise<ZohoDeal | null> {

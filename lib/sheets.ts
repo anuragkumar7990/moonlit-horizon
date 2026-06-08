@@ -1171,6 +1171,42 @@ export async function updateProspectCallStatus(email: string, status: string): P
   })
 }
 
+export async function appendPaymentRowRaw(row: {
+  date: string
+  account: string
+  deal: string
+  amount: number
+  invoiceDate: string
+  dueDate: string
+  status: Payment['status']
+  notes: string
+  attachmentUrl?: string
+}): Promise<void> {
+  const sheets = getSheets()
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const tabExists = meta.data.sheets?.some(s => (s.properties?.title ?? '') === 'Payments')
+  if (!tabExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Payments' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Payments!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [PAYMENTS_HEADERS] },
+    })
+  }
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Payments!A:I',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[row.date, row.account, row.deal, row.amount, row.invoiceDate, row.dueDate, row.status, row.notes, row.attachmentUrl ?? '']],
+    },
+  })
+}
+
 export async function updatePaymentStatus(rowIndex: number, status: Payment['status']): Promise<void> {
   const sheets = getSheets()
   // rowIndex is 1-indexed sheet row (including header); data rows start at 2
@@ -1180,6 +1216,101 @@ export async function updatePaymentStatus(rowIndex: number, status: Payment['sta
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[status]] },
   })
+}
+
+// ── Lost Deals sheet ─────────────────────────────────────────────────────────
+// Columns: DealID | DealName | Account | ContactEmail | Category | DateMoved | Notes
+
+export type LostDealCategory = 'No Shows / Multiple Reschedules' | 'Meeting Rescheduled-Cancelled' | 'Dropped 2025-26' | 'Lost'
+
+export interface LostDeal {
+  rowIndex: number
+  dealId: string
+  dealName: string
+  account: string
+  contactEmail: string
+  category: LostDealCategory
+  dateMoved: string
+  notes: string
+}
+
+const LOST_DEALS_HEADERS = ['DealID', 'DealName', 'Account', 'ContactEmail', 'Category', 'DateMoved', 'Notes']
+
+async function ensureLostDealsTab(sheets: ReturnType<typeof getSheets>) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const exists = meta.data.sheets?.some(s => s.properties?.title === 'Lost Deals')
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: 'Lost Deals' } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Lost Deals!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [LOST_DEALS_HEADERS] },
+    })
+  }
+}
+
+export async function getLostDeals(): Promise<LostDeal[]> {
+  try {
+    const sheets = getSheets()
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Lost Deals!A:G' })
+    const rows = res.data.values ?? []
+    return rows.slice(1)
+      .map((r, i) => ({
+        rowIndex: i + 2,
+        dealId:       String(r[0] ?? ''),
+        dealName:     String(r[1] ?? ''),
+        account:      String(r[2] ?? ''),
+        contactEmail: String(r[3] ?? ''),
+        category:     (String(r[4] ?? '') as LostDealCategory) || 'Lost',
+        dateMoved:    String(r[5] ?? ''),
+        notes:        String(r[6] ?? ''),
+      }))
+      .filter(d => d.dealId)
+  } catch { return [] }
+}
+
+export async function appendLostDeal(row: Omit<LostDeal, 'rowIndex'>): Promise<void> {
+  const sheets = getSheets()
+  await ensureLostDealsTab(sheets)
+  const now = new Date()
+  const dateMoved = row.dateMoved || new Date(now.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Lost Deals!A:G',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[row.dealId, row.dealName, row.account, row.contactEmail, row.category, dateMoved, row.notes]],
+    },
+  })
+}
+
+export async function deleteLostDealRow(rowIndex: number): Promise<void> {
+  const sheets = getSheets()
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: await getLostDealsSheetId(sheets),
+            dimension: 'ROWS',
+            startIndex: rowIndex - 1,
+            endIndex: rowIndex,
+          },
+        },
+      }],
+    },
+  })
+}
+
+async function getLostDealsSheetId(sheets: ReturnType<typeof getSheets>): Promise<number> {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const sheet = meta.data.sheets?.find(s => s.properties?.title === 'Lost Deals')
+  return sheet?.properties?.sheetId ?? 0
 }
 
 // ── Objectives sheet ──────────────────────────────────────────────────────────

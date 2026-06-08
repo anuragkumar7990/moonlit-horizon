@@ -97,6 +97,7 @@ export interface ZohoDeal {
   closingDate: string
   accountName: string
   contactName: string
+  temperature?: 'Hot' | 'Warm' | 'Cold' | null
 }
 
 export interface ZohoContact {
