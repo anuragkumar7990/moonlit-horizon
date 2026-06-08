@@ -159,14 +159,22 @@ export async function POST(req: NextRequest) {
       const found = accounts.find(a => a.accountName === contact.accountName)
       if (found) { accountId = found.id; accountName = found.accountName }
     }
+
+    // Still no account — infer from email domain or use Untagged tag, then find/create
+    if (!accountId) {
+      const contactFullName = `${contact.firstName} ${contact.lastName}`.trim()
+      const resolvedCompany = inferCompanyFromDomain(contact.email)
+        || `Untagged Company #${contactId.slice(-6).toUpperCase()}`
+      console.log(`[webhook/zoho-call] No account on contact — using "${resolvedCompany}"`)
+      const acct = await findOrCreateAccount(resolvedCompany)
+      accountId = acct.id
+      accountName = acct.accountName
+      await linkContactToAccount(contactId, accountId)
+      console.log(`[webhook/zoho-call] Linked Contact ${contactId} → Account ${accountId}`)
+      void contactFullName
+    }
   } else {
     accountName = contact.accountName || overrideAccountId
-  }
-
-  if (!accountId) {
-    return NextResponse.json({
-      error: `Could not resolve Account for ${contact.firstName} ${contact.lastName}. Ensure the contact is linked to an Account in Zoho.`,
-    }, { status: 400 })
   }
 
   // Prefer contact's own account name over the raw ID fallback
