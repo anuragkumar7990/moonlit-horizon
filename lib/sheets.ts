@@ -354,6 +354,23 @@ export async function appendTaskRows(rows: {
   })
 }
 
+export async function patchTask(linkedDeal: string, fields: { task?: string; assignedTo?: string }): Promise<void> {
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Tasks!A:G' })
+  const rows = res.data.values ?? []
+  const rowIdx = rows.findIndex((r, i) => i > 0 && r[4] === linkedDeal)
+  if (rowIdx === -1) throw new Error(`Task not found: ${linkedDeal}`)
+  const sheetRow = rowIdx + 1
+  const updates: { range: string; values: unknown[][] }[] = []
+  if (fields.task !== undefined)       updates.push({ range: `Tasks!B${sheetRow}`, values: [[fields.task]] })
+  if (fields.assignedTo !== undefined) updates.push({ range: `Tasks!D${sheetRow}`, values: [[fields.assignedTo]] })
+  if (updates.length === 0) return
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
+  })
+}
+
 export async function clearTasksSheet(): Promise<void> {
   const sheets = getSheets()
   await sheets.spreadsheets.values.clear({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTasks, updateTaskStatus } from '@/lib/sheets'
+import { getTasks, updateTaskStatus, patchTask } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,10 +12,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { linkedDeal, status } = await req.json() as { linkedDeal?: string; status?: string }
-  if (!linkedDeal || !status) {
-    return NextResponse.json({ error: 'linkedDeal and status are required' }, { status: 400 })
+  const body = await req.json() as { linkedDeal?: string; status?: string; task?: string; assignedTo?: string }
+  if (!body.linkedDeal) return NextResponse.json({ error: 'linkedDeal is required' }, { status: 400 })
+
+  // Status update (Mark Done / Reopen)
+  if (body.status) {
+    await updateTaskStatus(body.linkedDeal, body.status as 'Done' | 'Open')
   }
-  await updateTaskStatus(linkedDeal, status as 'Done' | 'Open')
+  // Field edits (task text, assignedTo)
+  if (body.task !== undefined || body.assignedTo !== undefined) {
+    await patchTask(body.linkedDeal, { task: body.task, assignedTo: body.assignedTo })
+  }
   return NextResponse.json({ ok: true })
 }

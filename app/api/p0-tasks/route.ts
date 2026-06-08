@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { format, parseISO, differenceInHours, differenceInDays, isPast } from 'date-fns'
 import { getMeetings, getNotes, getCalls, getTasks, appendTaskRows, clearTasksSheet, getContactIntelFollowUps } from '@/lib/sheets'
 import { getDeals, getZohoCalls } from '@/lib/zoho'
+import { postToDiscordChannel } from '@/lib/discord'
 
 export const dynamic = 'force-dynamic'
 
@@ -249,14 +250,20 @@ export async function POST(req: NextRequest) {
   const suffix = [account, contact].filter(Boolean).join(' / ')
   const taskText = suffix ? `${task} — ${suffix}` : task
 
+  const finalAssignee = assignedTo || 'Anurag'
+
   await appendTaskRows([{
     date:       today,
     task:       taskText,
     type:       'P0',
-    assignedTo: assignedTo || 'Anurag',
+    assignedTo: finalAssignee,
     linkedDeal: key,
     status:     'Open',
   }])
 
-  return NextResponse.json({ ok: true, task: taskText, assignedTo: assignedTo || 'Anurag' })
+  // Notify #p0-tasks on Discord
+  const discordMsg = `📌 **New P0 Task** — ${today}\n**Task:** ${taskText}\n**Assigned:** ${finalAssignee}`
+  postToDiscordChannel('p0-tasks', discordMsg).catch(() => { /* best effort */ })
+
+  return NextResponse.json({ ok: true, task: taskText, assignedTo: finalAssignee })
 }

@@ -1,48 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus } from '@/lib/zoho'
-import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus } from '@/lib/sheets'
-import { syncCallIntel } from '@/lib/intel'
+import { processZohoCall } from '@/lib/zoho-call-processor'
 
 export const dynamic = 'force-dynamic'
 
 const WEBHOOK_SECRET = process.env.DASHBOARD_PASSWORD ?? 'thetesttribe'
-
-const FREE_EMAIL_DOMAINS = new Set([
-  'gmail.com', 'yahoo.com', 'yahoo.in', 'yahoo.co.in',
-  'hotmail.com', 'hotmail.co.in', 'outlook.com', 'live.com',
-  'rediffmail.com', 'icloud.com', 'me.com', 'mac.com',
-  'protonmail.com', 'proton.me', 'aol.com', 'ymail.com',
-])
-
-// Infers a display company name from an email domain.
-// Corporate: ptc.com → "PTC", indusface.com → "Indusface"
-// Free provider (gmail etc): returns '' — caller should fall back to Untagged Company tag
-function inferCompanyFromDomain(email: string): string {
-  const domain = email.split('@')[1]?.toLowerCase()
-  if (!domain || FREE_EMAIL_DOMAINS.has(domain)) return ''
-  const label = domain.split('.')[0]
-  if (!label) return ''
-  return label.length <= 4
-    ? label.toUpperCase()
-    : label.charAt(0).toUpperCase() + label.slice(1)
-}
-
-// Zoho sends Call_Start_Time as "2026-06-07T10:30:00+05:30" or UTC ISO
-function parseZohoDateTime(callStartTime: string): { date: string; time: string } {
-  if (!callStartTime || callStartTime === 'null') return { date: '', time: '' }
-  return { date: callStartTime.slice(0, 10), time: callStartTime.slice(11, 16) }
-}
-
-// Maps a call outcome to a Zoho Lead_Status value.
-// Returns null when the outcome doesn't warrant a status change (e.g. unknown).
-function outcomeToLeadStatus(outcome: string): string | null {
-  const o = outcome.toLowerCase().trim()
-  if (o.includes('meeting scheduled') || o.includes('meeting booked') || o === 'scheduled a meeting') return 'Meeting Scheduled'
-  if (['interested', 'connected', 'callback later', 'call back later', 'send more info'].includes(o)) return 'Contacted'
-  if (o === 'not interested') return 'Not Interested'
-  if (['no answer', 'voicemail', 'left voice message', 'busy', 'wrong number', 'rnr', 'not reachable', 'unanswered'].includes(o)) return 'Attempted to Contact'
-  return null
-}
 
 async function extractCallId(req: NextRequest): Promise<string | null> {
   const fromUrl = req.nextUrl.searchParams.get('callId') ?? req.nextUrl.searchParams.get('id')
@@ -74,6 +35,17 @@ async function extractCallId(req: NextRequest): Promise<string | null> {
   return fromUrl
 }
 
+// GET — manual re-process for a specific callId (debugging / one-off backfill)
+// Usage: GET /api/webhook/zoho-call-logged?callId=<id>&secret=thetesttribe
+export async function GET(req: NextRequest) {
+  const secret = req.nextUrl.searchParams.get('secret')
+  if (secret !== WEBHOOK_SECRET) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const callId = req.nextUrl.searchParams.get('callId')
+  if (!callId) return NextResponse.json({ error: 'callId param required' }, { status: 400 })
+  const result = await processZohoCall(callId)
+  return NextResponse.json(result, { status: result.ok ? 200 : 404 })
+}
+
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-webhook-secret') ?? req.nextUrl.searchParams.get('secret')
   if (secret !== WEBHOOK_SECRET) {
@@ -87,143 +59,6 @@ export async function POST(req: NextRequest) {
   }
 
   console.log(`[webhook/zoho-call-logged] callId=${callId}`)
-
-  const call = await getCallById(callId)
-  if (!call) {
-    return NextResponse.json({ error: `Call ${callId} not found in Zoho` }, { status: 404 })
-  }
-
-  // Resolve contact/lead to get name, email, and account name.
-  //
-  // Zoho's call structure differs by record type:
-  //   Lead calls:    $se_module="Leads",    Who_Id=null, What_Id={ id: leadId, name }
-  //   Contact calls: $se_module="Contacts", Who_Id={ id: contactId, name }, What_Id=null (or Account)
-  let contactName = ''
-  let email = ''
-  let accountName = ''
-  let leadIdForUpdate: string | null = null  // tracked so we can write company back to Zoho
-
-  const whoId = call.whoId
-  const whatId = call.whatId
-
-  if (call.seModule === 'Leads') {
-    // Lead call — the lead record is in What_Id
-    const leadId = whatId?.id
-    if (leadId) {
-      leadIdForUpdate = leadId
-      const lead = await getLeadById(leadId)
-      if (lead) {
-        contactName = `${lead.firstName} ${lead.lastName}`.trim()
-        email = lead.email
-        accountName = lead.company
-      }
-    }
-    // Fallback: use What_Id name if lead fetch returned nothing (converted/deleted lead)
-    if (!contactName && whatId?.name) contactName = whatId.name
-  } else {
-    // Contact call — contact is in Who_Id; account may be in What_Id
-    if (whoId?.id) {
-      const contact = await getContactById(whoId.id)
-      if (contact) {
-        contactName = `${contact.firstName} ${contact.lastName}`.trim()
-        email = contact.email
-        accountName = contact.accountName
-      }
-    }
-    // Fallback: use Who_Id name if contact fetch returned nothing
-    if (!contactName && whoId?.name) contactName = whoId.name
-    // Fallback: account name from What_Id if contact had none
-    if (!accountName && whatId?.name) accountName = whatId.name
-  }
-
-  // Fallback: infer company from email domain when Zoho Company_Name is blank
-  if (!accountName && email) {
-    accountName = inferCompanyFromDomain(email)
-      || `Untagged Company #${callId.slice(-6).toUpperCase()}`
-    console.log(`[webhook/zoho-call-logged] Inferred company "${accountName}" from email for callId=${callId}`)
-
-    // Write inferred name back to Zoho (skip for Untagged entries — those need human correction)
-    if (!accountName.startsWith('Untagged') && leadIdForUpdate) {
-      updateLeadCompany(leadIdForUpdate, accountName).catch(e =>
-        console.error('[webhook/zoho-call-logged] updateLeadCompany failed:', e.message)
-      )
-    }
-  }
-
-  // Last resort: always log the call even if we can't resolve account/email.
-  // Use Untagged Company so nothing is silently dropped.
-  if (!accountName) {
-    accountName = `Untagged Company #${callId.slice(-6).toUpperCase()}`
-    console.warn(`[webhook/zoho-call-logged] No account resolved — using "${accountName}" for callId=${callId}`)
-  }
-
-  const { date, time } = parseZohoDateTime(call.callStartTime)
-
-  // Deduplicate: if this Zoho Call ID is already in Sheets (written by Discord /mh log call),
-  // skip the Sheets append but still refresh Account Intel and Contact Intel.
-  const alreadyInSheets = await callExistsInSheetByZohoId(callId)
-
-  if (!alreadyInSheets) {
-    await appendCallRow({
-      date,
-      time,
-      account: accountName,
-      contactName,
-      contactPhone: '',
-      sdr: call.ownerName,
-      duration: call.callDuration,
-      outcome: call.callResult,
-      notes: call.description,
-      followUpDate: '',
-      zohoCallId: callId,
-    })
-    console.log(`[webhook/zoho-call-logged] Wrote to Sheets — ${accountName} / ${call.callResult} / ${date}`)
-  } else {
-    console.log(`[webhook/zoho-call-logged] Skipped Sheets write — Zoho Call ID ${callId} already present`)
-  }
-
-  // Update Account Intelligence (Call Intel layer + Cumulative Summary)
-  if (accountName) {
-    syncCallIntel(accountName, date).catch(e =>
-      console.error('[webhook/zoho-call-logged] syncCallIntel failed:', e.message)
-    )
-  }
-
-  // Auto-update Zoho Lead_Status and Prospects sheet based on call outcome.
-  // Only fires for Lead calls (we have a leadId and email to match).
-  const newLeadStatus = outcomeToLeadStatus(call.callResult)
-  if (newLeadStatus) {
-    if (call.seModule === 'Leads' && leadIdForUpdate) {
-      updateLeadStatus(leadIdForUpdate, newLeadStatus).catch(e =>
-        console.error('[webhook/zoho-call-logged] updateLeadStatus failed:', e.message)
-      )
-    }
-    if (email) {
-      updateProspectCallStatus(email, newLeadStatus).catch(e =>
-        console.error('[webhook/zoho-call-logged] updateProspectCallStatus failed:', e.message)
-      )
-    }
-  }
-
-  // Update Contact Intelligence row for this contact
-  if (email) {
-    upsertContactIntelRow(email, {
-      date,
-      time,
-      outcome: call.callResult,
-      notes: call.description,
-      duration: call.callDuration,
-      zohoCallId: callId,
-    }).catch(e =>
-      console.error('[webhook/zoho-call-logged] upsertContactIntelRow failed:', e.message)
-    )
-  }
-
-  return NextResponse.json({
-    ok: true,
-    callId,
-    account: accountName,
-    skippedSheetsWrite: alreadyInSheets,
-    date,
-  })
+  const result = await processZohoCall(callId)
+  return NextResponse.json(result, { status: result.ok ? 200 : 404 })
 }

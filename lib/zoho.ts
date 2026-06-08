@@ -658,6 +658,24 @@ export async function createDeal(payload: {
   return record?.details?.id ?? ''
 }
 
+// Fetch all Zoho call IDs in a date range (yyyy-mm-dd) using COQL.
+// Returns at most 200 records per call — callers should page if needed.
+export async function getZohoCallsInRange(since: string, until: string): Promise<{ id: string; date: string }[]> {
+  const token = await getAccessToken()
+  const query = `SELECT id, Call_Start_Time FROM Calls WHERE Call_Start_Time >= '${since}T00:00:00+05:30' AND Call_Start_Time <= '${until}T23:59:59+05:30' ORDER BY Call_Start_Time DESC LIMIT 200`
+  const res = await fetch(`${BASE_URL}/coql`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ select_query: query }),
+    cache: 'no-store',
+  })
+  const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+  return (data.data ?? []).map(c => ({
+    id:   String(c.id ?? ''),
+    date: String(c.Call_Start_Time ?? '').slice(0, 10),
+  })).filter(c => c.id)
+}
+
 export async function updateDealStage(dealId: string, stage: string): Promise<void> {
   const token = await getAccessToken()
   await fetch(`${BASE_URL}/Deals/${dealId}`, {
