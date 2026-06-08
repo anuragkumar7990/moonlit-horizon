@@ -271,7 +271,7 @@ export default function PreMeetingEmailModal({ onClose, prefillAccount = '', pre
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="flex min-h-full items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="rounded-2xl w-full max-w-2xl flex flex-col max-h-[85vh]"
+      <div className="rounded-2xl w-full max-w-2xl flex flex-col h-[85vh]"
         style={{
           background: 'rgba(8,8,16,0.94)',
           backdropFilter: 'blur(24px)',
