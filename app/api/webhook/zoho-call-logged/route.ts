@@ -16,19 +16,12 @@ const FREE_EMAIL_DOMAINS = new Set([
 
 // Infers a display company name from an email domain.
 // Corporate: ptc.com → "PTC", indusface.com → "Indusface"
-// Free provider: gmail.com → "#Unknown"
+// Free provider (gmail etc): returns '' — caller should fall back to Untagged Company tag
 function inferCompanyFromDomain(email: string): string {
   const domain = email.split('@')[1]?.toLowerCase()
-  if (!domain) return '#Unknown'
-  if (FREE_EMAIL_DOMAINS.has(domain)) return '#Unknown'
-
-  // Take the first label of the domain (before first dot) as the company name.
-  // e.g. ptc.com → "ptc", indusface.com → "indusface", mail.cohesity.com → "mail" (edge case)
+  if (!domain || FREE_EMAIL_DOMAINS.has(domain)) return ''
   const label = domain.split('.')[0]
-  if (!label) return '#Unknown'
-
-  // ≤ 4 chars: fully uppercase (PTC, IBM, SAP, HCL)
-  // longer: title case (Indusface, Bloomreach, Cohesity)
+  if (!label) return ''
   return label.length <= 4
     ? label.toUpperCase()
     : label.charAt(0).toUpperCase() + label.slice(1)
@@ -133,16 +126,16 @@ export async function POST(req: NextRequest) {
   // Fallback: infer company from email domain when Zoho Company_Name is blank
   if (!accountName && email) {
     accountName = inferCompanyFromDomain(email)
+      || `Untagged Company #${callId.slice(-6).toUpperCase()}`
     console.log(`[webhook/zoho-call-logged] Inferred company "${accountName}" from email for callId=${callId}`)
 
-    // Write the inferred name back to Zoho so future calls don't need to fall back
-    if (accountName !== '#Unknown' && leadIdForUpdate) {
+    // Write inferred name back to Zoho (skip for Untagged entries — those need human correction)
+    if (!accountName.startsWith('Untagged') && leadIdForUpdate) {
       updateLeadCompany(leadIdForUpdate, accountName).catch(e =>
         console.error('[webhook/zoho-call-logged] updateLeadCompany failed:', e.message)
       )
     }
   }
-  if (!accountName) accountName = contactName
 
   if (!accountName && !email) {
     console.warn(`[webhook/zoho-call-logged] No contact, email, or company — cannot process callId=${callId}`)

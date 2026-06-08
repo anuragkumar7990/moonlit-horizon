@@ -116,7 +116,9 @@ export async function POST(req: NextRequest) {
 
         // Zoho often returns Accounts:null on conversion — find/create account and link the contact
         // Fall back to email-domain inference if company name is blank
-        const resolvedCompany = lead.company || inferCompanyFromDomain(lead.email ?? '')
+        const resolvedCompany = lead.company
+          || inferCompanyFromDomain(lead.email ?? '')
+          || `Untagged Company #${resolvedId.slice(-6).toUpperCase()}`
         if (!accountId && resolvedCompany) {
           console.log(`[webhook/zoho-call] No account from conversion, finding/creating for "${resolvedCompany}"`)
           const acct = await findOrCreateAccount(resolvedCompany)
