@@ -3,13 +3,13 @@ import { useState, useRef, useEffect, useCallback, useMemo, ChangeEvent } from '
 import type { ContactIntelRow } from '@/lib/sheets'
 import BookMeetingModal from './BookMeetingModal'
 
-const LVL1_OPTIONS = [
-  'Webinar',
-  'Events',
-  'Email',
-  'Cold Outreach',
-  'Referrals',
-  'Internal Community Data',
+const LVL1_OPTIONS: { label: string; value: string }[] = [
+  { label: 'Webinar',        value: 'Webinar' },
+  { label: 'Events',         value: 'Events' },
+  { label: 'Email',          value: 'Email' },
+  { label: 'Cold Outreach',  value: 'Cold Outreach' },
+  { label: 'Referrals',      value: 'Referrals' },
+  { label: 'Community Data', value: 'Internal Community Data' },
 ]
 
 interface L2BreakdownEntry {
@@ -55,16 +55,6 @@ function stockLabel(weeks: number): string {
   return 'Good'
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="card">
-      <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-2">{label}</p>
-      <p className="text-3xl font-semibold text-mh-text">{value}</p>
-      {sub && <p className="text-xs text-mh-muted mt-1">{sub}</p>}
-    </div>
-  )
-}
-
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const o = outcome.toLowerCase().trim()
   let color = '#9CA3AF'
@@ -96,7 +86,7 @@ export default function ProspectModule() {
   const [file, setFile] = useState<File | null>(null)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
   const [uploadResponse, setUploadResponse] = useState<UploadResponse | null>(null)
-  const [lvl1Source, setLvl1Source] = useState('Webinar')
+  const [lvl1Source, setLvl1Source] = useState('Webinar') // stores the VALUE (not label)
   const [lvl2Source, setLvl2Source] = useState('')
   const [lvl2Options, setLvl2Options] = useState<string[]>([])
   const [lvl2Loading, setLvl2Loading] = useState(true)
@@ -231,42 +221,10 @@ export default function ProspectModule() {
         />
       )}
 
-      {/* ── 1. Stat cards ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard
-          label="Total Prospects"
-          value={statsLoading ? '—' : (stats?.total ?? 0)}
-          sub="uncalled leads in pipeline"
-        />
-        <StatCard
-          label="Weeks of Stock"
-          value={statsLoading ? '—' : `${stats?.totalWeeksOfStock ?? 0}w`}
-          sub="at 250 calls / week"
-        />
-        <div className="card">
-          <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-2">Stock Health</p>
-          {statsLoading ? (
-            <p className="text-mh-muted text-sm">Loading…</p>
-          ) : lowStockSources.length > 0 ? (
-            <>
-              <p className="text-3xl font-semibold" style={{ color: '#F87171' }}>Low</p>
-              <p className="text-xs text-mh-muted mt-1">
-                {lowStockSources.map(s => s.source).join(', ')} below 2w
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-3xl font-semibold" style={{ color: '#22C55E' }}>Healthy</p>
-              <p className="text-xs text-mh-muted mt-1">All sources above 2-week threshold</p>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── 2. Upload — 1 line ────────────────────────────────────────────── */}
+      {/* ── 1. Upload + Source counts — 1 combined row ───────────────────── */}
       <div className="card py-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest shrink-0">Upload Prospects</p>
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest shrink-0">Upload</p>
           <select
             value={lvl1Source}
             onChange={e => setLvl1Source(e.target.value)}
@@ -275,7 +233,7 @@ export default function ProspectModule() {
               outline-none focus:border-mh-vermillion transition-colors"
           >
             <option value="" style={{ background: '#0d0d1a' }}>— Lvl 1 —</option>
-            {LVL1_OPTIONS.map(v => <option key={v} value={v} style={{ background: '#0d0d1a' }}>{v}</option>)}
+            {LVL1_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: '#0d0d1a' }}>{o.label}</option>)}
           </select>
           <select
             value={lvl2Source}
@@ -337,12 +295,27 @@ export default function ProspectModule() {
             </button>
           )}
 
+          {/* separator */}
+          <div className="h-8 w-px bg-mh-border shrink-0 mx-1" />
+
+          {/* Source mini-counts */}
+          {LVL1_OPTIONS.map(opt => {
+            const live = stats?.bySource.find(s => s.source === opt.value)
+            const count = statsLoading ? null : (live?.count ?? 0)
+            const weeks = live?.weeksOfStock ?? 0
+            const color = stockColor(weeks)
+            return (
+              <div key={opt.value} className="flex flex-col items-center min-w-[52px]">
+                <p className="text-lg font-bold leading-tight" style={{ color }}>
+                  {count === null ? '—' : count.toLocaleString()}
+                </p>
+                <p className="text-[9px] text-mh-muted text-center leading-tight mt-0.5">{opt.label}</p>
+              </div>
+            )
+          })}
+
           {stats && uploadStatus === 'idle' && (
-            <span className="text-[10px] text-mh-muted ml-auto">
-              Refreshed{' '}
-              {new Date(stats.fetchedAt).toLocaleTimeString('en-IN', {
-                hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata',
-              })}{' '}IST ·{' '}
+            <span className="text-[10px] text-mh-muted ml-auto shrink-0">
               <button onClick={() => fetchStats(true)} className="hover:text-mh-text underline underline-offset-2">
                 Refresh
               </button>
@@ -351,64 +324,24 @@ export default function ProspectModule() {
         </div>
       </div>
 
-      {/* ── 3. Source cards — 6 cards ─────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4">
-        {LVL1_OPTIONS.map(source => {
-          const live = stats?.bySource.find(s => s.source === source)
-          const count = statsLoading ? null : (live?.count ?? 0)
-          const weeks = live?.weeksOfStock ?? 0
-          const color = stockColor(weeks)
-          const label = stockLabel(weeks)
-          return (
-            <div key={source} className="card">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-mh-text leading-tight">{source}</p>
-                {count !== null && (
-                  <span
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
-                    style={{ color, backgroundColor: color + '22' }}
-                  >
-                    {label}
-                  </span>
-                )}
-              </div>
-              <p className="text-3xl font-semibold text-mh-text mt-3">
-                {count === null ? '—' : count.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-mh-muted mt-1">
-                {count === null ? '' : `${weeks}w of stock`}
-              </p>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* ── 4. Prospects Database table ───────────────────────────────────── */}
+      {/* ── 2. Uncalled Leads Database ────────────────────────────────────── */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <h3 className="text-sm font-semibold text-mh-text">Prospects Database</h3>
+        <div className="flex items-baseline gap-4 flex-wrap">
+          <h3 className="text-lg font-bold text-mh-text">Uncalled Leads Database</h3>
           {!prospectsLoading && (
-            <span className="text-xs text-mh-muted">{prospects.length.toLocaleString()} total</span>
+            <span className="text-xs text-mh-muted italic">
+              {tableStats.total.toLocaleString()} total
+              {' · '}called: <em className="not-italic font-semibold text-mh-text">{tableStats.called}</em>
+              {tableStats.total > 0 && <span className="text-mh-muted"> ({Math.round(tableStats.called / tableStats.total * 100)}%)</span>}
+              {' · '}connected: <em className="not-italic font-semibold text-mh-text">{tableStats.connected}</em>
+              {' · '}converted: <em className="not-italic font-semibold text-mh-text">{tableStats.converted}</em>
+              {' · '}
+              <span style={{ color: statsLoading ? '#9CA3AF' : lowStockSources.length > 0 ? '#F87171' : '#22C55E' }}>
+                {statsLoading ? '…' : lowStockSources.length > 0 ? `Low stock: ${lowStockSources.map(s => LVL1_OPTIONS.find(o => o.value === s.source)?.label ?? s.source).join(', ')}` : `${stats?.totalWeeksOfStock ?? 0}w stock`}
+              </span>
+            </span>
           )}
         </div>
-
-        {/* Table stats */}
-        {!prospectsLoading && (
-          <div className="grid grid-cols-4 gap-4">
-            {[
-              { label: 'Total',       value: tableStats.total.toLocaleString() },
-              { label: 'Called',      value: tableStats.called.toLocaleString(), sub: tableStats.total > 0 ? `${Math.round(tableStats.called / tableStats.total * 100)}% of total` : undefined },
-              { label: 'Connected',   value: tableStats.connected.toLocaleString() },
-              { label: 'Converted',   value: tableStats.converted.toLocaleString(), sub: 'became a contact' },
-            ].map(({ label, value, sub }) => (
-              <div key={label} className="card py-3">
-                <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-1">{label}</p>
-                <p className="text-2xl font-semibold text-mh-text">{value}</p>
-                {sub && <p className="text-xs text-mh-muted mt-0.5">{sub}</p>}
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* Filters */}
         <div className="card">

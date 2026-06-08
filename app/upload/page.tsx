@@ -21,7 +21,14 @@ interface UploadResponse {
   error?: string
 }
 
-const LVL1_OPTIONS = ['Webinar', 'Events', 'Email', 'Cold Outreach', 'Referrals', 'Internal Community Data']
+const LVL1_OPTIONS: { label: string; value: string }[] = [
+  { label: 'Webinar',        value: 'Webinar' },
+  { label: 'Events',         value: 'Events' },
+  { label: 'Email',          value: 'Email' },
+  { label: 'Cold Outreach',  value: 'Cold Outreach' },
+  { label: 'Referrals',      value: 'Referrals' },
+  { label: 'Community Data', value: 'Internal Community Data' },
+]
 
 function parseCSVPreview(text: string): { headers: string[]; rows: string[][] } {
   const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 6)
@@ -156,7 +163,7 @@ export default function UploadPage() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">— None —</option>
-                {LVL1_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                {LVL1_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             <div>
