@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getContacts, getLeads } from '@/lib/zoho'
 import { getContactIntelligence, getAccountIntelligence, getManualTouchpoints, type ManualTouchpoint } from '@/lib/sheets'
 import { postToDiscordChannel } from '@/lib/discord'
 
@@ -7,21 +6,16 @@ export const dynamic = 'force-dynamic'
 
 const SECRET = process.env.DASHBOARD_PASSWORD ?? 'thetesttribe'
 
-// Called by Vercel Cron or manually to post a follow-up digest to Discord
-// GET /api/followup-digest?secret=thetesttribe
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret')
   if (secret !== SECRET) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const [contacts, leads, ciRows, aiRows, touchpoints] = await Promise.all([
-    getContacts().catch(() => []),
-    getLeads().catch(() => []),
+  const [ciRows, aiRows, touchpoints] = await Promise.all([
     getContactIntelligence().catch(() => []),
     getAccountIntelligence().catch(() => []),
     getManualTouchpoints().catch(() => []),
   ])
 
-  const ciMap = new Map(ciRows.filter(r => r.email).map(r => [r.email.toLowerCase(), r]))
   const aiMap = new Map(aiRows.map(r => [r.account.toLowerCase(), r]))
   const mtMap = new Map<string, ManualTouchpoint[]>()
   for (const tp of touchpoints) {
@@ -31,28 +25,16 @@ export async function GET(req: NextRequest) {
   }
   mtMap.forEach(arr => arr.sort((a, b) => b.date.localeCompare(a.date)))
 
-  const seenEmails = new Set<string>()
-  const people: { name: string; accountName: string; email: string }[] = []
-  for (const c of contacts) {
-    if (c.email) seenEmails.add(c.email.toLowerCase())
-    people.push({ name: `${c.firstName} ${c.lastName}`.trim() || c.email, accountName: c.accountName, email: c.email })
-  }
-  for (const l of leads) {
-    if (l.email && seenEmails.has(l.email.toLowerCase())) continue
-    people.push({ name: `${l.firstName} ${l.lastName}`.trim() || l.email, accountName: l.company, email: l.email })
-  }
-
   const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const overdue: { name: string; account: string; days: number; lastType: string }[] = []
 
-  for (const p of people) {
-    const emailKey = p.email.toLowerCase()
-    const ci = emailKey ? ciMap.get(emailKey) : undefined
-    const ai = p.accountName ? aiMap.get(p.accountName.toLowerCase()) : undefined
+  for (const ci of ciRows) {
+    const emailKey = ci.email.toLowerCase()
+    const ai = ci.company ? aiMap.get(ci.company.toLowerCase()) : undefined
     const latestManual = emailKey ? (mtMap.get(emailKey)?.[0] ?? null) : null
 
-    const dates = [ci?.lastCallDate, ai?.lastContactDate, latestManual?.date].filter(Boolean) as string[]
+    const dates = [ci.lastCallDate, ai?.lastContactDate, latestManual?.date].filter(Boolean) as string[]
     const lastDate = dates.length ? dates.sort().pop()! : ''
     if (!lastDate) continue
 
@@ -64,7 +46,7 @@ export async function GET(req: NextRequest) {
     else if (ai?.circlebakIntelligence?.includes(lastDate)) lastType = 'Google Meet'
     else if (ai?.emailIntelligence?.includes(lastDate)) lastType = 'Email'
 
-    overdue.push({ name: p.name, account: p.accountName, days, lastType })
+    overdue.push({ name: ci.name, account: ci.company, days, lastType })
   }
 
   overdue.sort((a, b) => b.days - a.days)
