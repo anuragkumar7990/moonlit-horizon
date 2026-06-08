@@ -270,21 +270,23 @@ export default function ProspectModule() {
           <select
             value={lvl1Source}
             onChange={e => setLvl1Source(e.target.value)}
-            className="bg-mh-bg border border-mh-border rounded-lg px-2 py-1 text-xs text-mh-text
+            style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+            className="border border-mh-border rounded-lg px-2 py-1 text-xs
               outline-none focus:border-mh-vermillion transition-colors"
           >
-            <option value="">— Lvl 1 —</option>
-            {LVL1_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+            <option value="" style={{ background: '#0d0d1a' }}>— Lvl 1 —</option>
+            {LVL1_OPTIONS.map(v => <option key={v} value={v} style={{ background: '#0d0d1a' }}>{v}</option>)}
           </select>
           <select
             value={lvl2Source}
             onChange={e => setLvl2Source(e.target.value)}
             disabled={lvl2Loading}
-            className="bg-mh-bg border border-mh-border rounded-lg px-2 py-1 text-xs text-mh-text
+            style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+            className="border border-mh-border rounded-lg px-2 py-1 text-xs
               outline-none focus:border-mh-vermillion disabled:opacity-50 transition-colors"
           >
-            <option value="">{lvl2Loading ? 'Loading…' : '— Lvl 2 —'}</option>
-            {lvl2Options.map(v => <option key={v} value={v}>{v}</option>)}
+            <option value="" style={{ background: '#0d0d1a' }}>{lvl2Loading ? 'Loading…' : '— Lvl 2 —'}</option>
+            {lvl2Options.map(v => <option key={v} value={v} style={{ background: '#0d0d1a' }}>{v}</option>)}
           </select>
 
           <label
@@ -422,31 +424,34 @@ export default function ProspectModule() {
             <select
               value={prospSDR}
               onChange={e => { setProspSDR(e.target.value); setProspPage(0) }}
-              className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
+              style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+              className="border border-mh-border rounded-lg px-3 py-1.5 text-xs
                 outline-none focus:border-mh-vermillion transition-colors"
             >
-              <option value="all">All SDRs</option>
-              {sdrs.map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="all" style={{ background: '#0d0d1a' }}>All SDRs</option>
+              {sdrs.map(s => <option key={s} value={s} style={{ background: '#0d0d1a' }}>{s}</option>)}
             </select>
             <select
               value={prospOutcome}
               onChange={e => { setProspOutcome(e.target.value); setProspPage(0) }}
-              className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
+              style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+              className="border border-mh-border rounded-lg px-3 py-1.5 text-xs
                 outline-none focus:border-mh-vermillion transition-colors"
             >
-              <option value="all">All outcomes</option>
-              {outcomes.map(o => <option key={o} value={o}>{o}</option>)}
+              <option value="all" style={{ background: '#0d0d1a' }}>All outcomes</option>
+              {outcomes.map(o => <option key={o} value={o} style={{ background: '#0d0d1a' }}>{o}</option>)}
             </select>
             <select
               value={prospSort}
               onChange={e => { setProspSort(e.target.value as typeof prospSort); setProspPage(0) }}
-              className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
+              style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+              className="border border-mh-border rounded-lg px-3 py-1.5 text-xs
                 outline-none focus:border-mh-vermillion transition-colors"
             >
-              <option value="calls">Sort: Most calls</option>
-              <option value="rate">Sort: Highest rate</option>
-              <option value="date">Sort: Recent calls</option>
-              <option value="name">Sort: Name A–Z</option>
+              <option value="calls" style={{ background: '#0d0d1a' }}>Sort: Most calls</option>
+              <option value="rate" style={{ background: '#0d0d1a' }}>Sort: Highest rate</option>
+              <option value="date" style={{ background: '#0d0d1a' }}>Sort: Recent calls</option>
+              <option value="name" style={{ background: '#0d0d1a' }}>Sort: Name A–Z</option>
             </select>
             <span className="text-xs text-mh-muted ml-auto shrink-0">
               {filteredProspects.length.toLocaleString()} prospects

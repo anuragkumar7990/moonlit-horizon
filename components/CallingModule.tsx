@@ -266,11 +266,12 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
             <select
               value={outcomeFilter}
               onChange={e => setOutcomeFilter(e.target.value)}
-              className="text-xs bg-mh-surface border border-mh-border rounded-lg px-3 py-1.5
-                text-mh-text outline-none focus:border-mh-vermillion transition-colors"
+              style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+              className="text-xs border border-mh-border rounded-lg px-3 py-1.5
+                outline-none focus:border-mh-vermillion transition-colors"
             >
-              <option value="all">All outcomes</option>
-              {allOutcomes.map(o => <option key={o} value={o}>{o}</option>)}
+              <option value="all" style={{ background: '#0d0d1a' }}>All outcomes</option>
+              {allOutcomes.map(o => <option key={o} value={o} style={{ background: '#0d0d1a' }}>{o}</option>)}
             </select>
           </div>
         </div>

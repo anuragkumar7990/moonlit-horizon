@@ -152,22 +152,24 @@ export default function ContactsModule() {
           <select
             value={stageFilter}
             onChange={e => { setStageFilter(e.target.value); setPage(0) }}
-            className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
+            style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+            className="border border-mh-border rounded-lg px-3 py-1.5 text-xs
               outline-none focus:border-mh-vermillion transition-colors"
           >
-            <option value="all">All stages</option>
-            {stages.map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="all" style={{ background: '#0d0d1a' }}>All stages</option>
+            {stages.map(s => <option key={s} value={s} style={{ background: '#0d0d1a' }}>{s}</option>)}
           </select>
           <select
             value={sort}
             onChange={e => { setSort(e.target.value as typeof sort); setPage(0) }}
-            className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
+            style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+            className="border border-mh-border rounded-lg px-3 py-1.5 text-xs
               outline-none focus:border-mh-vermillion transition-colors"
           >
-            <option value="name">Sort: Name A–Z</option>
-            <option value="date">Sort: Recent activity</option>
-            <option value="stage">Sort: Deal stage</option>
-            <option value="calls">Sort: Most calls</option>
+            <option value="name" style={{ background: '#0d0d1a' }}>Sort: Name A–Z</option>
+            <option value="date" style={{ background: '#0d0d1a' }}>Sort: Recent activity</option>
+            <option value="stage" style={{ background: '#0d0d1a' }}>Sort: Deal stage</option>
+            <option value="calls" style={{ background: '#0d0d1a' }}>Sort: Most calls</option>
           </select>
           <span className="text-xs text-mh-muted ml-auto shrink-0">
             {filtered.length} contacts
