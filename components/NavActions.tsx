@@ -33,8 +33,9 @@ export default function NavActions() {
 
   return (
     <>
-      {showEmailDraft && (
-        <PreMeetingEmailModal onClose={() => setShowEmailDraft(false)} />
+      {showEmailDraft && typeof window !== 'undefined' && createPortal(
+        <PreMeetingEmailModal onClose={() => setShowEmailDraft(false)} />,
+        document.body
       )}
 
       <button
