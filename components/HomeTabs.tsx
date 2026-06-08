@@ -17,6 +17,8 @@ import P0TasksModule from './P0TasksModule'
 import ContactTrackerModule from './ContactTrackerModule'
 import DealsModule from './DealsModule'
 import ObjectivesModule from './ObjectivesModule'
+import DailyScrumModule from './DailyScrumModule'
+import WBRModule from './WBRModule'
 import type { Call, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
@@ -225,8 +227,8 @@ export default function HomeTabs({
       {tab === 'deals'      && <DealsModule />}
       {tab === 'calendar'   && <ComingSoon label="Calendar" />}
       {tab === 'objectives' && <ObjectivesModule />}
-      {tab === 'scrum'      && <ComingSoon label="Daily Scrum" />}
-      {tab === 'wbr'        && <ComingSoon label="Weekly Business Review" />}
+      {tab === 'scrum'      && <DailyScrumModule />}
+      {tab === 'wbr'        && <WBRModule />}
     </div>
   )
 }
