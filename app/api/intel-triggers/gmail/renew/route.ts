@@ -21,15 +21,11 @@ export async function POST() {
     oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN })
     const gmail = google.gmail({ version: 'v1', auth: oauth2 })
 
-    const topicTrimmed = topic.trim()
-    console.log(`[gmail-renew] topic="${topicTrimmed}" len=${topicTrimmed.length}`)
-
-    // Stop any existing watch first, then re-subscribe
     await gmail.users.stop({ userId: 'me' }).catch(() => {})
 
     const res = await gmail.users.watch({
       userId: 'me',
-      requestBody: { topicName: topicTrimmed },
+      requestBody: { topicName: topic.trim() },
     })
 
     const { historyId, expiration } = res.data
@@ -40,6 +36,6 @@ export async function POST() {
   } catch (e: unknown) {
     const detail = (e as { response?: { data?: unknown } })?.response?.data ?? String(e)
     console.error('[gmail-renew]', JSON.stringify(detail))
-    return NextResponse.json({ error: String(e), detail, debug: { topic: topic.trim(), topicLen: topic.trim().length } }, { status: 500 })
+    return NextResponse.json({ error: String(e), detail }, { status: 500 })
   }
 }
