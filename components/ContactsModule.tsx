@@ -3,10 +3,24 @@ import { useState, useEffect, useMemo } from 'react'
 import type { ContactIntelRow } from '@/lib/sheets'
 import BookMeetingModal from './BookMeetingModal'
 
-const CONNECTED_OUTCOMES = new Set([
-  'meeting scheduled', 'interested', 'not interested', 'call back later',
-  'send more info', 'callback later', 'connected', 'meeting booked',
-])
+function StageBadge({ stage }: { stage: string }) {
+  if (!stage) return <span className="text-mh-muted text-xs">—</span>
+  const s = stage.toLowerCase()
+  let color = '#9CA3AF'
+  if (s.includes('proposal') || s.includes('presentation')) color = '#60A5FA'
+  else if (s.includes('negotiat') || s.includes('value')) color = '#A78BFA'
+  else if (s.includes('closed won') || s.includes('won')) color = '#22C55E'
+  else if (s.includes('closed lost') || s.includes('lost')) color = '#F87171'
+  else if (s.includes('qualify') || s.includes('interest')) color = '#F59E0B'
+  return (
+    <span
+      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap"
+      style={{ backgroundColor: color + '22', color }}
+    >
+      {stage}
+    </span>
+  )
+}
 
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const o = outcome.toLowerCase().trim()
@@ -25,66 +39,55 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   )
 }
 
-function RateBadge({ rate }: { rate: number }) {
-  const color = rate >= 50 ? '#22C55E' : rate >= 30 ? '#F59E0B' : '#9CA3AF'
-  return <span className="text-xs font-semibold" style={{ color }}>{rate}%</span>
-}
-
 export default function ContactsModule() {
   const [contacts, setContacts] = useState<ContactIntelRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [search, setSearch]     = useState('')
-  const [sdrFilter, setSdrFilter]     = useState('all')
-  const [outcomeFilter, setOutcomeFilter] = useState('all')
-  const [sort, setSort]         = useState<'name' | 'calls' | 'rate' | 'date'>('calls')
+  const [stageFilter, setStageFilter] = useState('all')
+  const [sort, setSort]         = useState<'name' | 'date' | 'stage' | 'calls'>('name')
   const [page, setPage]         = useState(0)
   const [bookTarget, setBookTarget] = useState<ContactIntelRow | null>(null)
-  const PAGE_SIZE = 100
+  const PAGE_SIZE = 50
 
   useEffect(() => {
     fetch('/api/contact-intel')
       .then(r => r.json())
       .then((d: { contacts?: ContactIntelRow[]; error?: string }) => {
         if (d.error) { setError(d.error); return }
-        setContacts(d.contacts ?? [])
+        // Only show actual CRM contacts (those who have had a meeting booked)
+        setContacts((d.contacts ?? []).filter(c => c.zohoContactId))
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [])
 
-  const sdrs = useMemo(
-    () => Array.from(new Set(contacts.map(c => c.sdr).filter(Boolean))).sort(),
-    [contacts]
-  )
-
-  const outcomes = useMemo(
-    () => Array.from(new Set(contacts.map(c => c.lastCallOutcome).filter(Boolean))).sort(),
+  const stages = useMemo(
+    () => Array.from(new Set(contacts.map(c => c.zohoStage).filter(Boolean))).sort(),
     [contacts]
   )
 
   const filtered = useMemo(() => {
     let list = contacts
-    if (sdrFilter !== 'all')     list = list.filter(c => c.sdr === sdrFilter)
-    if (outcomeFilter !== 'all') list = list.filter(c => c.lastCallOutcome === outcomeFilter)
+    if (stageFilter !== 'all') list = list.filter(c => c.zohoStage === stageFilter)
     if (search) {
       const q = search.toLowerCase()
       list = list.filter(c =>
-        c.name.toLowerCase().includes(q)     ||
-        c.company.toLowerCase().includes(q)  ||
-        c.email.toLowerCase().includes(q)    ||
+        c.name.toLowerCase().includes(q) ||
+        c.company.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
         c.title.toLowerCase().includes(q)
       )
     }
     return list
-  }, [contacts, sdrFilter, outcomeFilter, search])
+  }, [contacts, stageFilter, search])
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
     if (sort === 'name')  arr.sort((a, b) => a.name.localeCompare(b.name))
-    if (sort === 'calls') arr.sort((a, b) => b.totalCalls - a.totalCalls)
-    if (sort === 'rate')  arr.sort((a, b) => b.connectionRate - a.connectionRate)
     if (sort === 'date')  arr.sort((a, b) => (b.lastCallDate || '').localeCompare(a.lastCallDate || ''))
+    if (sort === 'stage') arr.sort((a, b) => (a.zohoStage || '').localeCompare(b.zohoStage || ''))
+    if (sort === 'calls') arr.sort((a, b) => b.totalCalls - a.totalCalls)
     return arr
   }, [filtered, sort])
 
@@ -92,16 +95,14 @@ export default function ContactsModule() {
     () => sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
     [sorted, page]
   )
-
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
 
-  const stats = useMemo(() => {
-    const total     = contacts.length
-    const called    = contacts.filter(c => c.totalCalls > 0).length
-    const connected = contacts.filter(c => c.connectedCalls > 0).length
-    const withMtg   = contacts.filter(c => CONNECTED_OUTCOMES.has((c.lastCallOutcome || '').toLowerCase()) && (c.lastCallOutcome || '').toLowerCase().includes('meeting')).length
-    return { total, called, connected, withMtg }
-  }, [contacts])
+  const stats = useMemo(() => ({
+    total:      contacts.length,
+    withStage:  contacts.filter(c => c.zohoStage).length,
+    withCalls:  contacts.filter(c => c.totalCalls > 0).length,
+    connected:  contacts.filter(c => c.connectedCalls > 0).length,
+  }), [contacts])
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -121,13 +122,14 @@ export default function ContactsModule() {
           onClose={() => setBookTarget(null)}
         />
       )}
+
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Total Contacts',   value: stats.total.toLocaleString() },
-          { label: 'Called',           value: stats.called.toLocaleString(), sub: `${Math.round(stats.called/stats.total*100)}% of total` },
-          { label: 'Connected',        value: stats.connected.toLocaleString() },
-          { label: 'Mtg Scheduled',    value: stats.withMtg.toLocaleString() },
+          { label: 'Total Contacts', value: stats.total },
+          { label: 'Active Deals',   value: stats.withStage, sub: 'with a deal stage set' },
+          { label: 'Called',         value: stats.withCalls, sub: 'at least 1 call logged' },
+          { label: 'Connected',      value: stats.connected, sub: 'at least 1 connection' },
         ].map(({ label, value, sub }) => (
           <div key={label} className="card">
             <p className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest mb-2">{label}</p>
@@ -142,29 +144,20 @@ export default function ContactsModule() {
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
-            placeholder="Search name, company, email…"
+            placeholder="Search name, company, email, title…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
             className="flex-1 min-w-[200px] bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs
               text-mh-text placeholder:text-mh-muted outline-none focus:border-mh-vermillion transition-colors"
           />
           <select
-            value={sdrFilter}
-            onChange={e => { setSdrFilter(e.target.value); setPage(0) }}
+            value={stageFilter}
+            onChange={e => { setStageFilter(e.target.value); setPage(0) }}
             className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
               outline-none focus:border-mh-vermillion transition-colors"
           >
-            <option value="all">All SDRs</option>
-            {sdrs.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            value={outcomeFilter}
-            onChange={e => { setOutcomeFilter(e.target.value); setPage(0) }}
-            className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
-              outline-none focus:border-mh-vermillion transition-colors"
-          >
-            <option value="all">All outcomes</option>
-            {outcomes.map(o => <option key={o} value={o}>{o}</option>)}
+            <option value="all">All stages</option>
+            {stages.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <select
             value={sort}
@@ -172,13 +165,13 @@ export default function ContactsModule() {
             className="bg-mh-bg border border-mh-border rounded-lg px-3 py-1.5 text-xs text-mh-text
               outline-none focus:border-mh-vermillion transition-colors"
           >
-            <option value="calls">Sort: Most calls</option>
-            <option value="rate">Sort: Highest rate</option>
-            <option value="date">Sort: Recent calls</option>
             <option value="name">Sort: Name A–Z</option>
+            <option value="date">Sort: Recent activity</option>
+            <option value="stage">Sort: Deal stage</option>
+            <option value="calls">Sort: Most calls</option>
           </select>
           <span className="text-xs text-mh-muted ml-auto shrink-0">
-            {filtered.length.toLocaleString()} contacts
+            {filtered.length} contacts
           </span>
         </div>
       </div>
@@ -189,13 +182,13 @@ export default function ContactsModule() {
           <thead>
             <tr className="text-mh-muted text-[10px] uppercase tracking-widest border-b border-mh-border">
               <th className="text-left pb-3 pr-4 font-semibold">Name</th>
-              <th className="text-left pb-3 pr-4 font-semibold">Company</th>
+              <th className="text-left pb-3 pr-4 font-semibold">Account</th>
               <th className="text-left pb-3 pr-4 font-semibold">Title</th>
-              <th className="text-left pb-3 pr-4 font-semibold">SDR</th>
+              <th className="text-left pb-3 pr-4 font-semibold">Phone</th>
+              <th className="text-left pb-3 pr-4 font-semibold">Deal Stage</th>
               <th className="text-right pb-3 pr-4 font-semibold">Calls</th>
-              <th className="text-right pb-3 pr-4 font-semibold">Conn.</th>
               <th className="text-right pb-3 pr-4 font-semibold">Rate</th>
-              <th className="text-left pb-3 pr-4 font-semibold">Last Call</th>
+              <th className="text-left pb-3 pr-4 font-semibold">Last Activity</th>
               <th className="text-left pb-3 pr-4 font-semibold">Last Outcome</th>
               <th className="pb-3 font-semibold"></th>
             </tr>
@@ -204,17 +197,28 @@ export default function ContactsModule() {
             {pageData.map((c, i) => (
               <tr key={`${c.email || i}-${c.name}`} className="hover:bg-mh-surface/40 transition-colors">
                 <td className="py-2 pr-4">
-                  <div className="text-mh-text font-medium text-sm leading-tight truncate max-w-[140px]">{c.name || '—'}</div>
-                  <div className="text-[10px] text-mh-muted truncate max-w-[140px]">{c.email}</div>
+                  <div className="text-mh-text font-medium text-sm leading-tight truncate max-w-[160px]">{c.name || '—'}</div>
+                  <div className="text-[10px] text-mh-muted truncate max-w-[160px]">{c.email}</div>
                 </td>
                 <td className="py-2 pr-4 text-mh-muted text-xs max-w-[130px] truncate">{c.company || '—'}</td>
-                <td className="py-2 pr-4 text-mh-muted text-xs max-w-[120px] truncate">{c.title || '—'}</td>
-                <td className="py-2 pr-4 text-mh-muted text-xs whitespace-nowrap">{c.sdr || '—'}</td>
-                <td className="py-2 pr-4 text-right text-mh-text font-semibold">{c.totalCalls}</td>
-                <td className="py-2 pr-4 text-right text-mh-muted">{c.connectedCalls}</td>
-                <td className="py-2 pr-4 text-right"><RateBadge rate={c.connectionRate} /></td>
+                <td className="py-2 pr-4 text-mh-muted text-xs max-w-[130px] truncate">{c.title || '—'}</td>
+                <td className="py-2 pr-4 text-mh-muted text-xs whitespace-nowrap">{c.phone || '—'}</td>
+                <td className="py-2 pr-4"><StageBadge stage={c.zohoStage} /></td>
+                <td className="py-2 pr-4 text-right text-mh-text font-semibold text-sm">{c.totalCalls || '—'}</td>
+                <td className="py-2 pr-4 text-right">
+                  {c.totalCalls > 0 ? (
+                    <span
+                      className="text-xs font-semibold"
+                      style={{ color: c.connectionRate >= 50 ? '#22C55E' : c.connectionRate >= 30 ? '#F59E0B' : '#9CA3AF' }}
+                    >
+                      {c.connectionRate}%
+                    </span>
+                  ) : <span className="text-mh-muted text-xs">—</span>}
+                </td>
                 <td className="py-2 pr-4 text-mh-muted text-xs whitespace-nowrap">{c.lastCallDate || '—'}</td>
-                <td className="py-2 pr-4"><OutcomeBadge outcome={c.lastCallOutcome} /></td>
+                <td className="py-2 pr-4">
+                  {c.lastCallOutcome ? <OutcomeBadge outcome={c.lastCallOutcome} /> : <span className="text-mh-muted text-xs">—</span>}
+                </td>
                 <td className="py-2">
                   {c.email && (
                     <button
@@ -232,7 +236,7 @@ export default function ContactsModule() {
         </table>
 
         {sorted.length === 0 && (
-          <p className="text-center text-mh-muted text-sm py-10 italic">No contacts match your filters.</p>
+          <p className="text-center text-mh-muted text-sm py-10 italic">No contacts found.</p>
         )}
       </div>
 
@@ -240,7 +244,7 @@ export default function ContactsModule() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-xs text-mh-muted">
           <span>
-            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length.toLocaleString()}
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>
           <div className="flex gap-1">
             <button

@@ -284,16 +284,31 @@ export async function getZohoCalls(): Promise<{
   outcome: string
 }[]> {
   try {
-    const data = await zohoGet('/Calls?fields=id,Call_Start_Time,Call_Result,What_Id,Who_Id&per_page=200&sort_by=id&sort_order=desc') as { data?: Record<string, unknown>[] }
-    return (data.data ?? []).map(c => {
-      const whatId = c.What_Id && typeof c.What_Id === 'object' ? c.What_Id as Record<string, unknown> : null
-      const whoId  = c.Who_Id  && typeof c.Who_Id  === 'object' ? c.Who_Id  as Record<string, unknown> : null
-      const accountName = whatId ? String(whatId.name ?? '') : (whoId ? String(whoId.name ?? '') : '')
-      const contactName = whoId ? String(whoId.name ?? '') : ''
-      const rawTime = String(c.Call_Start_Time ?? '')
-      const date = rawTime ? rawTime.slice(0, 10) : ''
-      return { id: String(c.id ?? ''), date, accountName, contactName, outcome: String(c.Call_Result ?? '') }
-    }).filter(c => c.date && c.accountName)
+    const token = await getAccessToken()
+    const results: { id: string; date: string; accountName: string; contactName: string; outcome: string }[] = []
+    let page = 1
+    while (true) {
+      const res = await fetch(
+        `${BASE_URL}/Calls?fields=id,Call_Start_Time,Call_Result,What_Id,Who_Id&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
+        { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
+      )
+      const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+      const rows = data.data ?? []
+      for (const c of rows) {
+        const whatId = c.What_Id && typeof c.What_Id === 'object' ? c.What_Id as Record<string, unknown> : null
+        const whoId  = c.Who_Id  && typeof c.Who_Id  === 'object' ? c.Who_Id  as Record<string, unknown> : null
+        const accountName = whatId ? String(whatId.name ?? '') : (whoId ? String(whoId.name ?? '') : '')
+        const contactName = whoId ? String(whoId.name ?? '') : ''
+        const rawTime = String(c.Call_Start_Time ?? '')
+        const date = rawTime ? rawTime.slice(0, 10) : ''
+        if (date && accountName) {
+          results.push({ id: String(c.id ?? ''), date, accountName, contactName, outcome: String(c.Call_Result ?? '') })
+        }
+      }
+      if (!data.info?.more_records || rows.length < 200) break
+      page++
+    }
+    return results
   } catch { return [] }
 }
 
