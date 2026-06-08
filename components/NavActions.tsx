@@ -57,8 +57,8 @@ export default function NavActions() {
       {open && typeof window !== 'undefined' && createPortal(
         <div
           ref={dropdownRef}
-          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
-          className="w-56 bg-mh-surface border border-mh-border rounded-xl shadow-xl overflow-hidden py-1"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999, backgroundColor: '#1a1a1a' }}
+          className="w-56 border border-mh-border rounded-xl shadow-xl overflow-hidden py-1"
         >
           <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-mh-muted uppercase tracking-widest">
             Book
