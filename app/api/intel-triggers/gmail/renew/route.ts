@@ -22,16 +22,14 @@ export async function POST() {
     const gmail = google.gmail({ version: 'v1', auth: oauth2 })
 
     const topicTrimmed = topic.trim()
-    const clientId = process.env.GOOGLE_CLIENT_ID ?? ''
-    const clientProject = clientId.split('-')[0]
-    console.log(`[gmail-renew] topic="${topicTrimmed}" len=${topicTrimmed.length} clientProject=${clientProject}`)
+    console.log(`[gmail-renew] topic="${topicTrimmed}" len=${topicTrimmed.length}`)
+
+    // Stop any existing watch first, then re-subscribe
+    await gmail.users.stop({ userId: 'me' }).catch(() => {})
 
     const res = await gmail.users.watch({
       userId: 'me',
-      requestBody: {
-        topicName: topicTrimmed,
-        labelIds: ['INBOX'],
-      },
+      requestBody: { topicName: topicTrimmed },
     })
 
     const { historyId, expiration } = res.data
