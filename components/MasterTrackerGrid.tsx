@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import MetricCard from './MetricCard'
 import MetricsGraph from './MetricsGraph'
-import FunnelColumn from './FunnelColumn'
 import type { LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 
@@ -113,21 +112,11 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         </div>
       </div>
 
-      {/* Row 2: Pipeline (60%) | Trends (40%) */}
-      <div className="grid grid-cols-[3fr_2fr] gap-4 items-start">
-
-        {/* Pipeline */}
-        <div className="card">
-          <ColHeader>Pipeline</ColHeader>
-          <FunnelColumn data={funnel} />
-        </div>
-
-        {/* Trends */}
-        <div className="card" style={{ minHeight: '300px' }}>
-          <ColHeader>Trends (8 weeks)</ColHeader>
-          <div style={{ height: '260px' }}>
-            <MetricsGraph data={weeklyTrend} />
-          </div>
+      {/* Row 2: Trends — full width */}
+      <div className="card" style={{ minHeight: '320px' }}>
+        <ColHeader>This Week</ColHeader>
+        <div style={{ height: '260px' }}>
+          <MetricsGraph data={weeklyTrend} />
         </div>
       </div>
 

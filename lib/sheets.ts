@@ -15,7 +15,7 @@ function getAuth() {
   return oauth2
 }
 
-function getSheets() {
+export function getSheets() {
   return google.sheets({ version: 'v4', auth: getAuth() })
 }
 

@@ -52,31 +52,48 @@ interface Props {
   rawCalls:      Call[]
 }
 
-const IMPORTANT_TABS: { id: Tab; label: string }[] = [
-  { id: 'tracker',  label: 'Master Tracker' },
-  { id: 'calling',  label: 'Calls' },
-  { id: 'deals',    label: 'Deals' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'emails',   label: 'Emails' },
-  { id: 'accounts', label: 'Accounts' },
+const PRIMARY_TABS: { id: Tab; label: string }[] = [
+  { id: 'calling',  label: 'Calls'     },
+  { id: 'deals',    label: 'Deals'     },
+  { id: 'calendar', label: 'Calendar'  },
+  { id: 'emails',   label: 'Emails'    },
+  { id: 'accounts', label: 'Accounts'  },
 ]
 
-const SECONDARY_TABS: { id: Tab; label: string }[] = [
-  { id: 'contacts',   label: 'Contacts' },
-  { id: 'prospects',  label: 'Uncalled Leads' },
-  { id: 'payments',   label: 'Payments' },
-  { id: 'targets',    label: 'Targets' },
-  { id: 'events',     label: 'Event Intel' },
-  { id: 'supply',     label: 'Supply' },
-  { id: 'followups',  label: 'Follow-Ups' },
-  { id: 'updates',    label: 'Updates' },
-  { id: 'p0tasks',    label: 'P0 Tasks' },
-  { id: 'objectives', label: 'Objectives' },
-  { id: 'scrum',      label: 'Daily Scrum' },
-  { id: 'wbr',        label: 'WBR' },
+interface OthersGroup { label: string; items: { id: Tab; label: string }[] }
+
+const OTHERS_GROUPS: OthersGroup[] = [
+  {
+    label: 'Daily Use',
+    items: [
+      { id: 'scrum',     label: 'Daily Scrum'        },
+      { id: 'p0tasks',   label: 'Tasks'               },
+      { id: 'prospects', label: 'Prospects Database'  },
+    ],
+  },
+  {
+    label: 'Pipeline & Revenue',
+    items: [
+      { id: 'wbr',        label: 'WBR'        },
+      { id: 'objectives', label: 'Objectives' },
+      { id: 'targets',    label: 'Targets'    },
+      { id: 'payments',   label: 'Payments'   },
+      { id: 'followups',  label: 'Follow-Ups' },
+    ],
+  },
+  {
+    label: 'Data & Intelligence',
+    items: [
+      { id: 'contacts', label: 'Contacts'   },
+      { id: 'events',   label: 'Event Intel'},
+      { id: 'supply',   label: 'Supply'     },
+      { id: 'updates',  label: 'Updates'    },
+    ],
+  },
 ]
 
-const ALL_TABS = [...IMPORTANT_TABS, ...SECONDARY_TABS]
+const ALL_OTHERS = OTHERS_GROUPS.flatMap(g => g.items)
+const OTHERS_IDS = new Set<Tab>(ALL_OTHERS.map(i => i.id))
 
 const PEOPLE = [
   { name: 'Mahesh',   href: '/view/mahesh'   },
@@ -101,7 +118,6 @@ function ComingSoon({ label }: { label: string }) {
 
 function ViewDropdown() {
   const pathname = usePathname()
-  const activePerson = PEOPLE.find(p => pathname === p.href)
 
   return (
     <div className="flex items-center gap-2 shrink-0">
@@ -124,8 +140,135 @@ function ViewDropdown() {
           )
         })}
       </div>
-      {activePerson && (
-        <span className="text-[10px] text-mh-muted hidden sm:inline">— {activePerson.name}&apos;s view</span>
+    </div>
+  )
+}
+
+function OthersDropdown({
+  activeTab,
+  onSelect,
+}: {
+  activeTab: Tab
+  onSelect: (id: Tab) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const isOthersActive = OTHERS_IDS.has(activeTab)
+
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus()
+  }, [open])
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const q = query.toLowerCase()
+  const filteredGroups = q
+    ? [{ label: 'Results', items: ALL_OTHERS.filter(i => i.label.toLowerCase().includes(q)) }]
+    : OTHERS_GROUPS
+
+  function select(id: Tab) {
+    onSelect(id)
+    setOpen(false)
+    setQuery('')
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-5 py-2 rounded-full text-sm font-semibold transition-all select-none"
+        style={
+          isOthersActive
+            ? {
+                background: 'linear-gradient(135deg, #E8341C, #FF5A3A)',
+                color: '#fff',
+                boxShadow: '0 0 18px rgba(232,52,28,0.45)',
+              }
+            : {
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#888899',
+              }
+        }
+      >
+        Others
+        <svg
+          className="w-3.5 h-3.5 transition-transform"
+          style={{ transform: open ? 'rotate(180deg)' : 'none' }}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-2 z-50 rounded-xl overflow-hidden"
+          style={{
+            width: '240px',
+            background: 'rgba(10,10,18,0.96)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(24px)',
+          }}
+        >
+          {/* Search */}
+          <div className="p-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search modules..."
+              className="w-full bg-transparent text-sm text-mh-text placeholder:text-mh-muted outline-none"
+            />
+          </div>
+
+          {/* Groups */}
+          <div className="py-2 max-h-80 overflow-y-auto">
+            {filteredGroups.map(group => (
+              <div key={group.label}>
+                <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-mh-muted uppercase tracking-widest">
+                  {group.label}
+                </p>
+                {group.items.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => select(item.id)}
+                    className="w-full flex items-center justify-between px-4 py-2 text-sm transition-colors text-left"
+                    style={
+                      activeTab === item.id
+                        ? { color: '#E8341C', background: 'rgba(232,52,28,0.08)' }
+                        : { color: '#C8C8D8' }
+                    }
+                    onMouseEnter={e => { if (activeTab !== item.id) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => { if (activeTab !== item.id) (e.currentTarget as HTMLElement).style.background = '' }}
+                  >
+                    {item.label}
+                    {activeTab === item.id && (
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#E8341C' }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {filteredGroups[0]?.items.length === 0 && (
+              <p className="px-4 py-3 text-sm text-mh-muted italic">No modules found</p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -135,73 +278,48 @@ export default function HomeTabs({
   callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, rawCalls,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tracker')
-  const btnRefs = useRef<(HTMLButtonElement | null)[]>([])
-  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
 
-  useEffect(() => {
-    const idx = ALL_TABS.findIndex(t => t.id === tab)
-    const el = btnRefs.current[idx]
-    if (el) setIndicator({ left: el.offsetLeft, width: el.offsetWidth })
-  }, [tab])
+  function selectTab(id: Tab) {
+    // Clicking the active primary tab returns to Master Tracker
+    setTab(prev => (prev === id ? 'tracker' : id))
+  }
 
   return (
     <div>
-      {/* Top bar: View selector + secondary tabs hint */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+      {/* Top bar */}
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <ViewDropdown />
       </div>
 
-      {/* Tab bar — Important left, Secondary right (smaller) */}
-      <div
-        className="relative flex items-end mb-6 overflow-x-auto gap-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
-      >
-        {/* Sliding underline indicator */}
-        {indicator && (
-          <span
-            className="absolute bottom-0 h-0.5 rounded-t-full pointer-events-none"
-            style={{
-              left: indicator.left,
-              width: indicator.width,
-              background: 'linear-gradient(90deg, transparent, #E8341C 30%, #E8341C 70%, transparent)',
-              transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1), width 0.25s cubic-bezier(0.4,0,0.2,1)',
-              boxShadow: '0 0 8px rgba(232,52,28,0.6)',
-            }}
-          />
-        )}
-
-        {/* Important tabs */}
-        {IMPORTANT_TABS.map((t, i) => (
+      {/* Primary navigation */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        {PRIMARY_TABS.map(t => (
           <button
             key={t.id}
-            ref={el => { btnRefs.current[i] = el }}
-            onClick={() => setTab(t.id)}
-            className={`relative px-4 py-2.5 text-sm font-medium transition-all -mb-px whitespace-nowrap
-              ${tab === t.id ? 'text-white' : 'text-mh-muted hover:text-white'}`}
-            style={tab === t.id ? { textShadow: '0 0 12px rgba(255,255,255,0.4)' } : undefined}
+            onClick={() => selectTab(t.id)}
+            className="px-5 py-2 rounded-full text-sm font-semibold transition-all select-none"
+            style={
+              tab === t.id
+                ? {
+                    background: 'linear-gradient(135deg, #E8341C, #FF5A3A)',
+                    color: '#fff',
+                    boxShadow: '0 0 18px rgba(232,52,28,0.45)',
+                  }
+                : {
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#888899',
+                  }
+            }
           >
             {t.label}
           </button>
         ))}
 
-        {/* Divider */}
-        <div className="self-center h-4 w-px mx-2 shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }} />
-
-        {/* Secondary tabs */}
-        {SECONDARY_TABS.map((t, i) => (
-          <button
-            key={t.id}
-            ref={el => { btnRefs.current[IMPORTANT_TABS.length + i] = el }}
-            onClick={() => setTab(t.id)}
-            className={`relative px-3 py-2.5 text-xs font-medium transition-all -mb-px whitespace-nowrap
-              ${tab === t.id ? 'text-white' : 'text-mh-muted/70 hover:text-mh-muted'}`}
-            style={tab === t.id ? { textShadow: '0 0 12px rgba(255,255,255,0.3)' } : undefined}
-          >
-            {t.label}
-          </button>
-        ))}
+        <OthersDropdown activeTab={tab} onSelect={id => setTab(id)} />
       </div>
 
+      {/* Content */}
       {tab === 'tracker' && (
         <MasterTrackerGrid
           callsData={callsData}

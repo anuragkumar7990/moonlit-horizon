@@ -369,16 +369,15 @@ export function buildFollowUps(calls: Call[]): FollowUpItem[] {
 
 export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoint[] {
   const now = nowIST()
-  return Array.from({ length: 8 }, (_, i) => {
-    const ref    = subWeeks(now, 7 - i)
-    const wStart = startOfWeek(ref, { weekStartsOn: 1 })
-    const wEnd   = endOfWeek(ref,   { weekStartsOn: 1 })
-    const inW    = (d: Date) => isWithinInterval(d, { start: wStart, end: wEnd })
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const day    = new Date(weekStart.getTime() + i * 86400000)
+    const dayStr = day.toISOString().slice(0, 10)
 
     let dialled = 0, connected = 0
     for (const c of calls) {
-      const d = safeParseDate(c.date)
-      if (d && inW(d)) {
+      if (c.date === dayStr) {
         dialled++
         if (isConnected(c.outcome)) connected++
       }
@@ -386,8 +385,7 @@ export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoin
 
     let l1Booked = 0, l1Conducted = 0
     for (const m of meetings) {
-      const d = safeParseDate(m.createdAt)
-      if (d && inW(d) && m.meetingType === 'L1') {
+      if (m.createdAt?.slice(0, 10) === dayStr && m.meetingType === 'L1') {
         l1Booked++
         const mt = safeParseDate(m.meetingTime)
         if (mt && isPast(mt)) l1Conducted++
@@ -395,7 +393,7 @@ export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoin
     }
 
     return {
-      week: format(wStart, 'MMM d'),
+      week: format(day, 'EEE d'),
       dialled,
       connected,
       l1Booked,

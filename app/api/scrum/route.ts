@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
-import { getMeetings, getCalls } from '@/lib/sheets'
+import { getMeetings, getCalls, getSheets } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,18 +8,7 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 function nowIST() { return new Date(Date.now() + IST_OFFSET_MS) }
 function todayIST() { return nowIST().toISOString().slice(0, 10) }
 
-function getSheetsClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  })
-  return google.sheets({ version: 'v4', auth })
-}
-
-async function ensureScrumTab(sheets: ReturnType<typeof getSheetsClient>) {
+async function ensureScrumTab(sheets: ReturnType<typeof getSheets>) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
   const exists = meta.data.sheets?.some(s => (s.properties?.title ?? '') === 'Scrum Notes')
   if (!exists) {
@@ -37,7 +25,7 @@ async function ensureScrumTab(sheets: ReturnType<typeof getSheetsClient>) {
   }
 }
 
-async function readScrumNotes(sheets: ReturnType<typeof getSheetsClient>) {
+async function readScrumNotes(sheets: ReturnType<typeof getSheets>) {
   try {
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "'Scrum Notes'!A:E" })
     return (res.data.values ?? []).slice(1).filter(r => r.length > 0).map((r, i) => ({
@@ -53,7 +41,7 @@ async function readScrumNotes(sheets: ReturnType<typeof getSheetsClient>) {
 
 export async function GET() {
   try {
-    const sheets = getSheetsClient()
+    const sheets = getSheets()
     await ensureScrumTab(sheets)
 
     const today = todayIST()
@@ -101,7 +89,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const sheets = getSheetsClient()
+  const sheets = getSheets()
   await ensureScrumTab(sheets)
 
   const body = await req.json() as {

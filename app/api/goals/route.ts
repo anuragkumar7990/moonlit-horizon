@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
+import { getSheets } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
 const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID!
 
-function getSheetsClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  })
-  return google.sheets({ version: 'v4', auth })
-}
-
-async function ensureTab(sheets: ReturnType<typeof getSheetsClient>, title: string, headers: string[]) {
+async function ensureTab(sheets: ReturnType<typeof getSheets>, title: string, headers: string[]) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
   const exists = meta.data.sheets?.some(s => (s.properties?.title ?? '') === title)
   if (!exists) {
@@ -33,7 +22,7 @@ async function ensureTab(sheets: ReturnType<typeof getSheetsClient>, title: stri
   }
 }
 
-async function readTab(sheets: ReturnType<typeof getSheetsClient>, tab: string): Promise<string[][]> {
+async function readTab(sheets: ReturnType<typeof getSheets>, tab: string): Promise<string[][]> {
   try {
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `'${tab}'!A:Z` })
     return (res.data.values ?? []).slice(1).filter(r => r.length > 0).map(r => r.map(c => String(c ?? '')))
@@ -41,7 +30,7 @@ async function readTab(sheets: ReturnType<typeof getSheetsClient>, tab: string):
 }
 
 export async function GET() {
-  const sheets = getSheetsClient()
+  const sheets = getSheets()
   try {
     await Promise.all([
       ensureTab(sheets, 'Short-term Goals', ['ID', 'Title', 'TargetValue', 'CurrentValue', 'DueDate', 'Status']),
@@ -78,7 +67,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const sheets = getSheetsClient()
+  const sheets = getSheets()
   const body = await req.json() as {
     type: 'short' | 'long' | 'task'
     data: Record<string, string | number>
@@ -117,7 +106,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const sheets = getSheetsClient()
+  const sheets = getSheets()
   const body = await req.json() as {
     type: 'short' | 'long' | 'task'
     id: string
@@ -156,7 +145,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const sheets = getSheetsClient()
+  const sheets = getSheets()
   const { type, id } = await req.json() as { type: 'short' | 'long' | 'task'; id: string }
 
   const tabMap: Record<string, string> = { short: 'Short-term Goals', long: 'Long-term Goals', task: 'Goal Tasks' }
