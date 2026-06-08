@@ -1,3 +1,4 @@
+'use client'
 import type { FunnelData } from '@/lib/types'
 
 export default function FunnelColumn({ data }: { data: FunnelData }) {
