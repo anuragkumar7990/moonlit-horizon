@@ -8,14 +8,12 @@ const SECRET = process.env.DASHBOARD_PASSWORD ?? 'thetesttribe'
 const ACCOUNT_COL_INDEX = 2 // Column C = Account in Calls tab
 
 function getSheets() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key:  process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  })
-  return google.sheets({ version: 'v4', auth })
+  const oauth2 = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+  )
+  oauth2.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN })
+  return google.sheets({ version: 'v4', auth: oauth2 })
 }
 
 export async function POST(req: NextRequest) {
