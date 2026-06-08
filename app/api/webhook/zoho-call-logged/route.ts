@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCallById, getContactById, getLeadById, updateLeadCompany } from '@/lib/zoho'
-import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow } from '@/lib/sheets'
+import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus } from '@/lib/zoho'
+import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +31,17 @@ function inferCompanyFromDomain(email: string): string {
 function parseZohoDateTime(callStartTime: string): { date: string; time: string } {
   if (!callStartTime || callStartTime === 'null') return { date: '', time: '' }
   return { date: callStartTime.slice(0, 10), time: callStartTime.slice(11, 16) }
+}
+
+// Maps a call outcome to a Zoho Lead_Status value.
+// Returns null when the outcome doesn't warrant a status change (e.g. unknown).
+function outcomeToLeadStatus(outcome: string): string | null {
+  const o = outcome.toLowerCase().trim()
+  if (o.includes('meeting scheduled') || o.includes('meeting booked') || o === 'scheduled a meeting') return 'Meeting Scheduled'
+  if (['interested', 'connected', 'callback later', 'call back later', 'send more info'].includes(o)) return 'Contacted'
+  if (o === 'not interested') return 'Not Interested'
+  if (['no answer', 'voicemail', 'left voice message', 'busy', 'wrong number', 'rnr', 'not reachable', 'unanswered'].includes(o)) return 'Attempted to Contact'
+  return null
 }
 
 async function extractCallId(req: NextRequest): Promise<string | null> {
@@ -176,6 +187,22 @@ export async function POST(req: NextRequest) {
     syncCallIntel(accountName, date).catch(e =>
       console.error('[webhook/zoho-call-logged] syncCallIntel failed:', e.message)
     )
+  }
+
+  // Auto-update Zoho Lead_Status and Prospects sheet based on call outcome.
+  // Only fires for Lead calls (we have a leadId and email to match).
+  const newLeadStatus = outcomeToLeadStatus(call.callResult)
+  if (newLeadStatus) {
+    if (call.seModule === 'Leads' && leadIdForUpdate) {
+      updateLeadStatus(leadIdForUpdate, newLeadStatus).catch(e =>
+        console.error('[webhook/zoho-call-logged] updateLeadStatus failed:', e.message)
+      )
+    }
+    if (email) {
+      updateProspectCallStatus(email, newLeadStatus).catch(e =>
+        console.error('[webhook/zoho-call-logged] updateProspectCallStatus failed:', e.message)
+      )
+    }
   }
 
   // Update Contact Intelligence row for this contact

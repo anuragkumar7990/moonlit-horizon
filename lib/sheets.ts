@@ -1136,6 +1136,24 @@ export async function getContactIntelligence(): Promise<ContactIntelRow[]> {
 
 // ── Payments — status update ──────────────────────────────────────────────────
 
+export async function updateProspectCallStatus(email: string, status: string): Promise<void> {
+  if (!email) return
+  const sheets = getSheets()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Prospects!A:L',
+  })
+  const rows = res.data.values ?? []
+  const rowIdx = rows.findIndex((r, i) => i > 0 && (r[1] ?? '').toLowerCase() === email.toLowerCase())
+  if (rowIdx === -1) return
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Prospects!L${rowIdx + 1}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[status]] },
+  })
+}
+
 export async function updatePaymentStatus(rowIndex: number, status: Payment['status']): Promise<void> {
   const sheets = getSheets()
   // rowIndex is 1-indexed sheet row (including header); data rows start at 2
