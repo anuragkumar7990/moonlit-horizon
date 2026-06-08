@@ -2,6 +2,10 @@ import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLead
 import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
+const JUNK_ACCOUNT_NAMES = new Set([
+  'discord bot', 'test1', 'test', 'test call', 'test account',
+])
+
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com', 'yahoo.com', 'yahoo.in', 'yahoo.co.in',
   'hotmail.com', 'hotmail.co.in', 'outlook.com', 'live.com',
@@ -81,6 +85,10 @@ export async function processZohoCall(callId: string): Promise<{
   }
   if (!accountName) {
     accountName = `Untagged Company #${callId.slice(-6).toUpperCase()}`
+  }
+
+  if (JUNK_ACCOUNT_NAMES.has(accountName.toLowerCase().trim())) {
+    return { ok: true, callId, account: accountName, skippedSheetsWrite: true, date: '' }
   }
 
   const { date, time } = parseZohoDateTime(call.callStartTime)
