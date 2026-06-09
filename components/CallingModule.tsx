@@ -6,7 +6,7 @@ import {
 } from 'date-fns'
 import type { Call } from '@/lib/types'
 
-type Period = 'daily' | 'weekly' | 'monthly'
+type Period = 'daily' | 'weekly' | 'monthly' | 'all'
 
 // RNR, Wrong Number, and Incoming Not Available are the only non-connected outcomes
 const NOT_CONNECTED = new Set([
@@ -26,6 +26,7 @@ function safeParse(d: string): Date | null {
 }
 
 function filterByPeriod(calls: Call[], period: Period): Call[] {
+  if (period === 'all') return calls
   const now = new Date()
   let start: Date, end: Date
   if (period === 'daily') {
@@ -179,7 +180,7 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
       {/* Period toggle */}
       <div className="flex items-center justify-end mb-6">
         <div className="flex items-center gap-1 bg-mh-surface border border-mh-border rounded-full p-1">
-          {(['daily', 'weekly', 'monthly'] as Period[]).map(p => (
+          {(['daily', 'weekly', 'monthly', 'all'] as Period[]).map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
@@ -279,6 +280,7 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
                     <th className="text-left pb-2 pr-4 font-semibold">SDR</th>
                     <th className="text-left pb-2 pr-4 font-semibold">Duration</th>
                     <th className="text-left pb-2 pr-4 font-semibold">Outcome</th>
+                    <th className="text-left pb-2 pr-4 font-semibold">Create in Zoho</th>
                     <th className="text-left pb-2 font-semibold">Notes</th>
                   </tr>
                 </thead>
@@ -308,26 +310,28 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
                         <td className="py-2 pr-4 text-mh-muted whitespace-nowrap text-xs">
                           {noDur ? <span className="text-orange-400 text-[10px]">no duration</span> : c.duration}
                         </td>
+                        <td className="py-2 pr-4"><OutcomeBadge outcome={c.outcome} /></td>
                         <td className="py-2 pr-4">
-                          <div className="flex items-center gap-2">
-                            <OutcomeBadge outcome={c.outcome} />
-                            {isMeetingOutcome && c.account && (
-                              zohoSt ? (
-                                <span className={`text-[10px] font-medium ${zohoSt === 'created' ? 'text-green-400' : 'text-mh-muted'}`}>
-                                  {zohoSt === 'created' ? '✓ Created' : '✓ Exists'}
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => handleCreateZoho(c)}
-                                  disabled={isCreating}
-                                  className="text-[10px] px-2 py-0.5 rounded border border-mh-border text-mh-muted
-                                    hover:border-mh-vermillion hover:text-mh-vermillion transition-colors disabled:opacity-40"
-                                >
-                                  {isCreating ? '…' : '+ Zoho'}
-                                </button>
-                              )
-                            )}
-                          </div>
+                          {isMeetingOutcome && c.account ? (
+                            zohoSt ? (
+                              <span className={`text-xs font-semibold ${zohoSt === 'created' ? 'text-green-400' : 'text-mh-muted'}`}>
+                                {zohoSt === 'created' ? '✓ Deal Created' : '✓ Already Exists'}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleCreateZoho(c)}
+                                disabled={isCreating}
+                                title="Creates an Account + Deal in Zoho CRM at Discovery Call booked stage"
+                                className="text-xs px-3 py-1 rounded-lg font-medium
+                                  bg-mh-vermillion/10 border border-mh-vermillion/40 text-mh-vermillion
+                                  hover:bg-mh-vermillion hover:text-white transition-colors disabled:opacity-40 whitespace-nowrap"
+                              >
+                                {isCreating ? 'Creating…' : '+ Create Deal'}
+                              </button>
+                            )
+                          ) : (
+                            <span className="text-mh-muted text-xs">—</span>
+                          )}
                         </td>
                         <td className="py-2 text-mh-muted text-xs max-w-[200px] truncate" title={c.notes}>{c.notes || '—'}</td>
                       </tr>

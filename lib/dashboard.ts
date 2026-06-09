@@ -12,23 +12,32 @@ export function mergeCallSources(
   sheetCalls: Call[],
   zohoCalls: { id: string; date: string; accountName: string; contactName: string; outcome: string }[],
 ): Call[] {
-  const seen = new Set<string>()
+  // Deduplicate by Zoho call ID — sheet rows win (they have richer data: duration, notes, SDR, email, designation)
+  const zohoIdsSeen = new Set<string>()
   const result: Call[] = []
+
+  // Sheet rows first — they are the source of truth with full data
+  for (const c of sheetCalls) {
+    if (c.zohoCallId) zohoIdsSeen.add(c.zohoCallId)
+    result.push(c)
+  }
+
+  // Add Zoho-only calls not yet in Sheets (fallback data until next backfill runs)
   for (const c of zohoCalls) {
-    const key = `${c.date}:${c.accountName.toLowerCase()}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    if (zohoIdsSeen.has(c.id)) continue
+    zohoIdsSeen.add(c.id)
     result.push({
       date: c.date, time: '', account: c.accountName, contactName: c.contactName,
       contactPhone: '', email: '', designation: '', sdr: '', duration: '', outcome: c.outcome, notes: '',
       zohoCallId: c.id, followUpDate: '', recordingLink: '', transcriptSummary: '', autoTags: '',
     })
   }
-  for (const c of sheetCalls) {
-    const key = `${c.date}:${c.account.toLowerCase()}`
-    if (!seen.has(key)) result.push(c)
-  }
-  return result
+
+  // Sort descending by date then time
+  return result.sort((a, b) => {
+    const dc = b.date.localeCompare(a.date)
+    return dc !== 0 ? dc : b.time.localeCompare(a.time)
+  })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
