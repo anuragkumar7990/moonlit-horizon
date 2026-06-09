@@ -217,9 +217,9 @@ export async function getLeads(): Promise<{ id: string; firstName: string; lastN
   return results
 }
 
-export async function getLeadById(id: string): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string } | null> {
+export async function getLeadById(id: string): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string; designation: string } | null> {
   try {
-    const data = await zohoGet(`/Leads/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Company,Company_Name`) as { data?: Record<string, unknown>[] }
+    const data = await zohoGet(`/Leads/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Company,Company_Name,Designation,Title`) as { data?: Record<string, unknown>[] }
     const l = data.data?.[0]
     if (!l) return null
     return {
@@ -229,12 +229,13 @@ export async function getLeadById(id: string): Promise<{ id: string; firstName: 
       email: String(l.Email ?? ''),
       phone: String(l.Phone ?? l.Mobile ?? ''),
       company: String(l.Company ?? l.Company_Name ?? ''),
+      designation: String(l.Designation ?? l.Title ?? ''),
     }
   } catch { return null }
 }
 
-export async function getContactById(id: string): Promise<ZohoContact | null> {
-  const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact`) as { data?: Record<string, unknown>[] }
+export async function getContactById(id: string): Promise<ZohoContact & { designation: string } | null> {
+  const data = await zohoGet(`/Contacts/${id}?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact,Designation,Title`) as { data?: Record<string, unknown>[] }
   const c = data.data?.[0]
   if (!c) return null
   const accountLookup = typeof c.Account_Contact === 'object' && c.Account_Contact !== null
@@ -248,6 +249,7 @@ export async function getContactById(id: string): Promise<ZohoContact | null> {
     phone: String(c.Phone ?? c.Mobile ?? ''),
     accountId: String(accountLookup?.id ?? ''),
     accountName: String(accountLookup?.name ?? ''),
+    designation: String(c.Designation ?? c.Title ?? ''),
   }
 }
 

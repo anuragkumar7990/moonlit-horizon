@@ -26,6 +26,8 @@ export interface Call {
   account: string
   contactName: string
   contactPhone: string
+  email: string
+  designation: string
   sdr: string
   duration: string
   outcome: string

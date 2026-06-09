@@ -34,8 +34,9 @@ export function mergeCallSources(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const NOT_CONNECTED = new Set([
-  'no answer', 'voicemail', 'busy', 'wrong number',
-  'call dropped', 'disconnected', 'invalid number', 'no response', 'unanswered',
+  'rnr', 'rang no response',
+  'wrong number',
+  'incoming not available',
 ])
 
 function isConnected(outcome: string): boolean {

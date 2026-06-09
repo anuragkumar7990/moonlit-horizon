@@ -68,7 +68,7 @@ export async function getNotes(): Promise<Note[]> {
 }
 
 export async function getCalls(): Promise<Call[]> {
-  return readSheet<Call>('Calls!A:N', (r) => ({
+  return readSheet<Call>('Calls!A:P', (r) => ({
     date:               r[0]  ?? '',
     time:               r[1]  ?? '',
     account:            r[2]  ?? '',
@@ -83,6 +83,8 @@ export async function getCalls(): Promise<Call[]> {
     recordingLink:      r[11] ?? '',
     transcriptSummary:  r[12] ?? '',
     autoTags:           r[13] ?? '',
+    email:              r[14] ?? '',
+    designation:        r[15] ?? '',
   }))
 }
 
@@ -119,6 +121,7 @@ const CALLS_HEADERS = [
   'Date', 'Time', 'Account', 'Contact Name', 'Contact Phone', 'SDR',
   'Duration', 'Outcome', 'Notes', 'Zoho Call ID', 'Follow-up Date',
   'Recording Drive Link', 'Transcript Summary', 'Auto Tags',
+  'Email', 'Designation',
 ]
 
 // Returns the 1-indexed sheet row number that was written (used to back-fill Zoho Call ID).
@@ -128,6 +131,8 @@ export async function appendCallRow(row: {
   account: string
   contactName: string
   contactPhone: string
+  email?: string
+  designation?: string
   sdr: string
   duration?: string
   outcome: string
@@ -154,18 +159,19 @@ export async function appendCallRow(row: {
 
   const result = await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Calls!A:N',
+    range: 'Calls!A:P',
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [[
         row.date, row.time, row.account, row.contactName, row.contactPhone,
         row.sdr, row.duration ?? '', row.outcome, row.notes, row.zohoCallId ?? '',
         row.followUpDate, '', '', '',
+        row.email ?? '', row.designation ?? '',
       ]],
     },
   })
 
-  // Parse row number from updatedRange e.g. "Calls!A5:N5" → 5
+  // Parse row number from updatedRange e.g. "Calls!A5:P5" → 5
   const match = result.data.updates?.updatedRange?.match(/!A(\d+)/)
   return match ? parseInt(match[1]) : -1
 }
@@ -242,9 +248,10 @@ const CI_LASTO_COL   = 18  // S — Last Call Outcome
 const CI_HIST_COL    = 20  // U — Call History (JSON)
 const CI_UPDAT_COL   = 23  // X — Updated At
 
-const CI_CONNECTED_OUTCOMES = new Set([
-  'Meeting Scheduled', 'Interested', 'Not Interested', 'Call Back Later', 'Send More Info',
-  'meeting booked', 'connected', 'not interested', 'callback later', 'send more info',
+const CI_NOT_CONNECTED = new Set([
+  'rnr', 'rang no response',
+  'wrong number',
+  'incoming not available',
 ])
 
 export async function upsertContactIntelRow(email: string, call: {
@@ -276,7 +283,8 @@ export async function upsertContactIntelRow(email: string, call: {
   history.push({ date: call.date, time: call.time, outcome: call.outcome, notes: call.notes, duration: call.duration, zohoCallId: call.zohoCallId })
 
   const totalCalls = (Number(row[CI_TOTAL_COL]) || 0) + 1
-  const connected  = (Number(row[CI_CONNECT_COL]) || 0) + (CI_CONNECTED_OUTCOMES.has(call.outcome) ? 1 : 0)
+  const isConn = call.outcome !== '' && !CI_NOT_CONNECTED.has(call.outcome.toLowerCase().trim())
+  const connected  = (Number(row[CI_CONNECT_COL]) || 0) + (isConn ? 1 : 0)
   const rate       = Math.round((connected / totalCalls) * 100)
 
   const existingLastDate = String(row[CI_LASTD_COL] ?? '')

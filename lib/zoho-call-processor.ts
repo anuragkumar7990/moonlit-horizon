@@ -49,6 +49,7 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   let contactName = ''
   let contactPhone = ''
   let email = ''
+  let designation = ''
   let accountName = ''
   let leadIdForUpdate: string | null = null
 
@@ -64,17 +65,17 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   if (whoIsLead && whoId?.id) {
     leadIdForUpdate = whoId.id
     const lead = await getLeadById(leadIdForUpdate)
-    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company }
+    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company; designation = lead.designation }
     if (!contactName && whoId.name) contactName = whoId.name
   } else if ((whoIsLead || whatIsLead) && whatId?.id) {
     // Zoho sometimes places the lead in What_Id (not Who_Id) when $se_module=Leads
     leadIdForUpdate = whatId.id
     const lead = await getLeadById(leadIdForUpdate)
-    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company }
+    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company; designation = lead.designation }
     if (!contactName && whatId.name) contactName = whatId.name
   } else if (whoId?.id) {
     const contact = await getContactById(whoId.id)
-    if (contact) { contactName = `${contact.firstName} ${contact.lastName}`.trim(); email = contact.email; accountName = contact.accountName }
+    if (contact) { contactName = `${contact.firstName} ${contact.lastName}`.trim(); email = contact.email; accountName = contact.accountName; designation = contact.designation }
     if (!contactName && whoId.name) contactName = whoId.name
     if (!accountName && whatId?.name) accountName = whatId.name
   }
@@ -98,7 +99,7 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   const alreadyInSheets = existingRow ? true : await callExistsInSheetByZohoId(callId)
 
   if (!alreadyInSheets) {
-    await appendCallRow({ date, time, account: accountName, contactName, contactPhone, sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
+    await appendCallRow({ date, time, account: accountName, contactName, contactPhone, email, designation, sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
     console.log(`[zoho-call-processor] Wrote to Sheets — ${accountName} / ${call.callResult} / ${date}`)
   } else if (existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company')) {
     await updateCallAccountRow(existingRow.rowIndex, accountName, contactName, contactPhone)
