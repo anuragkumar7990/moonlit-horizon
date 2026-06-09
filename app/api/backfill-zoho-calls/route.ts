@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getZohoCallsInRange } from '@/lib/zoho'
-import { callExistsInSheetByZohoId } from '@/lib/sheets'
+import { getAllZohoCallIdsFromSheet } from '@/lib/sheets'
 import { processZohoCall } from '@/lib/zoho-call-processor'
 
 export const dynamic = 'force-dynamic'
@@ -18,13 +18,12 @@ export async function GET(req: NextRequest) {
   if (pwd !== SECRET) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { since, until } = getRange(req)
-  const zohoCallIds = await getZohoCallsInRange(since, until)
+  const [zohoCallIds, existingIds] = await Promise.all([
+    getZohoCallsInRange(since, until),
+    getAllZohoCallIdsFromSheet(),
+  ])
 
-  const missing: string[] = []
-  for (const c of zohoCallIds) {
-    const exists = await callExistsInSheetByZohoId(c.id)
-    if (!exists) missing.push(c.id)
-  }
+  const missing = zohoCallIds.filter(c => !existingIds.has(c.id)).map(c => c.id)
 
   return NextResponse.json({
     since, until,
@@ -45,21 +44,20 @@ export async function POST(req: NextRequest) {
   let callIds: string[]
 
   if (Array.isArray(body.callIds) && body.callIds.length > 0) {
-    // Explicit list of call IDs
     callIds = body.callIds.map(String)
   } else {
-    // Date range
     const since = body.since ?? daysAgo(7)
     const until = body.until ?? today()
     const zohoCallIds = await getZohoCallsInRange(since, until)
     callIds = zohoCallIds.map(c => c.id)
   }
 
+  // Single bulk read of existing IDs — avoids per-call sheet reads that hit quota
+  const existingIds = await getAllZohoCallIdsFromSheet()
   const results: { callId: string; status: string; account?: string; skipped?: boolean }[] = []
 
   for (const callId of callIds) {
-    const exists = await callExistsInSheetByZohoId(callId)
-    if (exists) {
+    if (existingIds.has(callId)) {
       results.push({ callId, status: 'already_synced' })
       continue
     }
@@ -69,6 +67,7 @@ export async function POST(req: NextRequest) {
     }
     try {
       const r = await processZohoCall(callId)
+      if (r.ok) existingIds.add(callId) // keep set fresh so processZohoCall's internal check sees it
       results.push({ callId, status: r.ok ? 'synced' : 'error', account: r.account, skipped: r.skippedSheetsWrite })
     } catch (e) {
       results.push({ callId, status: 'error', account: String((e as Error).message) })

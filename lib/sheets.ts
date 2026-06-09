@@ -193,6 +193,14 @@ export async function callExistsInSheetByZohoId(zohoCallId: string): Promise<boo
   }
 }
 
+export async function getAllZohoCallIdsFromSheet(): Promise<Set<string>> {
+  const sheets = getSheets()
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Calls!J:J' })
+    return new Set((res.data.values ?? []).flat().filter(Boolean).map(String))
+  } catch { return new Set() }
+}
+
 const CI_NAME_COL    = 3   // D — Name
 const CI_EMAIL_COL   = 4   // E — Email (lookup key)
 const CI_COMP_COL    = 7   // H — Company
