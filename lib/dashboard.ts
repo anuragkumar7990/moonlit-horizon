@@ -20,7 +20,7 @@ export function mergeCallSources(
     seen.add(key)
     result.push({
       date: c.date, time: '', account: c.accountName, contactName: c.contactName,
-      contactPhone: '', sdr: '', duration: '', outcome: c.outcome, notes: '',
+      contactPhone: '', email: '', designation: '', sdr: '', duration: '', outcome: c.outcome, notes: '',
       zohoCallId: c.id, followUpDate: '', recordingLink: '', transcriptSummary: '', autoTags: '',
     })
   }
