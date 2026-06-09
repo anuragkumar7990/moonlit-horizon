@@ -33,21 +33,28 @@ async function zohoGet(path: string): Promise<unknown> {
 }
 
 export async function getDeals(): Promise<ZohoDeal[]> {
-  const data = await zohoGet('/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Full_Name,Tag&per_page=200') as { data?: Record<string, unknown>[] }
-  return (data.data ?? []).map((d) => {
-    const tags = Array.isArray(d.Tag) ? (d.Tag as Record<string, unknown>[]).map(t => String(t.name ?? '')) : []
-    const temperature: ZohoDeal['temperature'] = tags.includes('Hot') ? 'Hot' : tags.includes('Warm') ? 'Warm' : tags.includes('Cold') ? 'Cold' : null
-    return {
-      id: String(d.id ?? ''),
-      dealName: String(d.Deal_Name ?? ''),
-      stage: String(d.Stage ?? ''),
-      amount: String(d.Amount ?? ''),
-      closingDate: String(d.Closing_Date ?? ''),
-      accountName: typeof d.Account_Name === 'object' && d.Account_Name !== null ? String((d.Account_Name as Record<string, unknown>).name ?? '') : String(d.Account_Name ?? ''),
-      contactName: String(d.Contact_Full_Name ?? ''),
-      temperature,
+  const results: ZohoDeal[] = []
+  let page = 1
+  while (true) {
+    const data = await zohoGet(`/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Full_Name,Tag&per_page=200&page=${page}`) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    for (const d of data.data ?? []) {
+      const tags = Array.isArray(d.Tag) ? (d.Tag as Record<string, unknown>[]).map(t => String(t.name ?? '')) : []
+      const temperature: ZohoDeal['temperature'] = tags.includes('Hot') ? 'Hot' : tags.includes('Warm') ? 'Warm' : tags.includes('Cold') ? 'Cold' : null
+      results.push({
+        id: String(d.id ?? ''),
+        dealName: String(d.Deal_Name ?? ''),
+        stage: String(d.Stage ?? ''),
+        amount: String(d.Amount ?? ''),
+        closingDate: String(d.Closing_Date ?? ''),
+        accountName: typeof d.Account_Name === 'object' && d.Account_Name !== null ? String((d.Account_Name as Record<string, unknown>).name ?? '') : String(d.Account_Name ?? ''),
+        contactName: String(d.Contact_Full_Name ?? ''),
+        temperature,
+      })
     }
-  })
+    if (!data.info?.more_records) break
+    page++
+  }
+  return results
 }
 
 export async function addTagToDeals(ids: string[], tagName: string): Promise<void> {
@@ -798,4 +805,42 @@ export async function updateDealStage(dealId: string, stage: string): Promise<vo
     body: JSON.stringify({ data: [{ Stage: stage }] }),
     cache: 'no-store',
   })
+}
+
+export interface ZohoEvent {
+  id: string
+  subject: string
+  startDateTime: string
+  whoName: string
+  whatName: string
+  whatId: string
+  description: string
+}
+
+export async function getZohoEvents(sinceDate?: string): Promise<ZohoEvent[]> {
+  const results: ZohoEvent[] = []
+  let page = 1
+  while (true) {
+    const data = await zohoGet(
+      `/Events?fields=id,Subject,Start_DateTime,Who_Id,What_Id,Description&per_page=200&page=${page}`
+    ) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    for (const e of data.data ?? []) {
+      const startDateTime = (e.Start_DateTime as string) ?? ''
+      if (sinceDate && startDateTime < sinceDate) continue
+      const whoId = e.Who_Id as { id?: string; name?: string } | null
+      const whatId = e.What_Id as { id?: string; name?: string } | null
+      results.push({
+        id: e.id as string,
+        subject: (e.Subject as string) ?? '',
+        startDateTime,
+        whoName: whoId?.name ?? '',
+        whatName: whatId?.name ?? '',
+        whatId: whatId?.id ?? '',
+        description: (e.Description as string) ?? '',
+      })
+    }
+    if (!data.info?.more_records) break
+    page++
+  }
+  return results
 }

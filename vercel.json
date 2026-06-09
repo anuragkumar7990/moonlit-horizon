@@ -7,6 +7,10 @@
     {
       "path": "/api/sync-zoho-calls",
       "schedule": "30 13 * * 1-5"
+    },
+    {
+      "path": "/api/sync-zoho-meetings",
+      "schedule": "0 6,10,14 * * 1-5"
     }
   ]
 }

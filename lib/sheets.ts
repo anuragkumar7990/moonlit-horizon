@@ -186,6 +186,33 @@ export async function updateCallRowZohoId(rowNum: number, zohoCallId: string): P
   })
 }
 
+export async function appendMeetingRow(row: {
+  meetingId: string
+  accountName: string
+  contactName: string
+  contactEmail: string
+  meetingTime: string
+  meetingType: string
+  gMeetLink: string
+  dealId: string
+  status: string
+  createdAt: string
+}): Promise<void> {
+  const sheets = getSheets()
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'Meetings!A:J',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[
+        row.meetingId, row.accountName, row.contactName, row.contactEmail,
+        row.meetingTime, row.meetingType, row.gMeetLink, row.dealId,
+        row.status, row.createdAt,
+      ]],
+    },
+  })
+}
+
 export async function callExistsInSheetByZohoId(zohoCallId: string): Promise<boolean> {
   const sheets = getSheets()
   try {
@@ -598,6 +625,17 @@ export async function getLatestSummary(): Promise<Summary | null> {
     if (rows.length === 0) return null
     return rows[rows.length - 1]
   } catch { return null }
+}
+
+export async function getRecentSummaries(n = 4): Promise<Summary[]> {
+  try {
+    const rows = await readSheet<Summary>('Summaries!A:C', (r) => ({
+      weekOf: r[0] ?? '',
+      generatedAt: r[1] ?? '',
+      summary: r[2] ?? '',
+    }))
+    return rows.slice(-n).reverse()
+  } catch { return [] }
 }
 
 export async function saveSummary(weekOf: string, summary: string): Promise<void> {
