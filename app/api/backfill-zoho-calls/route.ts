@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getZohoCallsInRange } from '@/lib/zoho'
-import { getAllZohoCallIdsFromSheet } from '@/lib/sheets'
+import { getAllZohoCallIdsFromSheet, getAllCallRowsFromSheet } from '@/lib/sheets'
 import { processZohoCall } from '@/lib/zoho-call-processor'
 
 export const dynamic = 'force-dynamic'
@@ -38,8 +38,9 @@ export async function POST(req: NextRequest) {
   const pwd = req.headers.get('x-dashboard-password') ?? req.nextUrl.searchParams.get('password')
   if (pwd !== SECRET) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { since?: string; until?: string; dryRun?: boolean; callIds?: string[] }
+  const body = await req.json().catch(() => ({})) as { since?: string; until?: string; dryRun?: boolean; callIds?: string[]; retagUntagged?: boolean }
   const dryRun = body.dryRun === true
+  const retagUntagged = body.retagUntagged !== false // default true
 
   let callIds: string[]
 
@@ -52,31 +53,38 @@ export async function POST(req: NextRequest) {
     callIds = zohoCallIds.map(c => c.id)
   }
 
-  // Single bulk read of existing IDs — avoids per-call sheet reads that hit quota
-  const existingIds = await getAllZohoCallIdsFromSheet()
+  // Bulk read of existing rows (includes account name for re-tag detection)
+  const existingRows = retagUntagged
+    ? await getAllCallRowsFromSheet()
+    : new Map(Array.from((await getAllZohoCallIdsFromSheet()), id => [id, { rowIndex: -1, account: 'synced' }]))
+
   const results: { callId: string; status: string; account?: string; skipped?: boolean }[] = []
 
   for (const callId of callIds) {
-    if (existingIds.has(callId)) {
+    const existing = existingRows.get(callId)
+    const isUntagged = existing?.account.startsWith('Untagged Company') ?? false
+
+    if (existing && !isUntagged) {
       results.push({ callId, status: 'already_synced' })
       continue
     }
     if (dryRun) {
-      results.push({ callId, status: 'would_sync' })
+      results.push({ callId, status: isUntagged ? 'would_retag' : 'would_sync' })
       continue
     }
     try {
-      const r = await processZohoCall(callId)
-      if (r.ok) existingIds.add(callId) // keep set fresh so processZohoCall's internal check sees it
-      results.push({ callId, status: r.ok ? 'synced' : 'error', account: r.account, skipped: r.skippedSheetsWrite })
+      const r = await processZohoCall(callId, { existingRow: existing })
+      if (r.ok) existingRows.set(callId, { rowIndex: existing?.rowIndex ?? -1, account: r.account })
+      results.push({ callId, status: r.ok ? (isUntagged ? 'retagged' : 'synced') : 'error', account: r.account, skipped: r.skippedSheetsWrite })
     } catch (e) {
       results.push({ callId, status: 'error', account: String((e as Error).message) })
     }
   }
 
-  const synced  = results.filter(r => r.status === 'synced').length
-  const skipped = results.filter(r => r.status === 'already_synced').length
-  return NextResponse.json({ dryRun, synced, skipped, total: results.length, results })
+  const synced   = results.filter(r => r.status === 'synced').length
+  const retagged = results.filter(r => r.status === 'retagged').length
+  const skipped  = results.filter(r => r.status === 'already_synced').length
+  return NextResponse.json({ dryRun, synced, retagged, skipped, total: results.length, results })
 }
 
 function today() { return new Date().toISOString().slice(0, 10) }

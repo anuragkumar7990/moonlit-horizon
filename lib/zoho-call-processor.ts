@@ -1,5 +1,5 @@
 import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus } from '@/lib/zoho'
-import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus } from '@/lib/sheets'
+import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus, updateCallAccountRow } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
 const JUNK_ACCOUNT_NAMES = new Set([
@@ -35,7 +35,7 @@ export function outcomeToLeadStatus(outcome: string): string | null {
   return null
 }
 
-export async function processZohoCall(callId: string): Promise<{
+export async function processZohoCall(callId: string, opts?: { existingRow?: { rowIndex: number; account: string } }): Promise<{
   ok: boolean
   callId: string
   account: string
@@ -47,6 +47,7 @@ export async function processZohoCall(callId: string): Promise<{
   if (!call) return { ok: false, callId, account: '', skippedSheetsWrite: false, date: '', error: `Call ${callId} not found in Zoho` }
 
   let contactName = ''
+  let contactPhone = ''
   let email = ''
   let accountName = ''
   let leadIdForUpdate: string | null = null
@@ -63,12 +64,13 @@ export async function processZohoCall(callId: string): Promise<{
   if (whoIsLead && whoId?.id) {
     leadIdForUpdate = whoId.id
     const lead = await getLeadById(leadIdForUpdate)
-    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; accountName = lead.company }
+    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company }
     if (!contactName && whoId.name) contactName = whoId.name
-  } else if (whatIsLead && whatId?.id) {
+  } else if ((whoIsLead || whatIsLead) && whatId?.id) {
+    // Zoho sometimes places the lead in What_Id (not Who_Id) when $se_module=Leads
     leadIdForUpdate = whatId.id
     const lead = await getLeadById(leadIdForUpdate)
-    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; accountName = lead.company }
+    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company }
     if (!contactName && whatId.name) contactName = whatId.name
   } else if (whoId?.id) {
     const contact = await getContactById(whoId.id)
@@ -92,11 +94,15 @@ export async function processZohoCall(callId: string): Promise<{
   }
 
   const { date, time } = parseZohoDateTime(call.callStartTime)
-  const alreadyInSheets = await callExistsInSheetByZohoId(callId)
+  const existingRow = opts?.existingRow ?? null
+  const alreadyInSheets = existingRow ? true : await callExistsInSheetByZohoId(callId)
 
   if (!alreadyInSheets) {
-    await appendCallRow({ date, time, account: accountName, contactName, contactPhone: '', sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
+    await appendCallRow({ date, time, account: accountName, contactName, contactPhone, sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
     console.log(`[zoho-call-processor] Wrote to Sheets — ${accountName} / ${call.callResult} / ${date}`)
+  } else if (existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company')) {
+    await updateCallAccountRow(existingRow.rowIndex, accountName, contactName, contactPhone)
+    console.log(`[zoho-call-processor] Updated untagged row ${existingRow.rowIndex} — ${accountName}`)
   } else {
     console.log(`[zoho-call-processor] Skipped — ${callId} already in Sheets`)
   }
@@ -113,5 +119,6 @@ export async function processZohoCall(callId: string): Promise<{
     upsertContactIntelRow(email, { date, time, outcome: call.callResult, notes: call.description, duration: call.callDuration, zohoCallId: callId }).catch(() => { /* best effort */ })
   }
 
-  return { ok: true, callId, account: accountName, skippedSheetsWrite: alreadyInSheets, date }
+  const wasUpdated = !!(existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company'))
+  return { ok: true, callId, account: accountName, skippedSheetsWrite: alreadyInSheets && !wasUpdated, date }
 }

@@ -201,6 +201,36 @@ export async function getAllZohoCallIdsFromSheet(): Promise<Set<string>> {
   } catch { return new Set() }
 }
 
+// Returns map of zohoCallId → { rowIndex (1-based, incl. header), account }
+export async function getAllCallRowsFromSheet(): Promise<Map<string, { rowIndex: number; account: string }>> {
+  const sheets = getSheets()
+  const result = new Map<string, { rowIndex: number; account: string }>()
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Calls!A:J' })
+    const rows = res.data.values ?? []
+    for (let i = 1; i < rows.length; i++) {
+      const zohoId = String(rows[i][9] ?? '').trim()
+      if (zohoId) result.set(zohoId, { rowIndex: i + 1, account: String(rows[i][2] ?? '') })
+    }
+  } catch { /* return empty */ }
+  return result
+}
+
+export async function updateCallAccountRow(rowIndex: number, account: string, contactName: string, contactPhone: string): Promise<void> {
+  const sheets = getSheets()
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `Calls!C${rowIndex}`, values: [[account]] },
+        { range: `Calls!D${rowIndex}`, values: [[contactName]] },
+        { range: `Calls!E${rowIndex}`, values: [[contactPhone]] },
+      ],
+    },
+  })
+}
+
 const CI_NAME_COL    = 3   // D — Name
 const CI_EMAIL_COL   = 4   // E — Email (lookup key)
 const CI_COMP_COL    = 7   // H — Company
