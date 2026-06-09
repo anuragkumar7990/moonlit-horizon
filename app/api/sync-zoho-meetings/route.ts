@@ -27,8 +27,9 @@ async function handler(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Look back 30 days
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // Default: look back 30 days. Pass ?since=YYYY-MM-DD for a custom window.
+  const sinceParam = req.nextUrl.searchParams.get('since')
+  const since = sinceParam ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const sheets = getSheets()
   const [events, existingRes] = await Promise.all([
