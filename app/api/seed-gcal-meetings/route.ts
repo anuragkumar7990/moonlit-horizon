@@ -17,7 +17,7 @@ const MEETINGS = [
   ['GCAL-20260609-CARNERA', 'Carnera Technologies',              'Manpreet Singh Bhikhe','manpreet@getcarnera.com',          '2026-06-09T17:00:00+05:30', 'L1', 'https://meet.google.com/wyf-fqah-cca', '1321968000000961005', 'Meeting Booked', NOW],
 ]
 
-export async function POST(req: NextRequest) {
+async function seed(req: NextRequest) {
   const pwd = req.headers.get('x-dashboard-password') ?? req.nextUrl.searchParams.get('password')
   if (pwd !== SECRET) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -41,3 +41,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, inserted: toInsert.length, accounts: toInsert.map(r => r[1]) })
 }
+
+export const GET = seed
+export const POST = seed
