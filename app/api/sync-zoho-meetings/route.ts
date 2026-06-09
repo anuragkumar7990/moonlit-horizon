@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getZohoEvents } from '@/lib/zoho'
-import { getSheets, appendMeetingRow } from '@/lib/sheets'
+import { getSheets } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID!
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
@@ -40,30 +41,35 @@ async function handler(req: NextRequest) {
   const existingIds = new Set<string>((existingRes.data.values ?? []).flat().filter(Boolean))
   const now = new Date().toISOString()
 
-  let synced = 0
-  let skipped = 0
-
+  const newRows: string[][] = []
   for (const event of events) {
     const meetingId = `ZOHO-${event.id}`
-    if (existingIds.has(meetingId)) { skipped++; continue }
-
-    await appendMeetingRow({
-      meetingId,
-      accountName: event.whatName || event.subject,
-      contactName: event.whoName,
-      contactEmail: '',
-      meetingTime: event.startDateTime,
-      meetingType: detectMeetingType(event.subject),
-      gMeetLink: extractGMeetLink(event.description),
-      dealId: '',
-      status: 'Meeting Booked',
-      createdAt: now,
-    })
+    if (existingIds.has(meetingId)) continue
     existingIds.add(meetingId)
-    synced++
+    newRows.push([
+      meetingId,
+      event.whatName || event.subject,
+      event.whoName,
+      '',
+      event.startDateTime,
+      detectMeetingType(event.subject),
+      extractGMeetLink(event.description),
+      '',
+      'Meeting Booked',
+      now,
+    ])
   }
 
-  return NextResponse.json({ ok: true, synced, skipped, since })
+  if (newRows.length > 0) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Meetings!A:J',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: newRows },
+    })
+  }
+
+  return NextResponse.json({ ok: true, synced: newRows.length, skipped: events.length - newRows.length, since })
 }
 
 export const GET = handler
