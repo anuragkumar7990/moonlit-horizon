@@ -763,6 +763,31 @@ export async function getZohoCallsInRange(since: string, until: string): Promise
   return results
 }
 
+export async function findDealByName(dealName: string): Promise<boolean> {
+  const token = await getAccessToken()
+  const encoded = encodeURIComponent(dealName)
+  const res = await fetch(`${BASE_URL}/Deals/search?criteria=(Deal_Name:equals:${encoded})&fields=id&per_page=1`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    cache: 'no-store',
+  })
+  const data = await res.json() as { data?: unknown[]; status?: string }
+  if (data.status === 'error') return false
+  return (data.data?.length ?? 0) > 0
+}
+
+export async function createDealLight(dealName: string, stage: string, closingDate: string): Promise<string | null> {
+  const token = await getAccessToken()
+  const res = await fetch(`${BASE_URL}/Deals`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [{ Deal_Name: dealName, Stage: stage, Pipeline: 'Internal Community Data', Closing_Date: closingDate }] }),
+  })
+  const data = await res.json() as { data?: { details?: { id: string }; status?: string; message?: string }[] }
+  const record = data.data?.[0]
+  if (record?.status === 'error') throw new Error(`Zoho createDeal: ${record.message}`)
+  return record?.details?.id ?? null
+}
+
 export async function updateDealStage(dealId: string, stage: string): Promise<void> {
   const token = await getAccessToken()
   await fetch(`${BASE_URL}/Deals/${dealId}`, {

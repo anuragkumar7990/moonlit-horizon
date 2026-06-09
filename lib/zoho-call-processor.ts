@@ -1,4 +1,4 @@
-import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus } from '@/lib/zoho'
+import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus, findDealByName, createDealLight } from '@/lib/zoho'
 import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus, updateCallAccountRow } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
@@ -113,6 +113,19 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   if (newLeadStatus) {
     if (leadIdForUpdate) updateLeadStatus(leadIdForUpdate, newLeadStatus).catch(() => { /* best effort */ })
     if (email) updateProspectCallStatus(email, newLeadStatus).catch(() => { /* best effort */ })
+  }
+
+  if (newLeadStatus === 'Meeting Scheduled' && accountName && !accountName.startsWith('Untagged')) {
+    const closingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    findDealByName(accountName)
+      .then(exists => {
+        if (!exists) {
+          return createDealLight(accountName, 'Discovery Call booked', closingDate)
+            .then(id => console.log(`[zoho-call-processor] Created deal for ${accountName} (id=${id})`))
+        }
+        console.log(`[zoho-call-processor] Deal already exists for ${accountName}, skipping`)
+      })
+      .catch(e => console.error(`[zoho-call-processor] Deal creation failed for ${accountName}:`, e))
   }
 
   if (email) {
