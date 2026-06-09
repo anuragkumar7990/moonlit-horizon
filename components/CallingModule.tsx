@@ -133,6 +133,7 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
     const noDur = (c: Call) => !c.duration || c.duration === '0:00' || c.duration === '0'
     return periodCalls
       .filter(c => {
+        if (c.account.toLowerCase().startsWith('untagged company')) return false
         if (outcomeFilter === NO_DURATION_FILTER) return noDur(c)
         if (outcomeFilter !== 'all' && c.outcome !== outcomeFilter) return false
         if (search) {

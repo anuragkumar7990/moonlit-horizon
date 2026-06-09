@@ -272,12 +272,19 @@ export async function generateAndSaveIntel(
     : (existing?.callIntelligence ?? '')
 
   // Generate cumulative summary
-  const { cumulativeSummary, nextAction, status } = await generateCumulativeWithStatus(account, {
+  const { cumulativeSummary, nextAction, status: aiStatus } = await generateCumulativeWithStatus(account, {
     emailIntelligence,
     circlebakIntelligence,
     callIntelligence,
     manualNotes,
   })
+
+  // Preserve a manually-set status ('Won' is always user-set; 'Dead' usually too)
+  // Only allow AI to set status if no existing status or existing is the default 'Cold'
+  const MANUAL_STATUSES = new Set(['Won', 'Dead'])
+  const status = (existing?.status && MANUAL_STATUSES.has(existing.status))
+    ? existing.status
+    : aiStatus
 
   const lastContactDate = autoDetectLastContact({
     lastMeeting,

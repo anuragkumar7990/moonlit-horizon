@@ -149,7 +149,8 @@ export default function DailyScrumModule() {
               onChange={e => setNotes(e.target.value)}
               rows={5}
               placeholder="What was discussed? What's blocking progress?"
-              className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+              className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+              style={{ background: '#0d0d1a', color: '#E5E7EB' }}
             />
           </div>
           <div>
@@ -159,7 +160,8 @@ export default function DailyScrumModule() {
               onChange={e => setActionItems(e.target.value)}
               rows={5}
               placeholder="One action per line..."
-              className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+              className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+              style={{ background: '#0d0d1a', color: '#E5E7EB' }}
             />
           </div>
         </div>
@@ -261,14 +263,16 @@ export default function DailyScrumModule() {
               onChange={e => setEditingSlot(s => s ? { ...s, notes: e.target.value } : s)}
               rows={4}
               placeholder="Notes..."
-              className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text placeholder:text-mh-muted resize-none outline-none"
+              className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none"
+              style={{ background: '#0d0d1a', color: '#E5E7EB' }}
             />
             <textarea
               value={editingSlot.actionItems}
               onChange={e => setEditingSlot(s => s ? { ...s, actionItems: e.target.value } : s)}
               rows={3}
               placeholder="Action items (one per line)..."
-              className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text placeholder:text-mh-muted resize-none outline-none"
+              className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none"
+              style={{ background: '#0d0d1a', color: '#E5E7EB' }}
             />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setEditingSlot(null)} className="px-4 py-1.5 text-sm text-mh-muted">Cancel</button>

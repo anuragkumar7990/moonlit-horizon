@@ -29,8 +29,11 @@ export async function GET() {
         closingDate: d.closingDate,
       }))
 
+    const JUNK_PATTERNS = ['untagged company', 'the test tribe', 'test']
+    const isJunk = (name: string) => JUNK_PATTERNS.some(p => name.toLowerCase().includes(p))
+
     const upcoming = meetings
-      .filter(m => m.status === 'Meeting Booked' && m.meetingTime >= today)
+      .filter(m => m.status === 'Meeting Booked' && m.meetingTime >= today && !isJunk(m.accountName))
       .slice(0, 20)
       .map(m => ({
         date: m.meetingTime,

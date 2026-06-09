@@ -1,4 +1,4 @@
-import { getCalls, getMeetings, getTargets, getLatestSummary } from '@/lib/sheets'
+import { getCalls, getMeetings, getTargets, getRecentSummaries } from '@/lib/sheets'
 import { getDeals, getZohoCalls } from '@/lib/zoho'
 import { buildCallsData, buildMeetingsData, buildFunnel, buildLeadCounts, buildWeeklyTrend, mergeCallSources } from '@/lib/dashboard'
 import HomeTabs from '@/components/HomeTabs'
@@ -12,7 +12,7 @@ export default async function HomePage() {
     getDeals(),
     getTargets(),
     getZohoCalls(),
-    getLatestSummary(),
+    getRecentSummaries(4),
   ])
 
   const calls      = callsRes.status      === 'fulfilled' ? callsRes.value      : []
@@ -20,9 +20,13 @@ export default async function HomePage() {
   const deals      = dealsRes.status      === 'fulfilled' ? dealsRes.value      : []
   const targets    = targetsRes.status    === 'fulfilled' ? targetsRes.value    : []
   const zohoCalls  = zohoCallsRes.status  === 'fulfilled' ? zohoCallsRes.value  : []
-  const summary    = summaryRes.status    === 'fulfilled' ? summaryRes.value    : null
+  const summaries  = summaryRes.status    === 'fulfilled' ? summaryRes.value    : []
 
   const allCalls = mergeCallSources(calls, zohoCalls)
+  const weeklySummary  = summaries[0]?.summary ?? null
+  const monthlySummary = summaries.length > 0
+    ? summaries.map((s, i) => `**Week ${i + 1} (${s.weekOf || s.generatedAt.slice(0, 10)}):**\n${s.summary}`).join('\n\n---\n\n')
+    : null
 
   return (
     <HomeTabs
@@ -31,7 +35,8 @@ export default async function HomePage() {
       leads={buildLeadCounts(deals)}
       funnel={buildFunnel(deals)}
       weeklyTrend={buildWeeklyTrend(allCalls, meetings)}
-      weeklySummary={summary?.summary ?? null}
+      weeklySummary={weeklySummary}
+      monthlySummary={monthlySummary}
       rawCalls={allCalls}
     />
   )

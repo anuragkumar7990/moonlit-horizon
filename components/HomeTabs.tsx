@@ -48,8 +48,9 @@ interface Props {
   leads:         LeadCounts
   funnel:        FunnelData
   weeklyTrend:   WeeklyPoint[]
-  weeklySummary?: string | null
-  rawCalls:      Call[]
+  weeklySummary?:  string | null
+  monthlySummary?: string | null
+  rawCalls:        Call[]
 }
 
 const PRIMARY_TABS: { id: Tab; label: string }[] = [
@@ -275,7 +276,7 @@ function OthersDropdown({
 }
 
 export default function HomeTabs({
-  callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, rawCalls,
+  callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, monthlySummary, rawCalls,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tracker')
 
@@ -328,6 +329,7 @@ export default function HomeTabs({
           funnel={funnel}
           weeklyTrend={weeklyTrend}
           weeklySummary={weeklySummary}
+          monthlySummary={monthlySummary}
         />
       )}
       {tab === 'calling'    && <CallingModule calls={rawCalls} />}

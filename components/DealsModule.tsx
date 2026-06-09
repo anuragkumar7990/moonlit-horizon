@@ -90,7 +90,15 @@ function TempBadge({ temperature, dealId, onUpdate }: {
         {temperature ?? 'Unassigned'}
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-30 card py-1 min-w-[110px] shadow-xl">
+        <div
+          className="absolute top-full mt-1 left-0 py-1 min-w-[110px] rounded-xl shadow-xl"
+          style={{
+            zIndex: 9999,
+            background: 'rgba(10,10,18,0.98)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(16px)',
+          }}
+        >
           {(['Hot', 'Warm', 'Cold', null] as Temperature[]).map(t => (
             <button
               key={t ?? 'none'}
@@ -120,12 +128,13 @@ function DealCard({
   return (
     <div
       className="card py-2 px-3 mb-2 cursor-grab select-none text-xs"
+      style={{ overflow: 'visible' }}
       draggable
       onDragStart={e => e.dataTransfer.setData('dealId', deal.id)}
     >
       <div className="font-semibold text-mh-text text-[11px] leading-tight mb-1 truncate" title={deal.name}>{deal.name}</div>
       <div className="text-mh-muted truncate mb-2" title={deal.account}>{deal.account}</div>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2" style={{ overflow: 'visible' }}>
         <TempBadge temperature={deal.temperature} dealId={deal.id} onUpdate={onTempUpdate} />
         {deal.amount && deal.amount !== 'null' && (
           <span className="text-[10px] text-mh-muted">₹{Number(deal.amount).toLocaleString('en-IN')}</span>
@@ -190,6 +199,7 @@ function NegativeCard({
 export default function DealsModule() {
   const [data, setData] = useState<DealsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [tempFilter, setTempFilter] = useState<Temperature | 'All'>('All')
   const [negativeModal, setNegativeModal] = useState<{ category: LostDealCategory } | null>(null)
@@ -203,8 +213,12 @@ export default function DealsModule() {
     setLoading(true)
     try {
       const res = await fetch('/api/deals')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const d = await res.json() as DealsData
       setData(d)
+      setError(null)
+    } catch (e) {
+      setError(String(e))
     } finally {
       setLoading(false)
     }
@@ -222,6 +236,23 @@ export default function DealsModule() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, temperature }),
+    })
+  }
+
+  async function handleKanbanDrop(e: React.DragEvent, newStage: string) {
+    e.preventDefault()
+    const dealId = e.dataTransfer.getData('dealId')
+    if (!dealId) return
+    const deal = data?.active.find(d => d.id === dealId)
+    if (!deal || deal.stage === newStage) return
+    setData(prev => prev ? {
+      ...prev,
+      active: prev.active.map(d => d.id === dealId ? { ...d, stage: newStage } : d),
+    } : prev)
+    await fetch('/api/update-deal-stage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dealId, stage: newStage }),
     })
   }
 
@@ -259,7 +290,7 @@ export default function DealsModule() {
     return matchSearch && matchTemp
   })
 
-  const byStage = (stage: string) => filtered.filter(d => d.stage === stage)
+  const byStage = (stage: string) => filtered.filter(d => d.stage.toLowerCase() === stage.toLowerCase())
 
   const STAGE_COLORS: Record<string, string> = {
     'Discovery Call booked':     '#6699FF',
@@ -283,6 +314,8 @@ export default function DealsModule() {
     return 'Next Week+'
   }
 
+  const CARD_HEIGHT = '240px'
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -294,20 +327,27 @@ export default function DealsModule() {
   return (
     <div className="space-y-4">
 
-      {/* Controls */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {error && (
+        <div className="card border-red-500/40 bg-red-500/10 text-red-400 text-sm px-4 py-3">
+          Failed to load deals: {error}. <button onClick={load} className="underline ml-1">Retry</button>
+        </div>
+      )}
+
+      {/* Controls — single line */}
+      <div className="flex items-center gap-3">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search deals..."
-          className="bg-mh-card border border-mh-border rounded-lg px-3 py-1.5 text-sm text-mh-text placeholder:text-mh-muted outline-none focus:border-mh-vermillion/50 w-56"
+          className="bg-mh-card border border-mh-border rounded-lg px-3 py-1.5 text-sm placeholder:text-mh-muted outline-none focus:border-mh-vermillion/50 w-48"
+          style={{ color: '#E5E7EB' }}
         />
         <div className="flex items-center gap-1">
           {(['All', 'Hot', 'Warm', 'Cold'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTempFilter(t === 'All' ? 'All' : t as Temperature)}
-              className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+              className="px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap"
               style={tempFilter === t
                 ? { background: t === 'All' ? '#444' : TEMP_COLORS[t as NonNullable<Temperature>].badge, color: t === 'All' ? '#fff' : TEMP_COLORS[t as NonNullable<Temperature>].label, border: `1px solid ${t === 'All' ? '#666' : TEMP_COLORS[t as NonNullable<Temperature>].dot}` }
                 : { background: 'rgba(255,255,255,0.04)', color: '#888899', border: '1px solid rgba(255,255,255,0.08)' }
@@ -317,20 +357,20 @@ export default function DealsModule() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-mh-muted ml-auto">{filtered.length} active deals</span>
+        <span className="text-xs text-mh-muted ml-auto shrink-0">{filtered.length} active deals</span>
       </div>
 
-      {/* Row 1: Upcoming Meetings + Funnel */}
+      {/* Row 1: Upcoming Meetings + Pipeline */}
       <div className="grid grid-cols-[280px_1fr] gap-4">
 
-        {/* Upcoming Meetings */}
-        <div className="card">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Upcoming Meetings</p>
+        {/* Upcoming Meetings — capped at 5, scrollable */}
+        <div className="card flex flex-col" style={{ maxHeight: CARD_HEIGHT }}>
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3 shrink-0">Upcoming Meetings</p>
           {(data?.upcoming ?? []).length === 0 ? (
             <p className="text-mh-muted text-xs italic">No upcoming meetings booked.</p>
           ) : (
-            <div className="space-y-2">
-              {(data?.upcoming ?? []).map((m, i) => (
+            <div className="overflow-y-auto space-y-0 flex-1" style={{ maxHeight: '190px' }}>
+              {(data?.upcoming ?? []).slice(0, 5).map((m, i) => (
                 <div key={i} className="flex items-start gap-2 py-1.5 border-b border-mh-border last:border-0">
                   <div className="text-[9px] text-mh-muted uppercase bg-mh-border/30 rounded px-1.5 py-0.5 mt-0.5 shrink-0">
                     {bucketLabel(m.date.slice(0, 10))}
@@ -345,10 +385,10 @@ export default function DealsModule() {
           )}
         </div>
 
-        {/* Pipeline Funnel */}
-        <div className="card">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Pipeline</p>
-          <div className="space-y-2">
+        {/* Pipeline Funnel — same height as Upcoming */}
+        <div className="card flex flex-col" style={{ maxHeight: CARD_HEIGHT }}>
+          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3 shrink-0">Pipeline</p>
+          <div className="space-y-2 overflow-y-auto flex-1">
             {KANBAN_STAGES.map(stage => {
               const count = (data?.active ?? []).filter(d => d.stage === stage).length
               const maxCount = Math.max(...KANBAN_STAGES.map(s => (data?.active ?? []).filter(d => d.stage === s).length), 1)
@@ -379,14 +419,15 @@ export default function DealsModule() {
               <div
                 key={stage}
                 className="rounded-xl p-2 min-h-[120px]"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', overflow: 'visible' }}
                 onDragOver={e => e.preventDefault()}
+                onDrop={e => handleKanbanDrop(e, stage)}
               >
                 <div className="flex items-center justify-between mb-2 px-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider truncate" style={{ color: col }}>{stage}</span>
                   <span className="text-[11px] font-bold ml-1 shrink-0" style={{ color: col }}>{cards.length}</span>
                 </div>
-                <div className="space-y-0">
+                <div style={{ overflow: 'visible' }}>
                   {cards.map(deal => (
                     <DealCard
                       key={deal.id}
@@ -425,7 +466,7 @@ export default function DealsModule() {
       {moveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="card w-full max-w-sm mx-4 space-y-4">
-            <p className="text-sm font-semibold text-mh-text">Move "{moveModal.deal.name}" to Negative Zone</p>
+            <p className="text-sm font-semibold text-mh-text">Move &quot;{moveModal.deal.name}&quot; to Negative Zone</p>
             <div>
               <label className="text-[10px] text-mh-muted uppercase tracking-widest block mb-1">Category</label>
               <select
@@ -434,7 +475,7 @@ export default function DealsModule() {
                 className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm"
                 style={{ color: '#E5E7EB' }}
               >
-                {NEGATIVE_CATEGORIES.map(c => <option key={c} value={c} style={{ background: '#0d0d1a' }}>{c}</option>)}
+                {NEGATIVE_CATEGORIES.map(c => <option key={c} value={c} style={{ background: '#0d0d1a', color: '#E5E7EB' }}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -444,7 +485,8 @@ export default function DealsModule() {
                 onChange={e => setPendingNotes(e.target.value)}
                 rows={2}
                 placeholder="Why is this deal here?"
-                className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+                className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+                style={{ color: '#E5E7EB' }}
               />
             </div>
             <div className="flex gap-2 justify-end">
@@ -510,7 +552,7 @@ export default function DealsModule() {
       {restoreModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="card w-full max-w-sm mx-4 space-y-4">
-            <p className="text-sm font-semibold text-mh-text">Restore "{restoreModal.lostDeal.dealName}"</p>
+            <p className="text-sm font-semibold text-mh-text">Restore &quot;{restoreModal.lostDeal.dealName}&quot;</p>
             <div>
               <label className="text-[10px] text-mh-muted uppercase tracking-widest block mb-1">Target Stage</label>
               <select
@@ -519,7 +561,7 @@ export default function DealsModule() {
                 className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm"
                 style={{ color: '#E5E7EB' }}
               >
-                {KANBAN_STAGES.map(s => <option key={s} value={s} style={{ background: '#0d0d1a' }}>{s}</option>)}
+                {KANBAN_STAGES.map(s => <option key={s} value={s} style={{ background: '#0d0d1a', color: '#E5E7EB' }}>{s}</option>)}
               </select>
             </div>
             <div className="flex gap-2 justify-end">

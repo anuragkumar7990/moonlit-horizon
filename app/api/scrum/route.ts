@@ -56,9 +56,12 @@ export async function GET() {
     const connected = todaysCalls.filter(c => !['No Answer', 'Voicemail', 'Not Reachable', 'RNR', 'Busy', 'Unanswered'].some(s => c.outcome?.toLowerCase().includes(s.toLowerCase()))).length
     const meetingsBooked = todaysCalls.filter(c => c.outcome?.toLowerCase().includes('meeting')).length
 
-    const todayMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === today)
+    const JUNK = ['untagged company', 'the test tribe', 'test']
+    const isJunk = (name: string) => JUNK.some(p => name.toLowerCase().includes(p))
+
+    const todayMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === today && !isJunk(m.accountName))
     const tomorrowIST = new Date(Date.now() + IST_OFFSET_MS + 86400000).toISOString().slice(0, 10)
-    const tomorrowMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === tomorrowIST)
+    const tomorrowMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === tomorrowIST && !isJunk(m.accountName))
 
     const suggestedItems: string[] = []
     if (dialled > 0) suggestedItems.push(`${dialled} calls dialled today, ${connected} connected, ${meetingsBooked} meetings booked`)

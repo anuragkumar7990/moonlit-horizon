@@ -381,7 +381,7 @@ export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoin
   const now = nowIST()
   const weekStart = startOfWeek(now, { weekStartsOn: 1 })
 
-  return Array.from({ length: 7 }, (_, i) => {
+  return Array.from({ length: 5 }, (_, i) => {
     const day    = new Date(weekStart.getTime() + i * 86400000)
     const dayStr = day.toISOString().slice(0, 10)
 

@@ -8,12 +8,13 @@ import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 type Period = 'weekly' | 'monthly'
 
 interface Props {
-  callsData:      CallsColumnData
-  meetingsData:   MeetingsColumnData
-  leads:          LeadCounts
-  funnel:         FunnelData
-  weeklyTrend:    WeeklyPoint[]
-  weeklySummary?: string | null
+  callsData:       CallsColumnData
+  meetingsData:    MeetingsColumnData
+  leads:           LeadCounts
+  funnel:          FunnelData
+  weeklyTrend:     WeeklyPoint[]
+  weeklySummary?:  string | null
+  monthlySummary?: string | null
 }
 
 function Divider() {
@@ -28,7 +29,7 @@ function ColHeader({ children }: { children: string }) {
   )
 }
 
-export default function MasterTrackerGrid({ callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary }: Props) {
+export default function MasterTrackerGrid({ callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, monthlySummary }: Props) {
   const [period, setPeriod] = useState<Period>('weekly')
 
   const calls       = callsData[period]
@@ -59,7 +60,7 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         </div>
       </div>
 
-      {/* Row 1: Calls | Leads strip | Meetings */}
+      {/* Row 1: Calls | Leads + Graph | Meetings */}
       <div className="grid grid-cols-[200px_1fr_200px] gap-4 items-start">
 
         {/* Calls */}
@@ -72,10 +73,10 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
           <MetricCard label="Mtgs Booked" achieved={calls.meetingsBooked} target={callTargets.meetingsBooked}  animationDelay={240} />
         </div>
 
-        {/* Leads strip — compact horizontal */}
-        <div className="card py-3">
-          <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Leads</p>
-          <div className="flex items-center gap-6 flex-wrap">
+        {/* Leads + Graph combined */}
+        <div className="card py-4 flex flex-col gap-4">
+          {/* Hot / Warm / Cold — centred */}
+          <div className="flex items-center justify-center gap-6 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#E8341C', boxShadow: '0 0 6px rgba(232,52,28,0.7)' }} />
               <span className="text-[10px] font-semibold text-mh-vermillion uppercase tracking-widest">Hot</span>
@@ -99,6 +100,11 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
               <span className="text-xl font-medium text-mh-muted ml-1">{leads.total}</span>
             </div>
           </div>
+
+          {/* Graph — Mon to Fri */}
+          <div style={{ height: '220px' }}>
+            <MetricsGraph data={weeklyTrend} />
+          </div>
         </div>
 
         {/* Meetings */}
@@ -112,15 +118,7 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
         </div>
       </div>
 
-      {/* Row 2: Trends — full width */}
-      <div className="card" style={{ minHeight: '320px' }}>
-        <ColHeader>This Week</ColHeader>
-        <div style={{ height: '260px' }}>
-          <MetricsGraph data={weeklyTrend} />
-        </div>
-      </div>
-
-      {/* Row 3: Summary */}
+      {/* Row 2: Summary */}
       <div className="card">
         <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">
           {period === 'weekly' ? 'Weekly Summary' : 'Monthly Summary'}
@@ -137,9 +135,17 @@ export default function MasterTrackerGrid({ callsData, meetingsData, leads, funn
               No summary yet — use <span className="text-mh-text">/mh stats weekly</span> in Discord to generate one.
             </p>
           )
+        ) : monthlySummary ? (
+          <div className="space-y-3">
+            {monthlySummary.split('\n').filter(l => l.trim()).map((line, i) => (
+              line === '---'
+                ? <hr key={i} className="border-mh-border" />
+                : <p key={i} className="text-sm text-mh-text leading-relaxed">{line}</p>
+            ))}
+          </div>
         ) : (
           <p className="text-mh-muted text-sm italic leading-relaxed">
-            No monthly summary yet — use <span className="text-mh-text">/mh stats monthly</span> in Discord to generate one.
+            No summaries generated yet — use <span className="text-mh-text">/mh stats weekly</span> in Discord each week. Monthly view stitches the last 4 weekly summaries.
           </p>
         )}
       </div>

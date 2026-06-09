@@ -112,9 +112,10 @@ export function AccountIntelPanel({ intel: initialIntel }: { intel: AccountIntel
           value={selectedAccount}
           onChange={e => { setSelectedAccount(e.target.value); setEditingDate(false) }}
           className="flex-1 bg-mh-surface2 border border-mh-border rounded-lg px-3 py-2 text-sm text-mh-text focus:outline-none focus:border-mh-vermillion cursor-pointer"
+          style={{ color: '#FFFFFF' }}
         >
           {intel.map(i => (
-            <option key={i.account} value={i.account} className="bg-mh-surface text-mh-text">
+            <option key={i.account} value={i.account} style={{ background: '#0d0d1a', color: '#FFFFFF' }}>
               {STATUS_EMOJI[i.status] ?? '⚪'} {i.account}
             </option>
           ))}
@@ -125,9 +126,10 @@ export function AccountIntelPanel({ intel: initialIntel }: { intel: AccountIntel
             value={account.status}
             onChange={e => handleStatusChange(e.target.value as Status)}
             className={`shrink-0 text-[10px] font-semibold px-2.5 py-1.5 rounded uppercase tracking-wide border-0 bg-transparent focus:outline-none cursor-pointer ${STATUS_STYLE[account.status]}`}
+            style={{ color: 'inherit' }}
           >
             {STATUS_OPTIONS.map(s => (
-              <option key={s} value={s} className="bg-mh-surface text-mh-text normal-case text-xs">
+              <option key={s} value={s} style={{ background: '#0d0d1a', color: '#FFFFFF', fontWeight: 'normal' }}>
                 {s}
               </option>
             ))}

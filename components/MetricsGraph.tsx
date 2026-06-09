@@ -6,20 +6,18 @@ import {
 } from 'recharts'
 import type { WeeklyPoint } from '@/lib/types'
 
-type Filter = 'calls' | 'meetings' | 'conversion' | 'emails'
+type Filter = 'calls' | 'meetings' | 'emails'
 
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'calls',      label: 'Calls'           },
-  { key: 'meetings',   label: 'Meetings'        },
-  { key: 'conversion', label: 'Lead Conversion' },
-  { key: 'emails',     label: 'Emails'          },
+  { key: 'calls',    label: 'Calls'    },
+  { key: 'meetings', label: 'Meetings' },
+  { key: 'emails',   label: 'Emails'   },
 ]
 
 const LEGEND_ITEMS: Record<Filter, { name: string; color: string }[]> = {
-  calls:      [{ name: 'Dialled', color: '#E8341C' }, { name: 'Connected', color: '#22C55E' }],
-  meetings:   [{ name: 'L1 Booked', color: '#E8341C' }, { name: 'L1 Conducted', color: '#FFD700' }],
-  conversion: [{ name: 'Connection %', color: '#E8341C' }, { name: 'Booking %', color: '#22C55E' }],
-  emails:     [],
+  calls:    [{ name: 'Dialled', color: '#E8341C' }, { name: 'Connected', color: '#22C55E' }],
+  meetings: [{ name: 'L1 Booked', color: '#E8341C' }, { name: 'L1 Conducted', color: '#FFD700' }],
+  emails:   [],
 }
 
 const TOOLTIP_STYLE = {
@@ -63,7 +61,7 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
         ))}
       </div>
 
-      {/* Custom legend — fully controlled order */}
+      {/* Custom legend */}
       {filter !== 'emails' && (
         <div className="flex gap-4 mb-2">
           {LEGEND_ITEMS[filter].map(item => (
@@ -107,11 +105,6 @@ export default function MetricsGraph({ data }: { data: WeeklyPoint[] }) {
               {filter === 'meetings' && <>
                 <Line type="monotone" dataKey="l1Booked"    stroke="#E8341C" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="l1Conducted" stroke="#FFD700" strokeWidth={2} dot={false} />
-              </>}
-
-              {filter === 'conversion' && <>
-                <Line type="monotone" dataKey="connectionRate" stroke="#E8341C" strokeWidth={2} dot={false} unit="%" />
-                <Line type="monotone" dataKey="bookingRate"    stroke="#22C55E" strokeWidth={2} dot={false} unit="%" />
               </>}
             </LineChart>
           </ResponsiveContainer>
