@@ -742,22 +742,22 @@ export async function getZohoCallsInRange(since: string, until: string): Promise
   const token = await getAccessToken()
   const results: { id: string; date: string }[] = []
   let page = 1
-  while (true) {
+  while (page <= 50) {
     const res = await fetch(
-      `${BASE_URL}/Calls?fields=id,Call_Start_Time&per_page=200&page=${page}&sort_by=Call_Start_Time&sort_order=desc`,
+      `${BASE_URL}/Calls?fields=id,Call_Start_Time&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
       { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
     )
     const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     const rows = data.data ?? []
     if (rows.length === 0) break
-    let pastSince = false
     for (const c of rows) {
       const rawTime = String(c.Call_Start_Time ?? '')
       const date = rawTime.slice(0, 10)
-      if (date < since) { pastSince = true; break }
-      if (date <= until && c.id) results.push({ id: String(c.id), date })
+      if (date >= since && date <= until && c.id) {
+        results.push({ id: String(c.id), date })
+      }
     }
-    if (pastSince || !data.info?.more_records) break
+    if (!data.info?.more_records) break
     page++
   }
   return results
