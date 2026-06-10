@@ -52,6 +52,7 @@ export default function UploadPage() {
   const [addingNew, setAddingNew] = useState(false)
   const [newSourceValue, setNewSourceValue] = useState('')
   const [addingStatus, setAddingStatus] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [addingError, setAddingError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -71,14 +72,15 @@ export default function UploadPage() {
         body: JSON.stringify({ value: newSourceValue.trim() }),
       })
       const data: { ok?: boolean; value?: string; error?: string } = await res.json()
-      if (data.error) { setAddingStatus('error'); return }
+      if (data.error) { setAddingError(data.error); setAddingStatus('error'); return }
       const added = data.value!
       setLvl2Options(prev => [...prev, added])
       setLvl2Source(added)
       setAddingNew(false)
       setNewSourceValue('')
       setAddingStatus('idle')
-    } catch {
+    } catch (err) {
+      setAddingError(String(err))
       setAddingStatus('error')
     }
   }
@@ -196,7 +198,7 @@ export default function UploadPage() {
                     </button>
                   </div>
                   {addingStatus === 'error' && (
-                    <p className="text-xs text-red-600">Failed to add. Try again.</p>
+                    <p className="text-xs text-red-600">{addingError || 'Failed to add. Try again.'}</p>
                   )}
                 </div>
               ) : (

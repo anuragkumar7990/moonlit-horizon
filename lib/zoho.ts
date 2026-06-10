@@ -683,21 +683,40 @@ export async function getLvl2SourceValues(): Promise<string[]> {
 export async function addLvl2SourceValue(value: string): Promise<void> {
   const token = await getAccessToken()
   const existing = await fetchLvl2Field(token)
+  const body = {
+    fields: [{
+      id: LVL2_FIELD_ID,
+      pick_list_values: [
+        ...existing,
+        {
+          display_value: value,
+          actual_value: value,
+          reference_value: value,
+          colour_code: null,
+          sequence_number: existing.filter(v => v.actual_value !== '-None-').length + 1,
+        },
+      ],
+    }],
+  }
   const putRes = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
     method: 'PUT',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fields: [{
-        id: LVL2_FIELD_ID,
-        pick_list_values: [
-          ...existing,
-          { display_value: value, actual_value: value, sequence_number: existing.length + 1 },
-        ],
-      }],
-    }),
+    body: JSON.stringify(body),
   })
-  const result = await putRes.json() as { status?: string; message?: string }
-  if (result.status === 'error') throw new Error(result.message ?? JSON.stringify(result))
+  const result = await putRes.json() as {
+    status?: string; message?: string; code?: string
+    fields?: { status?: string; message?: string; code?: string }[]
+  }
+  console.log('[addLvl2SourceValue] Zoho response:', JSON.stringify(result))
+  // Top-level error (auth failures, invalid module, etc.)
+  if (!putRes.ok || result.status === 'error') {
+    throw new Error(result.message ?? result.code ?? `HTTP ${putRes.status}: ${JSON.stringify(result)}`)
+  }
+  // Per-field error (field ID wrong, scope missing, etc.)
+  const fieldResult = result.fields?.[0]
+  if (fieldResult && fieldResult.status === 'error') {
+    throw new Error(fieldResult.message ?? fieldResult.code ?? JSON.stringify(fieldResult))
+  }
 }
 
 export async function createDeal(payload: {
