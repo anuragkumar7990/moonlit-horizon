@@ -1,5 +1,6 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   isWithinInterval, parseISO, format,
@@ -89,11 +90,15 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 const NO_DURATION_FILTER = '__no_duration__'
 
 export default function CallingModule({ calls, meetings }: { calls: Call[]; meetings: Meeting[] }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [period, setPeriod] = useState<Period>('weekly')
   const [search, setSearch] = useState('')
   const [outcomeFilter, setOutcomeFilter] = useState('all')
   const [creatingZoho, setCreatingZoho] = useState<Set<string>>(new Set())
   const [zohoStatus, setZohoStatus] = useState<Map<string, 'created' | 'exists'>>(new Map())
+
+  const refresh = useCallback(() => startTransition(() => router.refresh()), [router, startTransition])
 
   const periodCalls = useMemo(() => filterByPeriod(calls, period), [calls, period])
 
@@ -178,6 +183,7 @@ export default function CallingModule({ calls, meetings }: { calls: Call[]; meet
       })
       const data = await res.json() as { existing?: boolean }
       setZohoStatus(prev => new Map(prev).set(key, data.existing ? 'exists' : 'created'))
+      refresh()
     } catch {
       /* silent fail */
     } finally {
@@ -295,6 +301,16 @@ export default function CallingModule({ calls, meetings }: { calls: Call[]; meet
             <span className="ml-2 text-mh-text font-semibold">{logsFiltered.length}</span>
           </p>
           <div className="flex items-center gap-2">
+            <button
+              onClick={refresh}
+              disabled={isPending}
+              title="Refresh call data"
+              className="text-mh-muted hover:text-mh-text transition-colors disabled:opacity-40"
+            >
+              <svg className={`w-4 h-4 ${isPending ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
             <input
               type="text"
               placeholder="Search account, contact, email…"

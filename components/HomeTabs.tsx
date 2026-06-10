@@ -1,7 +1,7 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useTransition } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import MasterTrackerGrid from './MasterTrackerGrid'
 import CallingModule from './CallingModule'
 import ProspectModule from './ProspectModule'
@@ -279,11 +279,16 @@ function OthersDropdown({
 export default function HomeTabs({
   callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, monthlySummary, rawCalls, rawMeetings,
 }: Props) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [tab, setTab] = useState<Tab>('tracker')
 
   function selectTab(id: Tab) {
-    // Clicking the active primary tab returns to Master Tracker
     setTab(prev => (prev === id ? 'tracker' : id))
+  }
+
+  function refresh() {
+    startTransition(() => router.refresh())
   }
 
   return (
@@ -291,6 +296,17 @@ export default function HomeTabs({
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <ViewDropdown />
+        <button
+          onClick={refresh}
+          disabled={isPending}
+          title="Refresh all data"
+          className="flex items-center gap-1.5 text-xs text-mh-muted hover:text-mh-text border border-mh-border hover:border-mh-vermillion/40 rounded-lg px-3 py-1.5 transition-all disabled:opacity-40"
+        >
+          <svg className={`w-3.5 h-3.5 ${isPending ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {isPending ? 'Refreshing…' : 'Refresh'}
+        </button>
       </div>
 
       {/* Primary navigation */}
