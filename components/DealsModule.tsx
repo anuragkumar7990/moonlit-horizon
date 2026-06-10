@@ -219,6 +219,9 @@ function NegativeCard({
   )
 }
 
+// How long (ms) to protect an optimistic change from being overwritten by a stale poll
+const MUTATION_TTL = 120_000
+
 export default function DealsModule() {
   const [data, setData] = useState<DealsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -232,13 +235,37 @@ export default function DealsModule() {
   const [pendingNotes, setPendingNotes] = useState('')
   const [restoreStage, setRestoreStage] = useState(KANBAN_STAGES[0])
 
+  // Protects optimistic changes from being clobbered by background polls
+  // while Zoho is still processing the write.
+  const pendingChanges = useRef<Map<string, { changes: Partial<ActiveDeal>; ts: number }>>(new Map())
+  const pendingRemovals = useRef<Map<string, number>>(new Map()) // dealId → timestamp
+
+  function applyPendingOverServer(serverData: DealsData): DealsData {
+    const now = Date.now()
+    const changes = pendingChanges.current
+    const removals = pendingRemovals.current
+    return {
+      ...serverData,
+      active: serverData.active
+        .filter(deal => {
+          const ts = removals.get(deal.id)
+          return !ts || now - ts > MUTATION_TTL
+        })
+        .map(deal => {
+          const p = changes.get(deal.id)
+          if (!p || now - p.ts > MUTATION_TTL) return deal
+          return { ...deal, ...p.changes }
+        }),
+    }
+  }
+
   async function load(background = false) {
     if (!background) setLoading(true)
     try {
       const res = await fetch('/api/deals')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const d = await res.json() as DealsData
-      setData(d)
+      setData(background ? applyPendingOverServer(d) : d)
       setError(null)
     } catch (e) {
       setError(String(e))
@@ -255,7 +282,8 @@ export default function DealsModule() {
 
   async function handleTempUpdate(dealId: string, temperature: Temperature) {
     if (!data) return
-    // Optimistic — don't reload after; Zoho is async and would revert the value
+    const existing = pendingChanges.current.get(dealId)?.changes ?? {}
+    pendingChanges.current.set(dealId, { changes: { ...existing, temperature }, ts: Date.now() })
     setData(prev => prev ? {
       ...prev,
       active: prev.active.map(d => d.id === dealId ? { ...d, temperature } : d),
@@ -273,7 +301,8 @@ export default function DealsModule() {
     if (!dealId) return
     const deal = data?.active.find(d => d.id === dealId)
     if (!deal || deal.stage === newStage) return
-    // Optimistic — don't reload after; Zoho is async and would revert the value
+    const existing = pendingChanges.current.get(dealId)?.changes ?? {}
+    pendingChanges.current.set(dealId, { changes: { ...existing, stage: newStage }, ts: Date.now() })
     setData(prev => prev ? {
       ...prev,
       active: prev.active.map(d => d.id === dealId ? { ...d, stage: newStage } : d),
@@ -286,16 +315,15 @@ export default function DealsModule() {
   }
 
   async function handleMoveToNegative(deal: ActiveDeal, category: LostDealCategory, notes: string) {
-    // Optimistic: remove from active immediately
+    pendingRemovals.current.set(deal.id, Date.now())
     setData(prev => prev ? { ...prev, active: prev.active.filter(d => d.id !== deal.id) } : prev)
     setMoveModal(null)
     setPendingNotes('')
-    await fetch('/api/move-deal-to-lost', {
+    fetch('/api/move-deal-to-lost', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
     })
-    load(true)
   }
 
   async function handleDrop(dealId: string, category: LostDealCategory) {
@@ -306,15 +334,13 @@ export default function DealsModule() {
   }
 
   async function handleRestore(lostDeal: LostDeal, targetStage: string) {
-    // Optimistic: remove from lost immediately
     setData(prev => prev ? { ...prev, lost: prev.lost.filter(d => d.rowIndex !== lostDeal.rowIndex) } : prev)
     setRestoreModal(null)
-    await fetch('/api/restore-deal', {
+    fetch('/api/restore-deal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sheetRowIndex: lostDeal.rowIndex, dealId: lostDeal.dealId, targetStage }),
     })
-    load(true)
   }
 
   const filtered = (data?.active ?? []).filter(d => {
