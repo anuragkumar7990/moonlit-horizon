@@ -17,6 +17,7 @@ function extractAccountFromTitle(title: string): string {
 }
 
 const TTT_CAL_PATTERNS = ['test tribe', 'upskilling', 'training', 'l1', 'l2']
+const SKIP_CAL_TITLES = ['corporate training - daily scrum call', 'daily debrief - corporate training']
 
 export async function GET() {
   try {
@@ -62,7 +63,8 @@ export async function GET() {
       .filter(e => {
         const lower = e.title.toLowerCase()
         if (!TTT_CAL_PATTERNS.some(p => lower.includes(p))) return false
-        if (isJunk(e.title)) return false
+        if (SKIP_CAL_TITLES.some(s => lower.includes(s))) return false
+        if (isJunk(extractAccountFromTitle(e.title))) return false
         if (e.gMeetLink && sheetsGMeetLinks.has(e.gMeetLink)) return false
         return true
       })
