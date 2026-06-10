@@ -112,7 +112,7 @@ export async function GET() {
 
     // Calendar-only events: TTT-related (title contains "Test Tribe" or "Upskilling") and not already in Sheets by GMeet link
     const TTT_CAL_PATTERNS = ['test tribe', 'upskilling', 'training', 'l1', 'l2']
-    const SKIP_CAL_TITLES = ['corporate training - daily scrum call', 'daily debrief - corporate training']
+    const SKIP_CAL_TITLES = ['corporate training - daily scrum call', 'daily debrief - corporate training', 'weekly business review']
     const calTodayExtra = calEvents.filter(e => {
       const lower = e.title.toLowerCase()
       if (!TTT_CAL_PATTERNS.some(p => lower.includes(p))) return false

@@ -209,8 +209,8 @@ export default function DealsModule() {
   const [pendingNotes, setPendingNotes] = useState('')
   const [restoreStage, setRestoreStage] = useState(KANBAN_STAGES[0])
 
-  async function load() {
-    setLoading(true)
+  async function load(background = false) {
+    if (!background) setLoading(true)
     try {
       const res = await fetch('/api/deals')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -220,13 +220,13 @@ export default function DealsModule() {
     } catch (e) {
       setError(String(e))
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }
 
   useEffect(() => {
     load()
-    const interval = setInterval(load, 30_000)
+    const interval = setInterval(() => load(true), 30_000)
     return () => clearInterval(interval)
   }, [])
 
@@ -241,7 +241,7 @@ export default function DealsModule() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, temperature }),
     })
-    await load()
+    await load(true)
   }
 
   async function handleKanbanDrop(e: React.DragEvent, newStage: string) {
@@ -259,7 +259,7 @@ export default function DealsModule() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, stage: newStage }),
     })
-    await load()
+    await load(true)
   }
 
   async function handleMoveToNegative(deal: ActiveDeal, category: LostDealCategory, notes: string) {
@@ -268,9 +268,9 @@ export default function DealsModule() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
     })
-    await load()
     setMoveModal(null)
     setPendingNotes('')
+    await load(true)
   }
 
   async function handleDrop(dealId: string, category: LostDealCategory) {
@@ -286,8 +286,8 @@ export default function DealsModule() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sheetRowIndex: lostDeal.rowIndex, dealId: lostDeal.dealId, targetStage }),
     })
-    await load()
     setRestoreModal(null)
+    await load(true)
   }
 
   const filtered = (data?.active ?? []).filter(d => {
@@ -335,7 +335,7 @@ export default function DealsModule() {
 
       {error && (
         <div className="card border-red-500/40 bg-red-500/10 text-red-400 text-sm px-4 py-3">
-          Failed to load deals: {error}. <button onClick={load} className="underline ml-1">Retry</button>
+          Failed to load deals: {error}. <button onClick={() => load()} className="underline ml-1">Retry</button>
         </div>
       )}
 
@@ -478,8 +478,8 @@ export default function DealsModule() {
               <select
                 value={pendingCategory}
                 onChange={e => setPendingCategory(e.target.value as LostDealCategory)}
-                className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm"
-                style={{ color: '#E5E7EB' }}
+                className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm"
+                style={{ color: '#E5E7EB', background: '#0d0d1a' }}
               >
                 {NEGATIVE_CATEGORIES.map(c => <option key={c} value={c} style={{ background: '#0d0d1a', color: '#E5E7EB' }}>{c}</option>)}
               </select>
@@ -491,8 +491,8 @@ export default function DealsModule() {
                 onChange={e => setPendingNotes(e.target.value)}
                 rows={2}
                 placeholder="Why is this deal here?"
-                className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
-                style={{ color: '#E5E7EB' }}
+                className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm placeholder:text-mh-muted resize-none outline-none focus:border-mh-vermillion/50"
+                style={{ color: '#E5E7EB', background: '#0d0d1a' }}
               />
             </div>
             <div className="flex gap-2 justify-end">
@@ -564,8 +564,8 @@ export default function DealsModule() {
               <select
                 value={restoreStage}
                 onChange={e => setRestoreStage(e.target.value)}
-                className="w-full bg-mh-card border border-mh-border rounded-lg px-3 py-2 text-sm"
-                style={{ color: '#E5E7EB' }}
+                className="w-full border border-mh-border rounded-lg px-3 py-2 text-sm"
+                style={{ color: '#E5E7EB', background: '#0d0d1a' }}
               >
                 {KANBAN_STAGES.map(s => <option key={s} value={s} style={{ background: '#0d0d1a', color: '#E5E7EB' }}>{s}</option>)}
               </select>

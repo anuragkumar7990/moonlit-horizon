@@ -20,7 +20,7 @@ function extractAccountFromTitle(title: string): string {
 }
 
 const TTT_CAL_PATTERNS = ['test tribe', 'upskilling', 'training', 'l1', 'l2']
-const SKIP_CAL_TITLES = ['corporate training - daily scrum call', 'daily debrief - corporate training']
+const SKIP_CAL_TITLES = ['corporate training - daily scrum call', 'daily debrief - corporate training', 'weekly business review']
 
 export async function GET() {
   try {
