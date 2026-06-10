@@ -5,7 +5,8 @@ import {
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   isWithinInterval, parseISO, format,
 } from 'date-fns'
-import type { Call, Meeting } from '@/lib/types'
+import type { Call } from '@/lib/types'
+import type { CalendarEvent } from '@/lib/booking'
 
 type Period = 'daily' | 'weekly' | 'monthly' | 'all'
 
@@ -89,7 +90,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 const NO_DURATION_FILTER = '__no_duration__'
 
-export default function CallingModule({ calls, meetings }: { calls: Call[]; meetings: Meeting[] }) {
+export default function CallingModule({ calls, calEvents }: { calls: Call[]; calEvents: CalendarEvent[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [period, setPeriod] = useState<Period>('weekly')
@@ -105,16 +106,36 @@ export default function CallingModule({ calls, meetings }: { calls: Call[]; meet
   const stats = useMemo(() => {
     const dialled   = periodCalls.length
     const connected = periodCalls.filter(c => isConnected(c.outcome)).length
-    const bookedCalls = periodCalls.filter(c => {
+
+    // L1 = calls in period where outcome indicates a meeting was scheduled
+    const l1Booked = periodCalls.filter(c => {
       const o = c.outcome.toLowerCase()
       return o.includes('meeting') || o.includes('scheduled')
-    })
-    // An account with any entry in the Meetings sheet is considered L2 (already had a meeting)
-    const accountsWithMeetings = new Set(meetings.map(m => m.accountName.toLowerCase().trim()))
-    const l1Booked = bookedCalls.filter(c => !accountsWithMeetings.has(c.account.toLowerCase().trim())).length
-    const l2Booked = bookedCalls.filter(c =>  accountsWithMeetings.has(c.account.toLowerCase().trim())).length
+    }).length
+
+    // L2 = GCal events with "l2" or "next steps" in title whose CREATED date falls in the selected period
+    let start: Date, end: Date
+    const now = new Date()
+    if (period === 'daily') {
+      start = startOfDay(now); end = endOfDay(now)
+    } else if (period === 'weekly') {
+      start = startOfWeek(now, { weekStartsOn: 1 })
+      end   = endOfWeek(now,   { weekStartsOn: 1 })
+    } else if (period === 'monthly') {
+      start = startOfMonth(now); end = endOfMonth(now)
+    } else {
+      start = new Date(0); end = new Date(8640000000000000)
+    }
+
+    const l2Booked = calEvents.filter(e => {
+      const lower = e.title.toLowerCase()
+      if (!lower.includes('l2') && !lower.includes('next steps')) return false
+      const created = safeParse(e.created)
+      return created && isWithinInterval(created, { start, end })
+    }).length
+
     return { dialled, connected, l1Booked, l2Booked }
-  }, [periodCalls, meetings])
+  }, [periodCalls, calEvents, period])
 
   const { notConnectedBreakdown, connectedBreakdown } = useMemo(() => {
     const map = new Map<string, number>()

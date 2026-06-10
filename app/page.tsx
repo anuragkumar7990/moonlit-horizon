@@ -1,18 +1,24 @@
 import { getCalls, getMeetings, getTargets, getRecentSummaries } from '@/lib/sheets'
 import { getDeals, getZohoCalls } from '@/lib/zoho'
 import { buildCallsData, buildMeetingsData, buildFunnel, buildLeadCounts, buildWeeklyTrend, mergeCallSources } from '@/lib/dashboard'
+import { getCalendarEvents } from '@/lib/booking'
 import HomeTabs from '@/components/HomeTabs'
 
 export const revalidate = 60
 
 export default async function HomePage() {
-  const [callsRes, meetingsRes, dealsRes, targetsRes, zohoCallsRes, summaryRes] = await Promise.allSettled([
+  const todayIST = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' })
+  const ninetyDaysLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+    .toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' })
+
+  const [callsRes, meetingsRes, dealsRes, targetsRes, zohoCallsRes, summaryRes, calEventsRes] = await Promise.allSettled([
     getCalls(),
     getMeetings(),
     getDeals(),
     getTargets(),
     getZohoCalls(),
     getRecentSummaries(4),
+    getCalendarEvents(todayIST, ninetyDaysLater),
   ])
 
   const calls      = callsRes.status      === 'fulfilled' ? callsRes.value      : []
@@ -21,6 +27,7 @@ export default async function HomePage() {
   const targets    = targetsRes.status    === 'fulfilled' ? targetsRes.value    : []
   const zohoCalls  = zohoCallsRes.status  === 'fulfilled' ? zohoCallsRes.value  : []
   const summaries  = summaryRes.status    === 'fulfilled' ? summaryRes.value    : []
+  const calEvents  = calEventsRes.status  === 'fulfilled' ? calEventsRes.value  : []
 
   const allCalls = mergeCallSources(calls, zohoCalls)
   const weeklySummary  = summaries[0]?.summary ?? null
@@ -39,6 +46,7 @@ export default async function HomePage() {
       monthlySummary={monthlySummary}
       rawCalls={allCalls}
       rawMeetings={meetings}
+      calEvents={calEvents}
     />
   )
 }

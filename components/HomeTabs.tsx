@@ -21,6 +21,7 @@ import DailyScrumModule from './DailyScrumModule'
 import WBRModule from './WBRModule'
 import type { Call, Meeting, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
+import type { CalendarEvent } from '@/lib/booking'
 
 type Tab =
   | 'tracker'
@@ -52,6 +53,7 @@ interface Props {
   monthlySummary?: string | null
   rawCalls:        Call[]
   rawMeetings:     Meeting[]
+  calEvents:       CalendarEvent[]
 }
 
 const PRIMARY_TABS: { id: Tab; label: string }[] = [
@@ -277,7 +279,7 @@ function OthersDropdown({
 }
 
 export default function HomeTabs({
-  callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, monthlySummary, rawCalls, rawMeetings,
+  callsData, meetingsData, leads, funnel, weeklyTrend, weeklySummary, monthlySummary, rawCalls, rawMeetings, calEvents,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -349,7 +351,7 @@ export default function HomeTabs({
           monthlySummary={monthlySummary}
         />
       )}
-      {tab === 'calling'    && <CallingModule calls={rawCalls} meetings={rawMeetings} />}
+      {tab === 'calling'    && <CallingModule calls={rawCalls} calEvents={calEvents} />}
       {tab === 'accounts'   && <AccountsModule />}
       {tab === 'contacts'   && <ContactsModule />}
       {tab === 'prospects'  && <ProspectModule />}

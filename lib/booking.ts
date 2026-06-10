@@ -147,6 +147,7 @@ export interface CalendarEvent {
   title: string
   startTime: string      // ISO datetime
   endTime: string
+  created: string        // ISO datetime — when the event was created in GCal
   gMeetLink: string | null
   attendeeEmails: string[]
 }
@@ -181,6 +182,7 @@ export async function getCalendarEvents(istDateFrom: string, istDateTo?: string)
         title:          e.summary ?? '',
         startTime:      e.start?.dateTime ?? e.start?.date ?? '',
         endTime:        e.end?.dateTime ?? e.end?.date ?? '',
+        created:        e.created ?? '',
         gMeetLink:      meetEntry?.uri ?? null,
         attendeeEmails: (e.attendees ?? []).map(a => a.email ?? '').filter(Boolean),
       }
