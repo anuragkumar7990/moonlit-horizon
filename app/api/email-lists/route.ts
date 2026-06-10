@@ -4,7 +4,7 @@ import { getEmailListCounts } from '@/lib/sheets'
 
 export const dynamic = 'force-dynamic'
 
-export const EMAIL_CATEGORIES = [
+const EMAIL_CATEGORIES = [
   'Email - QA Domestic',
   'Email - QA International',
   'Email - Engineering Domestic',
