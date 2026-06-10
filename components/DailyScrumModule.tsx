@@ -16,6 +16,8 @@ interface ScheduledMeeting {
   contactName: string
   meetingType: string
   conducted: boolean
+  startTime?: string
+  source?: 'sheets' | 'zoho' | 'calendar'
   circlebakNotes: string | null
 }
 
@@ -337,6 +339,12 @@ export default function DailyScrumModule() {
                         <p className="text-xs font-medium text-mh-text truncate">{m.accountName}</p>
                         {m.contactName && <p className="text-[10px] text-mh-muted">{m.contactName}</p>}
                       </div>
+                      {m.source === 'calendar' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(66,133,244,0.15)', color: '#4285F4' }}>GCal</span>
+                      )}
+                      {m.source === 'zoho' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(255,140,0,0.15)', color: '#FF8C00' }}>Zoho</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -453,6 +461,12 @@ export default function DailyScrumModule() {
                           >
                             {isConducted ? 'Conducted' : 'Pending'}
                           </span>
+                          {m.source === 'calendar' && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(66,133,244,0.15)', color: '#4285F4' }}>GCal</span>
+                          )}
+                          {m.source === 'zoho' && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(255,140,0,0.15)', color: '#FF8C00' }}>Zoho</span>
+                          )}
                           {hasCircle && (
                             <button
                               onClick={() => setExpandedNotes(prev => {

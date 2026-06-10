@@ -135,3 +135,48 @@ export async function bookMeeting(payload: {
 
   return { meetingId, gMeetLink, dealId, dealError }
 }
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  startTime: string      // ISO datetime
+  endTime: string
+  gMeetLink: string | null
+  attendeeEmails: string[]
+}
+
+export async function getCalendarEvents(istDateFrom: string, istDateTo?: string): Promise<CalendarEvent[]> {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID
+  if (!calendarId) return []
+
+  const auth = getGoogleAuth()
+  const calendar = google.calendar({ version: 'v3', auth })
+
+  const timeMin = new Date(`${istDateFrom}T00:00:00+05:30`).toISOString()
+  const endDate  = istDateTo ?? istDateFrom
+  const timeMax  = new Date(`${endDate}T23:59:59+05:30`).toISOString()
+
+  const res = await calendar.events.list({
+    calendarId,
+    timeMin,
+    timeMax,
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 100,
+  })
+
+  return (res.data.items ?? [])
+    .filter(e => e.status !== 'cancelled')
+    .map(e => {
+      const entryPoints = e.conferenceData?.entryPoints ?? []
+      const meetEntry = entryPoints.find(ep => ep.entryPointType === 'video')
+      return {
+        id:             e.id ?? '',
+        title:          e.summary ?? '',
+        startTime:      e.start?.dateTime ?? e.start?.date ?? '',
+        endTime:        e.end?.dateTime ?? e.end?.date ?? '',
+        gMeetLink:      meetEntry?.uri ?? null,
+        attendeeEmails: (e.attendees ?? []).map(a => a.email ?? '').filter(Boolean),
+      }
+    })
+}
