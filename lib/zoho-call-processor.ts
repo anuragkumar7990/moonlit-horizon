@@ -115,7 +115,7 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     await appendCallRow({ date, time, account: accountName, contactName, contactPhone, email, designation, sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
     console.log(`[zoho-call-processor] Wrote to Sheets — ${accountName} / ${call.callResult} / ${date}`)
   } else if (existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company')) {
-    await updateCallAccountRow(existingRow.rowIndex, accountName, contactName, contactPhone)
+    await updateCallAccountRow(existingRow.rowIndex, accountName, contactName, contactPhone, email, designation)
     console.log(`[zoho-call-processor] Updated untagged row ${existingRow.rowIndex} — ${accountName}`)
   } else {
     console.log(`[zoho-call-processor] Skipped — ${callId} already in Sheets`)

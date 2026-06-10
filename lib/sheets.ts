@@ -249,18 +249,25 @@ export async function getAllCallRowsFromSheet(): Promise<Map<string, { rowIndex:
   return result
 }
 
-export async function updateCallAccountRow(rowIndex: number, account: string, contactName: string, contactPhone: string): Promise<void> {
+export async function updateCallAccountRow(
+  rowIndex: number,
+  account: string,
+  contactName: string,
+  contactPhone: string,
+  email?: string,
+  designation?: string,
+): Promise<void> {
   const sheets = getSheets()
+  const data: { range: string; values: string[][] }[] = [
+    { range: `Calls!C${rowIndex}`, values: [[account]] },
+    { range: `Calls!D${rowIndex}`, values: [[contactName]] },
+    { range: `Calls!E${rowIndex}`, values: [[contactPhone]] },
+  ]
+  if (email)       data.push({ range: `Calls!O${rowIndex}`, values: [[email]] })
+  if (designation) data.push({ range: `Calls!P${rowIndex}`, values: [[designation]] })
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
-    requestBody: {
-      valueInputOption: 'USER_ENTERED',
-      data: [
-        { range: `Calls!C${rowIndex}`, values: [[account]] },
-        { range: `Calls!D${rowIndex}`, values: [[contactName]] },
-        { range: `Calls!E${rowIndex}`, values: [[contactPhone]] },
-      ],
-    },
+    requestBody: { valueInputOption: 'USER_ENTERED', data },
   })
 }
 

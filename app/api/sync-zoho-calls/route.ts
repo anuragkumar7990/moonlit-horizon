@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getZohoCallsInRange } from '@/lib/zoho'
-import { callExistsInSheetByZohoId } from '@/lib/sheets'
+import { callExistsInSheetByZohoId, getAllCallRowsFromSheet } from '@/lib/sheets'
 import { processZohoCall } from '@/lib/zoho-call-processor'
 
 export const dynamic = 'force-dynamic'
@@ -60,5 +60,28 @@ export async function GET(req: NextRequest) {
 
   console.log(`[sync-zoho-calls] since=${since} until=${until} total=${callsInRange.length} synced=${synced} skipped=${skipped} junk=${junk} errors=${errors}`)
 
-  return NextResponse.json({ since, until, synced, skipped, junk, errors, total: callsInRange.length, results })
+  // Re-enrich any rows that previously landed as "Untagged Company #..." — their Zoho leads
+  // may now have company/email filled in (e.g. after a webinar batch import gets enriched).
+  const reenrichResults: { callId: string; status: string; account?: string }[] = []
+  try {
+    const allRows = await getAllCallRowsFromSheet()
+    const untagged = Array.from(allRows.entries()).filter(([, v]) => v.account.startsWith('Untagged Company #'))
+    for (const [callId, existingRow] of untagged) {
+      try {
+        const r = await processZohoCall(callId, { existingRow })
+        const wasResolved = !r.account.startsWith('Untagged Company')
+        reenrichResults.push({ callId, status: wasResolved ? 'reenriched' : 'still_untagged', account: r.account })
+      } catch (e) {
+        reenrichResults.push({ callId, status: 'error', account: String(e) })
+      }
+    }
+    const resolved = reenrichResults.filter(r => r.status === 'reenriched').length
+    if (untagged.length > 0) {
+      console.log(`[sync-zoho-calls] re-enrich: total=${untagged.length} resolved=${resolved}`)
+    }
+  } catch (e) {
+    console.error('[sync-zoho-calls] re-enrich pass failed:', e)
+  }
+
+  return NextResponse.json({ since, until, synced, skipped, junk, errors, total: callsInRange.length, results, reenrichResults })
 }
