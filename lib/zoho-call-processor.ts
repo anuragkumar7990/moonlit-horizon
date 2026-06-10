@@ -13,6 +13,12 @@ const FREE_EMAIL_DOMAINS = new Set([
   'protonmail.com', 'proton.me', 'aol.com', 'ymail.com',
 ])
 
+function toTitleCase(str: string): string {
+  if (!str) return str
+  // Preserve all-caps tokens (abbreviations like LTM, KPMG, ABB)
+  return str.replace(/\w+/g, w => w === w.toUpperCase() ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+}
+
 function inferCompanyFromDomain(email: string): string {
   const domain = email.split('@')[1]?.toLowerCase()
   if (!domain || FREE_EMAIL_DOMAINS.has(domain)) return ''
@@ -65,17 +71,17 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   if (whoIsLead && whoId?.id) {
     leadIdForUpdate = whoId.id
     const lead = await getLeadById(leadIdForUpdate)
-    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company; designation = lead.designation }
+    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = toTitleCase(lead.company); designation = lead.designation }
     if (!contactName && whoId.name) contactName = whoId.name
   } else if ((whoIsLead || whatIsLead) && whatId?.id) {
     // Zoho sometimes places the lead in What_Id (not Who_Id) when $se_module=Leads
     leadIdForUpdate = whatId.id
     const lead = await getLeadById(leadIdForUpdate)
-    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = lead.company; designation = lead.designation }
+    if (lead) { contactName = `${lead.firstName} ${lead.lastName}`.trim(); email = lead.email; contactPhone = lead.phone; accountName = toTitleCase(lead.company); designation = lead.designation }
     if (!contactName && whatId.name) contactName = whatId.name
   } else if (whoId?.id) {
     const contact = await getContactById(whoId.id)
-    if (contact) { contactName = `${contact.firstName} ${contact.lastName}`.trim(); email = contact.email; accountName = contact.accountName; designation = contact.designation }
+    if (contact) { contactName = `${contact.firstName} ${contact.lastName}`.trim(); email = contact.email; accountName = toTitleCase(contact.accountName); designation = contact.designation }
     if (!contactName && whoId.name) contactName = whoId.name
     if (!accountName && whatId?.name) accountName = whatId.name
   }
