@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
     const companyKey      = findKey(headers, ['company', 'organization', 'organisation', 'account', 'companyname', 'company name', 'employer', 'org'])
     const personalEmailKey = findKey(headers, ['email', 'emailaddress', 'email address', 'e-mail', 'contactemail', 'contact email'])
     const workEmailKey    = findWorkEmailKey(headers)
-    const phoneKey        = findKey(headers, ['phone_number', 'phone', 'mobile', 'phonenumber', 'phone number', 'contact number', 'contactphone', 'contact phone', 'cell', 'cell phone', 'telephone', 'work phone'])
+    const phoneKey        = findKey(headers, ['phone_number', 'phone', 'mobile', 'mobile phone', 'mobilephone', 'phonenumber', 'phone number', 'contact number', 'contactphone', 'contact phone', 'cell', 'cell phone', 'telephone', 'work phone'])
     const designationKey  = findKey(headers, ['designation', 'title', 'role', 'jobtitle', 'job title', 'position', 'job role', 'seniority'])
     const priorityKey     = findKey(headers, ['priority'])
     const cityKey         = findKey(headers, ['city', 'location'])
