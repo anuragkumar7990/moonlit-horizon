@@ -4,6 +4,9 @@ import { syncCallIntel } from '@/lib/intel'
 
 const JUNK_ACCOUNT_NAMES = new Set([
   'discord bot', 'test1', 'test', 'test call', 'test account',
+  'the test tribe', 'thetesttribe',
+  // Generic/bad inferences that are never real accounts
+  'india', '123', 'mt',
 ])
 
 const FREE_EMAIL_DOMAINS = new Set([
@@ -84,6 +87,9 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     if (contact) { contactName = `${contact.firstName} ${contact.lastName}`.trim(); email = contact.email; accountName = toTitleCase(contact.accountName); designation = contact.designation }
     if (!contactName && whoId.name) contactName = whoId.name
     if (!accountName && whatId?.name) accountName = whatId.name
+  } else if (seModule === 'accounts' && whatId?.name) {
+    // Call logged against an Account record directly — grab name from What_Id
+    accountName = whatId.name
   }
 
   // Enrich missing fields from Prospects sheet (Zoho leads often lack Company/Designation)

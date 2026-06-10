@@ -249,6 +249,45 @@ export async function getAllCallRowsFromSheet(): Promise<Map<string, { rowIndex:
   return result
 }
 
+async function getCallsSheetId(sheets: ReturnType<typeof getSheets>): Promise<number> {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+  const sheet = meta.data.sheets?.find(s => s.properties?.title === 'Calls')
+  return sheet?.properties?.sheetId ?? 0
+}
+
+// Deletes all Calls rows where the account name (col C) exactly matches any of the given names.
+// Rows are deleted bottom-up to avoid index shifting. Returns count of rows deleted.
+export async function deleteCallRowsByAccountNames(accountNames: string[]): Promise<number> {
+  const sheets = getSheets()
+  const nameSet = new Set(accountNames.map(n => n.toLowerCase().trim()))
+
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Calls!A:C' })
+  const rows = res.data.values ?? []
+
+  // Collect 1-based sheet row numbers to delete (skip header at index 0)
+  const toDelete: number[] = []
+  for (let i = 1; i < rows.length; i++) {
+    const account = String(rows[i][2] ?? '').toLowerCase().trim()
+    if (nameSet.has(account)) toDelete.push(i + 1) // i+1 because sheets are 1-indexed, header is row 1
+  }
+  if (toDelete.length === 0) return 0
+
+  const sheetId = await getCallsSheetId(sheets)
+
+  // Delete bottom-up so row indices stay valid
+  const requests = [...toDelete].reverse().map(rowIndex => ({
+    deleteDimension: {
+      range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex },
+    },
+  }))
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: { requests },
+  })
+  return toDelete.length
+}
+
 export async function updateCallAccountRow(
   rowIndex: number,
   account: string,
