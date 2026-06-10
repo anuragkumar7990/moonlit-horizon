@@ -28,9 +28,9 @@ export async function GET() {
     const in14days = new Date(Date.now() + IST_OFFSET_MS + 14 * 86400000).toISOString().slice(0, 10)
 
     const [allDeals, lostDeals, meetings, calEvents] = await Promise.all([
-      getDeals(),
+      getDeals().catch(e => { throw new Error(`getDeals: ${e}`) }),
       getLostDeals(),
-      getMeetings(),
+      getMeetings().catch(e => { throw new Error(`getMeetings: ${e}`) }),
       getCalendarEvents(today, in14days).catch(() => []),
     ])
 

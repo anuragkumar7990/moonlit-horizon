@@ -263,7 +263,10 @@ export default function DealsModule() {
     if (!background) setLoading(true)
     try {
       const res = await fetch('/api/deals')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(`HTTP ${res.status}${body.error ? `: ${body.error}` : ''}`)
+      }
       const d = await res.json() as DealsData
       setData(background ? applyPendingOverServer(d) : d)
       setError(null)
