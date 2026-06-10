@@ -14,8 +14,12 @@ const JUNK = ['untagged company', 'the test tribe', 'test']
 const isJunk = (name: string) => JUNK.some(p => name.toLowerCase().includes(p))
 
 function extractAccountFromTitle(title: string): string {
-  const match = title.match(/^(.+?)\s*<>/)
-  return match ? match[1].trim() : title
+  const parts = title.split('<>')
+  if (parts.length < 2) return title
+  const left = parts[0].trim()
+  const right = parts[1].split('|')[0].trim()
+  // Return whichever side is not TTT itself (handles both "Account <> TTT" and "TTT <> Account")
+  return left.toLowerCase().includes('the test tribe') ? right : left
 }
 
 async function ensureScrumTab(sheets: ReturnType<typeof getSheets>) {

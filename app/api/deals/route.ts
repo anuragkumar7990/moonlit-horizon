@@ -12,8 +12,11 @@ const JUNK_PATTERNS = ['untagged company', 'the test tribe', 'test']
 const isJunk = (name: string) => JUNK_PATTERNS.some(p => name.toLowerCase().includes(p))
 
 function extractAccountFromTitle(title: string): string {
-  const match = title.match(/^(.+?)\s*<>/)
-  return match ? match[1].trim() : title
+  const parts = title.split('<>')
+  if (parts.length < 2) return title
+  const left = parts[0].trim()
+  const right = parts[1].split('|')[0].trim()
+  return left.toLowerCase().includes('the test tribe') ? right : left
 }
 
 const TTT_CAL_PATTERNS = ['test tribe', 'upskilling', 'training', 'l1', 'l2']
