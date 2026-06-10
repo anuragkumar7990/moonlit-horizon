@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { LostDealCategory } from '@/lib/sheets'
 
 type Temperature = 'Hot' | 'Warm' | 'Cold' | null
@@ -67,36 +68,58 @@ function TempBadge({ temperature, dealId, onUpdate }: {
   onUpdate: (dealId: string, temp: Temperature) => void
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const dropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (
+        btnRef.current && !btnRef.current.contains(target) &&
+        (dropRef.current == null || !dropRef.current.contains(target))
+      ) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  function handleToggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 4, left: r.left })
+    }
+    setOpen(o => !o)
+  }
+
   const c = temperature ? TEMP_COLORS[temperature] : null
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={handleToggle}
         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
         style={c ? { background: c.badge, color: c.label } : { background: 'rgba(255,255,255,0.06)', color: '#888899' }}
       >
         {c && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.dot }} />}
         {temperature ?? 'Unassigned'}
       </button>
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
-          className="absolute top-full mt-1 left-0 py-1 min-w-[110px] rounded-xl shadow-xl"
+          ref={dropRef}
           style={{
-            zIndex: 9999,
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 99999,
             background: 'rgba(10,10,18,0.98)',
             border: '1px solid rgba(255,255,255,0.12)',
             backdropFilter: 'blur(16px)',
+            borderRadius: '12px',
+            padding: '4px 0',
+            minWidth: '110px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
           }}
         >
           {(['Hot', 'Warm', 'Cold', null] as Temperature[]).map(t => (
@@ -107,12 +130,13 @@ function TempBadge({ temperature, dealId, onUpdate }: {
             >
               {t ? <span className="w-2 h-2 rounded-full shrink-0" style={{ background: TEMP_COLORS[t].dot }} /> : <span className="w-2 h-2 shrink-0" />}
               <span style={{ color: t ? TEMP_COLORS[t].label : '#888899' }}>{t ?? 'Unassigned'}</span>
-              {temperature === t && <span className="ml-auto text-[10px] text-mh-muted">✓</span>}
+              {temperature === t && <span className="ml-auto text-[10px] opacity-60">✓</span>}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
@@ -128,13 +152,12 @@ function DealCard({
   return (
     <div
       className="card py-2 px-3 mb-2 cursor-grab select-none text-xs"
-      style={{ overflow: 'visible' }}
       draggable
       onDragStart={e => e.dataTransfer.setData('dealId', deal.id)}
     >
       <div className="font-semibold text-mh-text text-[11px] leading-tight mb-1 truncate" title={deal.name}>{deal.name}</div>
       <div className="text-mh-muted truncate mb-2" title={deal.account}>{deal.account}</div>
-      <div className="flex items-center justify-between gap-2" style={{ overflow: 'visible' }}>
+      <div className="flex items-center justify-between gap-2">
         <TempBadge temperature={deal.temperature} dealId={deal.id} onUpdate={onTempUpdate} />
         {deal.amount && deal.amount !== 'null' && (
           <span className="text-[10px] text-mh-muted">₹{Number(deal.amount).toLocaleString('en-IN')}</span>
@@ -232,16 +255,16 @@ export default function DealsModule() {
 
   async function handleTempUpdate(dealId: string, temperature: Temperature) {
     if (!data) return
+    // Optimistic — don't reload after; Zoho is async and would revert the value
     setData(prev => prev ? {
       ...prev,
       active: prev.active.map(d => d.id === dealId ? { ...d, temperature } : d),
     } : prev)
-    await fetch('/api/update-deal-temperature', {
+    fetch('/api/update-deal-temperature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, temperature }),
     })
-    await load(true)
   }
 
   async function handleKanbanDrop(e: React.DragEvent, newStage: string) {
@@ -250,27 +273,29 @@ export default function DealsModule() {
     if (!dealId) return
     const deal = data?.active.find(d => d.id === dealId)
     if (!deal || deal.stage === newStage) return
+    // Optimistic — don't reload after; Zoho is async and would revert the value
     setData(prev => prev ? {
       ...prev,
       active: prev.active.map(d => d.id === dealId ? { ...d, stage: newStage } : d),
     } : prev)
-    await fetch('/api/update-deal-stage', {
+    fetch('/api/update-deal-stage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, stage: newStage }),
     })
-    await load(true)
   }
 
   async function handleMoveToNegative(deal: ActiveDeal, category: LostDealCategory, notes: string) {
+    // Optimistic: remove from active immediately
+    setData(prev => prev ? { ...prev, active: prev.active.filter(d => d.id !== deal.id) } : prev)
+    setMoveModal(null)
+    setPendingNotes('')
     await fetch('/api/move-deal-to-lost', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
     })
-    setMoveModal(null)
-    setPendingNotes('')
-    await load(true)
+    load(true)
   }
 
   async function handleDrop(dealId: string, category: LostDealCategory) {
@@ -281,13 +306,15 @@ export default function DealsModule() {
   }
 
   async function handleRestore(lostDeal: LostDeal, targetStage: string) {
+    // Optimistic: remove from lost immediately
+    setData(prev => prev ? { ...prev, lost: prev.lost.filter(d => d.rowIndex !== lostDeal.rowIndex) } : prev)
+    setRestoreModal(null)
     await fetch('/api/restore-deal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sheetRowIndex: lostDeal.rowIndex, dealId: lostDeal.dealId, targetStage }),
     })
-    setRestoreModal(null)
-    await load(true)
+    load(true)
   }
 
   const filtered = (data?.active ?? []).filter(d => {
@@ -339,37 +366,10 @@ export default function DealsModule() {
         </div>
       )}
 
-      {/* Controls — single line */}
-      <div className="flex items-center gap-3">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search deals..."
-          className="bg-mh-card border border-mh-border rounded-lg px-3 py-1.5 text-sm placeholder:text-mh-muted outline-none focus:border-mh-vermillion/50 w-48"
-          style={{ color: '#E5E7EB' }}
-        />
-        <div className="flex items-center gap-1">
-          {(['All', 'Hot', 'Warm', 'Cold'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTempFilter(t === 'All' ? 'All' : t as Temperature)}
-              className="px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap"
-              style={tempFilter === t
-                ? { background: t === 'All' ? '#444' : TEMP_COLORS[t as NonNullable<Temperature>].badge, color: t === 'All' ? '#fff' : TEMP_COLORS[t as NonNullable<Temperature>].label, border: `1px solid ${t === 'All' ? '#666' : TEMP_COLORS[t as NonNullable<Temperature>].dot}` }
-                : { background: 'rgba(255,255,255,0.04)', color: '#888899', border: '1px solid rgba(255,255,255,0.08)' }
-              }
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <span className="text-xs text-mh-muted ml-auto shrink-0">{filtered.length} active deals</span>
-      </div>
-
       {/* Row 1: Upcoming Meetings + Pipeline */}
       <div className="grid grid-cols-[280px_1fr] gap-4">
 
-        {/* Upcoming Meetings — capped at 5, scrollable */}
+        {/* Upcoming Meetings */}
         <div className="card flex flex-col" style={{ maxHeight: CARD_HEIGHT }}>
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3 shrink-0">Upcoming Meetings</p>
           {(data?.upcoming ?? []).length === 0 ? (
@@ -391,7 +391,7 @@ export default function DealsModule() {
           )}
         </div>
 
-        {/* Pipeline Funnel — same height as Upcoming */}
+        {/* Pipeline Funnel */}
         <div className="card flex flex-col" style={{ maxHeight: CARD_HEIGHT }}>
           <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3 shrink-0">Pipeline</p>
           <div className="space-y-2 overflow-y-auto flex-1">
@@ -416,7 +416,34 @@ export default function DealsModule() {
 
       {/* Kanban Board */}
       <div>
-        <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-3">Kanban</p>
+        <div className="flex items-center gap-4 mb-3">
+          <p className="text-base font-bold text-mh-text">Kanban Board</p>
+          <div className="flex items-center gap-2 flex-1">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search deals..."
+              className="border border-mh-border rounded-lg px-3 py-1 text-xs placeholder:text-mh-muted outline-none focus:border-mh-vermillion/50 w-40"
+              style={{ color: '#E5E7EB', background: '#0d0d1a' }}
+            />
+            <div className="flex items-center gap-1">
+              {(['All', 'Hot', 'Warm', 'Cold'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTempFilter(t === 'All' ? 'All' : t as Temperature)}
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all whitespace-nowrap"
+                  style={tempFilter === t
+                    ? { background: t === 'All' ? '#444' : TEMP_COLORS[t as NonNullable<Temperature>].badge, color: t === 'All' ? '#fff' : TEMP_COLORS[t as NonNullable<Temperature>].label, border: `1px solid ${t === 'All' ? '#666' : TEMP_COLORS[t as NonNullable<Temperature>].dot}` }
+                    : { background: 'rgba(255,255,255,0.04)', color: '#888899', border: '1px solid rgba(255,255,255,0.08)' }
+                  }
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] text-mh-muted ml-auto">{filtered.length} deals</span>
+          </div>
+        </div>
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${KANBAN_STAGES.length}, minmax(0, 1fr))` }}>
           {KANBAN_STAGES.map(stage => {
             const cards = byStage(stage)
@@ -425,7 +452,7 @@ export default function DealsModule() {
               <div
                 key={stage}
                 className="rounded-xl p-2 min-h-[120px]"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', overflow: 'visible' }}
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => handleKanbanDrop(e, stage)}
               >
@@ -433,19 +460,17 @@ export default function DealsModule() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider truncate" style={{ color: col }}>{stage}</span>
                   <span className="text-[11px] font-bold ml-1 shrink-0" style={{ color: col }}>{cards.length}</span>
                 </div>
-                <div style={{ overflow: 'visible' }}>
-                  {cards.map(deal => (
-                    <DealCard
-                      key={deal.id}
-                      deal={deal}
-                      onTempUpdate={handleTempUpdate}
-                      onMoveToNegative={d => { setMoveModal({ deal: d }); setPendingCategory('Lost') }}
-                    />
-                  ))}
-                  {cards.length === 0 && (
-                    <p className="text-[10px] text-mh-muted/30 italic px-1 py-4 text-center">Empty</p>
-                  )}
-                </div>
+                {cards.map(deal => (
+                  <DealCard
+                    key={deal.id}
+                    deal={deal}
+                    onTempUpdate={handleTempUpdate}
+                    onMoveToNegative={d => { setMoveModal({ deal: d }); setPendingCategory('Lost') }}
+                  />
+                ))}
+                {cards.length === 0 && (
+                  <p className="text-[10px] text-mh-muted/30 italic px-1 py-4 text-center">Empty</p>
+                )}
               </div>
             )
           })}
