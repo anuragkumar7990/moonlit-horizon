@@ -4,20 +4,20 @@ import {
   startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   isWithinInterval, parseISO, format,
 } from 'date-fns'
-import type { Call } from '@/lib/types'
+import type { Call, Meeting } from '@/lib/types'
 
 type Period = 'daily' | 'weekly' | 'monthly' | 'all'
 
-// RNR, Wrong Number, and Incoming Not Available are the only non-connected outcomes
-const NOT_CONNECTED = new Set([
-  'rnr', 'rang no response',
-  'wrong number',
-  'incoming not available',
-])
+const NOT_CONNECTED_KEYWORDS = [
+  'rnr', 'rang no response', 'switched off', 'unreachable',
+  'wrong number', 'incoming not available', 'no answer',
+  'voicemail', 'busy', 'not reachable', 'unanswered',
+]
 
 function isConnected(outcome: string): boolean {
   const o = outcome.toLowerCase().trim()
-  return o !== '' && !NOT_CONNECTED.has(o)
+  if (!o) return false
+  return !NOT_CONNECTED_KEYWORDS.some(kw => o.includes(kw))
 }
 
 function safeParse(d: string): Date | null {
@@ -88,7 +88,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 const NO_DURATION_FILTER = '__no_duration__'
 
-export default function CallingModule({ calls }: { calls: Call[] }) {
+export default function CallingModule({ calls, meetings }: { calls: Call[]; meetings: Meeting[] }) {
   const [period, setPeriod] = useState<Period>('weekly')
   const [search, setSearch] = useState('')
   const [outcomeFilter, setOutcomeFilter] = useState('all')
@@ -98,30 +98,36 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
   const periodCalls = useMemo(() => filterByPeriod(calls, period), [calls, period])
 
   const stats = useMemo(() => {
-    const dialled    = periodCalls.length
-    const connected  = periodCalls.filter(c => isConnected(c.outcome)).length
-    const booked     = periodCalls.filter(c => {
+    const dialled   = periodCalls.length
+    const connected = periodCalls.filter(c => isConnected(c.outcome)).length
+    const bookedCalls = periodCalls.filter(c => {
       const o = c.outcome.toLowerCase()
       return o.includes('meeting') || o.includes('scheduled')
-    }).length
-    const noDuration = periodCalls.filter(c => !c.duration || c.duration === '0:00' || c.duration === '0').length
-    const rate = dialled > 0 ? Math.round((connected / dialled) * 100) : 0
-    return { dialled, connected, booked, noDuration, rate }
-  }, [periodCalls])
+    })
+    // An account with any entry in the Meetings sheet is considered L2 (already had a meeting)
+    const accountsWithMeetings = new Set(meetings.map(m => m.accountName.toLowerCase().trim()))
+    const l1Booked = bookedCalls.filter(c => !accountsWithMeetings.has(c.account.toLowerCase().trim())).length
+    const l2Booked = bookedCalls.filter(c =>  accountsWithMeetings.has(c.account.toLowerCase().trim())).length
+    return { dialled, connected, l1Booked, l2Booked }
+  }, [periodCalls, meetings])
 
-  const outcomeBreakdown = useMemo(() => {
+  const { notConnectedBreakdown, connectedBreakdown } = useMemo(() => {
     const map = new Map<string, number>()
     for (const c of periodCalls) {
       const o = c.outcome || 'Unknown'
       map.set(o, (map.get(o) ?? 0) + 1)
     }
-    return Array.from(map.entries())
+    const all = Array.from(map.entries())
       .map(([outcome, count]) => ({
         outcome,
         count,
         pct: periodCalls.length > 0 ? Math.round((count / periodCalls.length) * 100) : 0,
       }))
       .sort((a, b) => b.count - a.count)
+    return {
+      notConnectedBreakdown: all.filter(o => !isConnected(o.outcome)),
+      connectedBreakdown:    all.filter(o =>  isConnected(o.outcome)),
+    }
   }, [periodCalls])
 
   const allOutcomes = useMemo(
@@ -196,40 +202,84 @@ export default function CallingModule({ calls }: { calls: Call[] }) {
 
       {/* Stats row */}
       <div className="grid grid-cols-5 gap-4 mb-6">
-        <StatCard label="Dialled"         value={stats.dialled} />
-        <StatCard label="Connected"       value={stats.connected} />
-        <StatCard label="Not Connected"   value={stats.dialled - stats.connected} sub={`${NOT_CONNECTED.size > 0 ? 100 - stats.rate : 0}% of calls`} />
-        <StatCard label="Meetings Booked" value={stats.booked} />
-        <StatCard label="No Duration"     value={stats.noDuration} sub="no pickup recorded" />
+        <StatCard label="Dialled"             value={stats.dialled} />
+        <StatCard label="Connected"           value={stats.connected} sub={stats.dialled > 0 ? `${Math.round((stats.connected / stats.dialled) * 100)}% of calls` : undefined} />
+        <StatCard label="Not Connected"       value={stats.dialled - stats.connected} sub={stats.dialled > 0 ? `${Math.round(((stats.dialled - stats.connected) / stats.dialled) * 100)}% of calls` : undefined} />
+        <StatCard label="L1 Meetings Booked"  value={stats.l1Booked} />
+        <StatCard label="L2 Meetings Booked"  value={stats.l2Booked} />
       </div>
 
-      {/* Outcome breakdown (full width — SDR Performance removed) */}
+      {/* Outcome breakdown */}
       <div className="card mb-6">
-        <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-4">Outcome Breakdown</p>
-        {outcomeBreakdown.length === 0 ? (
+        <p className="text-[10px] font-semibold text-mh-muted uppercase tracking-widest mb-5">Outcome Breakdown</p>
+        {notConnectedBreakdown.length === 0 && connectedBreakdown.length === 0 ? (
           <p className="text-mh-muted text-sm italic">No calls in this period.</p>
         ) : (
-          <div className="space-y-3">
-            {outcomeBreakdown.map(({ outcome, count, pct }) => (
-              <div key={outcome}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <OutcomeBadge outcome={outcome} />
-                  <span className="text-sm font-semibold text-mh-text">
-                    {count}{' '}
-                    <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
-                  </span>
+          <div className="space-y-6">
+
+            {/* Not Connected */}
+            {notConnectedBreakdown.length > 0 && (() => {
+              const total = notConnectedBreakdown.reduce((s, o) => s + o.count, 0)
+              const pctOfAll = periodCalls.length > 0 ? Math.round((total / periodCalls.length) * 100) : 0
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-mh-muted uppercase tracking-wide">Not Connected</p>
+                    <span className="text-xs text-mh-muted tabular-nums">{total} calls · {pctOfAll}% of total</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {notConnectedBreakdown.map(({ outcome, count, pct }) => (
+                      <div key={outcome}>
+                        <div className="flex items-center justify-between mb-1">
+                          <OutcomeBadge outcome={outcome} />
+                          <span className="text-sm font-semibold text-mh-text tabular-nums">
+                            {count} <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-[#1c1c1c] rounded-full">
+                          <div className="h-1.5 rounded-full transition-all"
+                            style={{ width: `${pct}%`, backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF' }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="h-1.5 bg-[#1c1c1c] rounded-full">
-                  <div
-                    className="h-1.5 rounded-full transition-all"
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF',
-                    }}
-                  />
+              )
+            })()}
+
+            {/* Connected */}
+            {connectedBreakdown.length > 0 && (() => {
+              const total = connectedBreakdown.reduce((s, o) => s + o.count, 0)
+              const pctOfAll = periodCalls.length > 0 ? Math.round((total / periodCalls.length) * 100) : 0
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-mh-muted uppercase tracking-wide">Connected</p>
+                    <span className="text-xs text-mh-muted tabular-nums">{total} calls · {pctOfAll}% of total</span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {connectedBreakdown.map(({ outcome, count, pct }) => {
+                      const isMtg = outcome.toLowerCase().includes('meeting') || outcome.toLowerCase().includes('scheduled')
+                      return (
+                        <div key={outcome} className={isMtg ? 'bg-emerald-900/10 rounded-lg px-2 py-2 -mx-2' : ''}>
+                          <div className="flex items-center justify-between mb-1">
+                            <OutcomeBadge outcome={outcome} />
+                            <span className={`font-semibold text-mh-text tabular-nums ${isMtg ? 'text-base' : 'text-sm'}`}>
+                              {count} <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
+                            </span>
+                          </div>
+                          <div className={`${isMtg ? 'h-2' : 'h-1.5'} bg-[#1c1c1c] rounded-full`}>
+                            <div className={`${isMtg ? 'h-2' : 'h-1.5'} rounded-full transition-all`}
+                              style={{ width: `${pct}%`, backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF' }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })()}
+
           </div>
         )}
       </div>

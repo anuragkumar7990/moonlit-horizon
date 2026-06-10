@@ -38,6 +38,7 @@ export default async function HomePage() {
       weeklySummary={weeklySummary}
       monthlySummary={monthlySummary}
       rawCalls={allCalls}
+      rawMeetings={meetings}
     />
   )
 }
