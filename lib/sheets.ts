@@ -234,16 +234,20 @@ export async function getAllZohoCallIdsFromSheet(): Promise<Set<string>> {
   } catch { return new Set() }
 }
 
-// Returns map of zohoCallId → { rowIndex (1-based, incl. header), account }
-export async function getAllCallRowsFromSheet(): Promise<Map<string, { rowIndex: number; account: string }>> {
+// Returns map of zohoCallId → { rowIndex (1-based, incl. header), account, contactName }
+export async function getAllCallRowsFromSheet(): Promise<Map<string, { rowIndex: number; account: string; contactName: string }>> {
   const sheets = getSheets()
-  const result = new Map<string, { rowIndex: number; account: string }>()
+  const result = new Map<string, { rowIndex: number; account: string; contactName: string }>()
   try {
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Calls!A:J' })
     const rows = res.data.values ?? []
     for (let i = 1; i < rows.length; i++) {
       const zohoId = String(rows[i][9] ?? '').trim()
-      if (zohoId) result.set(zohoId, { rowIndex: i + 1, account: String(rows[i][2] ?? '') })
+      if (zohoId) result.set(zohoId, {
+        rowIndex: i + 1,
+        account: String(rows[i][2] ?? ''),
+        contactName: String(rows[i][3] ?? ''),
+      })
     }
   } catch { /* return empty */ }
   return result
@@ -297,6 +301,7 @@ export async function updateCallAccountRow(
   contactPhone: string,
   email?: string,
   designation?: string,
+  duration?: string,
 ): Promise<void> {
   const sheets = getSheets()
   const data: { range: string; values: string[][] }[] = [
@@ -306,6 +311,7 @@ export async function updateCallAccountRow(
   ]
   if (email)       data.push({ range: `Calls!O${rowIndex}`, values: [[email]] })
   if (designation) data.push({ range: `Calls!P${rowIndex}`, values: [[designation]] })
+  if (duration)    data.push({ range: `Calls!G${rowIndex}`, values: [[duration]] })
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { valueInputOption: 'USER_ENTERED', data },

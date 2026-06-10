@@ -44,7 +44,7 @@ export function outcomeToLeadStatus(outcome: string): string | null {
   return null
 }
 
-export async function processZohoCall(callId: string, opts?: { existingRow?: { rowIndex: number; account: string } }): Promise<{
+export async function processZohoCall(callId: string, opts?: { existingRow?: { rowIndex: number; account: string; contactName?: string } }): Promise<{
   ok: boolean
   callId: string
   account: string
@@ -123,12 +123,17 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   const existingRow = opts?.existingRow ?? null
   const alreadyInSheets = existingRow ? true : await callExistsInSheetByZohoId(callId)
 
+  // A row needs updating if: it was untagged and now has a real company, OR
+  // it was written without a contact name (empty contactName = stale/incomplete row from old sync code).
+  const isIncompleteRow = existingRow && !existingRow.contactName && contactName
+  const wasUntagged = existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company')
+
   if (!alreadyInSheets) {
     await appendCallRow({ date, time, account: accountName, contactName, contactPhone, email, designation, sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
     console.log(`[zoho-call-processor] Wrote to Sheets — ${accountName} / ${call.callResult} / ${date}`)
-  } else if (existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company')) {
-    await updateCallAccountRow(existingRow.rowIndex, accountName, contactName, contactPhone, email, designation)
-    console.log(`[zoho-call-processor] Updated untagged row ${existingRow.rowIndex} — ${accountName}`)
+  } else if (wasUntagged || isIncompleteRow) {
+    await updateCallAccountRow(existingRow!.rowIndex, accountName, contactName, contactPhone, email, designation, call.callDuration || undefined)
+    console.log(`[zoho-call-processor] Updated row ${existingRow!.rowIndex} — ${accountName} (wasUntagged=${wasUntagged} isIncomplete=${!!isIncompleteRow})`)
   } else {
     console.log(`[zoho-call-processor] Skipped — ${callId} already in Sheets`)
   }
@@ -158,6 +163,6 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     upsertContactIntelRow(email, { date, time, outcome: call.callResult, notes: call.description, duration: call.callDuration, zohoCallId: callId }).catch(() => { /* best effort */ })
   }
 
-  const wasUpdated = !!(existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company'))
+  const wasUpdated = !!(wasUntagged || isIncompleteRow)
   return { ok: true, callId, account: accountName, skippedSheetsWrite: alreadyInSheets && !wasUpdated, date }
 }

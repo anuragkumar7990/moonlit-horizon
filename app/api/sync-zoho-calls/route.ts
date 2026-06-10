@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
   for (const c of callsInRange) {
     try {
       const existingRow = existingRows.get(c.id)
-      if (existingRow && !existingRow.account.startsWith('Untagged Company #')) {
+      // Skip rows that are fully enriched (have a real company AND a contact name)
+      if (existingRow && !existingRow.account.startsWith('Untagged Company #') && existingRow.contactName) {
         results.push({ callId: c.id, status: 'already_synced' })
         continue
       }
@@ -65,17 +66,19 @@ export async function GET(req: NextRequest) {
 
   console.log(`[sync-zoho-calls] since=${since} until=${until} total=${callsInRange.length} synced=${synced} skipped=${skipped} junk=${junk} errors=${errors}`)
 
-  // Re-enrich untagged rows using the already-loaded sheet map (no extra reads).
+  // Re-enrich untagged rows OR rows with no contact name (incomplete from old sync code).
   const reenrichResults: { callId: string; status: string; account?: string }[] = []
-  const untagged = Array.from(existingRows.entries()).filter(([, v]) => v.account.startsWith('Untagged Company #'))
+  const untagged = Array.from(existingRows.entries()).filter(
+    ([, v]) => v.account.startsWith('Untagged Company #') || !v.contactName
+  )
   // Skip call IDs we already processed above to avoid double-processing
   const processedIds = new Set(results.map(r => r.callId))
   for (const [callId, existingRow] of untagged) {
     if (processedIds.has(callId)) continue
     try {
       const r = await processZohoCall(callId, { existingRow })
-      const wasResolved = !r.account.startsWith('Untagged Company')
-      reenrichResults.push({ callId, status: wasResolved ? 'reenriched' : 'still_untagged', account: r.account })
+      const wasResolved = !r.skippedSheetsWrite
+      reenrichResults.push({ callId, status: wasResolved ? 'reenriched' : 'still_incomplete', account: r.account })
     } catch (e) {
       reenrichResults.push({ callId, status: 'error', account: String(e) })
     }
