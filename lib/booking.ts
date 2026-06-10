@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import { createDeal } from './zoho'
+import { createDeal, findDealIdByName } from './zoho'
 import { randomUUID } from 'crypto'
 
 const TTT_ATTENDEES = [
@@ -83,16 +83,22 @@ export async function bookMeeting(payload: {
   let dealError: string | undefined
 
   try {
-    dealId = await createDeal({
-      accountId,
-      accountName,
-      contactName,
-      contactEmail,
-      contactPhone,
-      stage: meetingType === 'L1' ? 'Discovery Call booked' : 'Outline Meeting Conducted',
-      closingDate,
-      dateOfFirstContact: startTime.toISOString().split('T')[0],
-    })
+    const existingDealId = await findDealIdByName(accountName)
+    if (existingDealId) {
+      dealId = existingDealId
+      console.log(`[bookMeeting] Reusing existing deal ${existingDealId} for ${accountName}`)
+    } else {
+      dealId = await createDeal({
+        accountId,
+        accountName,
+        contactName,
+        contactEmail,
+        contactPhone,
+        stage: meetingType === 'L1' ? 'Discovery Call booked' : 'Outline Meeting Conducted',
+        closingDate,
+        dateOfFirstContact: startTime.toISOString().split('T')[0],
+      })
+    }
   } catch (err) {
     dealError = String(err)
     console.error('[bookMeeting] Zoho deal creation failed:', err)

@@ -790,15 +790,19 @@ export async function getZohoCallsInRange(since: string, until: string): Promise
 }
 
 export async function findDealByName(dealName: string): Promise<boolean> {
+  return !!(await findDealIdByName(dealName))
+}
+
+export async function findDealIdByName(dealName: string): Promise<string | null> {
   const token = await getAccessToken()
   const encoded = encodeURIComponent(dealName)
   const res = await fetch(`${BASE_URL}/Deals/search?criteria=(Deal_Name:equals:${encoded})&fields=id&per_page=1`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
     cache: 'no-store',
   })
-  const data = await res.json() as { data?: unknown[]; status?: string }
-  if (data.status === 'error') return false
-  return (data.data?.length ?? 0) > 0
+  const data = await res.json() as { data?: { id?: string }[]; status?: string }
+  if (data.status === 'error') return null
+  return data.data?.[0]?.id ?? null
 }
 
 export async function createDealLight(dealName: string, stage: string, closingDate: string): Promise<string | null> {
