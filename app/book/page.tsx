@@ -1,7 +1,7 @@
 import { getZohoAccounts, getContacts } from '@/lib/zoho'
 import BookingForm from './BookingForm'
 
-export const revalidate = 120
+export const dynamic = 'force-dynamic'
 
 export default async function BookPage({
   searchParams,

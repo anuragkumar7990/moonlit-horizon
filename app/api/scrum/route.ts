@@ -13,6 +13,11 @@ function todayIST() { return nowIST().toISOString().slice(0, 10) }
 const JUNK = ['untagged company', 'the test tribe', 'test']
 const isJunk = (name: string) => JUNK.some(p => name.toLowerCase().includes(p))
 
+function extractAccountFromTitle(title: string): string {
+  const match = title.match(/^(.+?)\s*<>/)
+  return match ? match[1].trim() : title
+}
+
 async function ensureScrumTab(sheets: ReturnType<typeof getSheets>) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
   const exists = meta.data.sheets?.some(s => (s.properties?.title ?? '') === 'Scrum Notes')
@@ -112,12 +117,6 @@ export async function GET() {
     })
 
     const intelByAccount = new Map(accountIntel.map(a => [a.account.toLowerCase(), a]))
-
-    // Extract account name from calendar title pattern: "AccountName <> The Test Tribe | ..."
-    function extractAccountFromTitle(title: string): string {
-      const match = title.match(/^(.+?)\s*<>/)
-      return match ? match[1].trim() : title
-    }
 
     const scheduledMeetings = [
       ...sheetsTodayMtgs.map(m => ({
