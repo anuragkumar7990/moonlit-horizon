@@ -560,6 +560,26 @@ export async function appendProspectRows(rows: {
   })
 }
 
+export async function getEmailListCounts(): Promise<Record<string, number>> {
+  try {
+    const sheets = getSheets()
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Prospects!I:J',
+    })
+    const rows = res.data.values ?? []
+    const counts: Record<string, number> = {}
+    for (let i = 1; i < rows.length; i++) {
+      const lvl1 = (rows[i][0] ?? '').trim()
+      const lvl2 = (rows[i][1] ?? '').trim()
+      if (lvl1.toLowerCase() === 'email' && lvl2) {
+        counts[lvl2] = (counts[lvl2] ?? 0) + 1
+      }
+    }
+    return counts
+  } catch { return {} }
+}
+
 // ── Targets sheet ────────────────────────────────────────────────────────────
 
 const TARGETS_HEADERS = ['Month', 'Metric Name', 'Target Value', 'Actual Value']
