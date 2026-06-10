@@ -100,14 +100,16 @@ export default function CallingModule({ calls, meetings }: { calls: Call[]; meet
   const stats = useMemo(() => {
     const dialled   = periodCalls.length
     const connected = periodCalls.filter(c => isConnected(c.outcome)).length
-    // All "Meeting Scheduled" outcomes from call logs = L1 (cold calling always produces L1s).
-    // L2 meetings are booked during/after the L1 and tracked via Google Calendar, not call logs.
-    const l1Booked = periodCalls.filter(c => {
+    const bookedCalls = periodCalls.filter(c => {
       const o = c.outcome.toLowerCase()
       return o.includes('meeting') || o.includes('scheduled')
-    }).length
-    return { dialled, connected, l1Booked, l2Booked: 0 }
-  }, [periodCalls])
+    })
+    // An account with any entry in the Meetings sheet is considered L2 (already had a meeting)
+    const accountsWithMeetings = new Set(meetings.map(m => m.accountName.toLowerCase().trim()))
+    const l1Booked = bookedCalls.filter(c => !accountsWithMeetings.has(c.account.toLowerCase().trim())).length
+    const l2Booked = bookedCalls.filter(c =>  accountsWithMeetings.has(c.account.toLowerCase().trim())).length
+    return { dialled, connected, l1Booked, l2Booked }
+  }, [periodCalls, meetings])
 
   const { notConnectedBreakdown, connectedBreakdown } = useMemo(() => {
     const map = new Map<string, number>()
