@@ -14,11 +14,11 @@ const EMAIL_CATEGORIES = [
 type Category = typeof EMAIL_CATEGORIES[number]
 
 const DISPLAY_NAME: Record<Category, string> = {
-  'Email - QA Domestic':           'QA Domestic',
-  'Email - QA International':      'QA International',
-  'Email - Engineering Domestic':  'Engineering Domestic',
+  'Email - QA Domestic':               'QA Domestic',
+  'Email - QA International':          'QA International',
+  'Email - Engineering Domestic':      'Engineering Domestic',
   'Email - Engineering International': 'Engineering International',
-  'Email - L&D Domestic':          'L&D Domestic',
+  'Email - L&D Domestic':              'L&D Domestic',
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -36,74 +36,75 @@ interface CardState {
   result: UploadResult | null
 }
 
-interface GMassCampaign {
-  id?: string | number
-  subject?: string
-  name?: string
-  campaignName?: string
-  campaign_name?: string
-  sentCount?: number
-  sent_count?: number
-  totalSent?: number
-  total_sent?: number
-  openRate?: number
-  open_rate?: number
-  clickRate?: number
-  click_rate?: number
-  replyRate?: number
-  reply_rate?: number
-  bounceCount?: number
-  bounce_count?: number
+interface GMassStatistics {
+  recipients?: number
+  opens?: number
+  clicks?: number
+  replies?: number
+  unsubscribes?: number
   bounces?: number
-  unsubscribeCount?: number
-  unsubscribe_count?: number
-  scheduledDate?: string
-  scheduled_date?: string
-  sentDate?: string
-  sent_date?: string
-  createdAt?: string
-  created_at?: string
+  blocks?: number
+}
+
+interface GMassCampaign {
+  campaignId?: number
+  subject?: string
+  friendlyName?: string | null
+  stage?: number
+  creationTime?: string
+  status?: string
+  statistics?: GMassStatistics
+  lists?: { listSource?: { listSourceSheet?: { worksheetName?: string } } }[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function cleanSubject(subject: string): string {
+  // Strip GMass {{spin}}...{{end spin}} — take first variation as the display name
+  return subject
+    .replace(/\{\{spin\}\}(.*?)\{\{variation\}\}[\s\S]*?\{\{end spin\}\}/gi, '$1')
+    .replace(/\{\{.*?\}\}/g, '')
+    .trim()
+}
+
 function campaignName(c: GMassCampaign): string {
-  return c.subject ?? c.name ?? c.campaignName ?? c.campaign_name ?? '(Unnamed)'
+  if (c.friendlyName) return c.friendlyName
+  if (c.subject) return cleanSubject(c.subject)
+  return '(Unnamed)'
 }
 
-function sent(c: GMassCampaign): number {
-  return c.sentCount ?? c.sent_count ?? c.totalSent ?? c.total_sent ?? 0
+function recipients(c: GMassCampaign): number {
+  return c.statistics?.recipients ?? 0
 }
 
-function openRate(c: GMassCampaign): number {
-  return c.openRate ?? c.open_rate ?? 0
-}
-
-function clickRate(c: GMassCampaign): number {
-  return c.clickRate ?? c.click_rate ?? 0
-}
-
-function replyRate(c: GMassCampaign): number {
-  return c.replyRate ?? c.reply_rate ?? 0
+function pct(count: number, total: number): string {
+  if (!total) return '—'
+  return `${((count / total) * 100).toFixed(1)}%`
 }
 
 function campaignDate(c: GMassCampaign): string {
-  const raw = c.scheduledDate ?? c.scheduled_date ?? c.sentDate ?? c.sent_date ?? c.createdAt ?? c.created_at ?? ''
+  const raw = c.creationTime ?? ''
   if (!raw) return '—'
   const d = new Date(raw)
   return isNaN(d.getTime()) ? raw : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
 }
 
-function fmtRate(r: number): string {
-  return r > 0 && r <= 1 ? `${(r * 100).toFixed(1)}%` : `${r.toFixed(1)}%`
+function sheetName(c: GMassCampaign): string {
+  return c.lists?.[0]?.listSource?.listSourceSheet?.worksheetName ?? ''
 }
 
-function weightedAvg(campaigns: GMassCampaign[], fn: (c: GMassCampaign) => number): string {
-  const totalSent = campaigns.reduce((s, c) => s + sent(c), 0)
-  if (totalSent === 0) return '—'
-  const weighted = campaigns.reduce((s, c) => s + fn(c) * sent(c), 0)
-  const avg = weighted / totalSent
-  return fmtRate(avg > 1 ? avg : avg)
+// Weighted average rate across all campaigns
+function weightedAvgPct(
+  campaigns: GMassCampaign[],
+  fn: (stats: GMassStatistics) => number,
+): string {
+  const totalRecipients = campaigns.reduce((s, c) => s + recipients(c), 0)
+  if (!totalRecipients) return '—'
+  const weighted = campaigns.reduce((s, c) => {
+    const r = recipients(c)
+    return s + fn(c.statistics ?? {}) * r
+  }, 0)
+  return `${((weighted / totalRecipients) * 100).toFixed(1)}%`
 }
 
 // ── Upload card ───────────────────────────────────────────────────────────────
@@ -142,12 +143,10 @@ function UploadCard({
       setState({ uploading: false, result: { created: 0, skipped: 0, updated: 0, errors: 0, error: String(err) } })
     }
 
-    // reset input so the same file can be re-uploaded if needed
     if (inputRef.current) inputRef.current.value = ''
   }, [category, onUploaded])
 
   const { result, uploading } = state
-  const displayCount = count.toLocaleString()
 
   return (
     <div className="rounded-xl border border-mh-border bg-mh-surface p-5 flex flex-col gap-3 min-w-0">
@@ -157,7 +156,7 @@ function UploadCard({
       </div>
 
       <div className="flex items-end gap-1">
-        <span className="text-3xl font-bold text-white tabular-nums">{displayCount}</span>
+        <span className="text-3xl font-bold text-white tabular-nums">{count.toLocaleString()}</span>
         <span className="text-xs text-mh-muted mb-1">contacts</span>
       </div>
 
@@ -169,13 +168,7 @@ function UploadCard({
         </div>
       )}
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={handleFile}
-      />
+      <input ref={inputRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
       <button
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
@@ -213,22 +206,16 @@ export default function EmailsModule() {
       const res = await fetch('/api/email-lists')
       const json = await res.json() as { counts: Record<string, number>; error?: string }
       if (json.counts) setCounts(json.counts)
-    } catch {
-      // counts stay as 0 — non-critical
-    } finally {
-      setCountsLoading(false)
-    }
+    } catch { /* counts stay 0 */ }
+    finally { setCountsLoading(false) }
   }, [])
 
   const loadGmass = useCallback(async () => {
     try {
       const res = await fetch('/api/gmass')
       const json = await res.json() as { campaigns?: GMassCampaign[]; error?: string }
-      if (json.error) {
-        setGmassError(json.error)
-      } else {
-        setCampaigns(json.campaigns ?? [])
-      }
+      if (json.error) setGmassError(json.error)
+      else setCampaigns(json.campaigns ?? [])
     } catch (err) {
       setGmassError(String(err))
     } finally {
@@ -241,17 +228,16 @@ export default function EmailsModule() {
     loadGmass()
   }, [loadCounts, loadGmass])
 
-  // Campaign aggregates
-  const totalSent = campaigns.reduce((s, c) => s + sent(c), 0)
-  const avgOpen  = weightedAvg(campaigns, openRate)
-  const avgClick = weightedAvg(campaigns, clickRate)
-  const avgReply = weightedAvg(campaigns, replyRate)
+  const sentCampaigns = campaigns.filter(c => c.status === 'sent' || (c.statistics?.recipients ?? 0) > 0)
 
-  const sortedCampaigns = [...campaigns].sort((a, b) => {
-    const da = new Date(a.scheduledDate ?? a.scheduled_date ?? a.sentDate ?? a.sent_date ?? a.createdAt ?? a.created_at ?? 0).getTime()
-    const db = new Date(b.scheduledDate ?? b.scheduled_date ?? b.sentDate ?? b.sent_date ?? b.createdAt ?? b.created_at ?? 0).getTime()
-    return db - da
-  })
+  const totalRecipients = sentCampaigns.reduce((s, c) => s + recipients(c), 0)
+  const avgOpen  = weightedAvgPct(sentCampaigns, s => s.opens  ?? 0)
+  const avgClick = weightedAvgPct(sentCampaigns, s => s.clicks ?? 0)
+  const avgReply = weightedAvgPct(sentCampaigns, s => s.replies ?? 0)
+
+  const sortedCampaigns = [...campaigns].sort((a, b) =>
+    new Date(b.creationTime ?? 0).getTime() - new Date(a.creationTime ?? 0).getTime()
+  )
 
   return (
     <div className="space-y-8 py-2">
@@ -300,7 +286,7 @@ export default function EmailsModule() {
             {/* Summary chips */}
             <div className="flex flex-wrap gap-2">
               <StatChip label="Campaigns"  value={campaigns.length} />
-              <StatChip label="Total Sent" value={totalSent.toLocaleString()} />
+              <StatChip label="Total Sent" value={totalRecipients.toLocaleString()} />
               <StatChip label="Avg Open"   value={avgOpen} />
               <StatChip label="Avg Click"  value={avgClick} />
               <StatChip label="Avg Reply"  value={avgReply} />
@@ -312,24 +298,30 @@ export default function EmailsModule() {
                 <thead>
                   <tr className="border-b border-mh-border bg-mh-surface">
                     <th className="text-left px-4 py-2.5 text-mh-muted font-medium">Campaign</th>
+                    <th className="text-left px-3 py-2.5 text-mh-muted font-medium hidden md:table-cell">Sheet</th>
                     <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Sent</th>
-                    <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Open</th>
-                    <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Click</th>
-                    <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Reply</th>
+                    <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Opens</th>
+                    <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Clicks</th>
+                    <th className="text-right px-3 py-2.5 text-mh-muted font-medium">Replies</th>
                     <th className="text-right px-4 py-2.5 text-mh-muted font-medium">Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-mh-border">
-                  {sortedCampaigns.map((c, i) => (
-                    <tr key={c.id ?? i} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-2.5 text-white font-medium max-w-[200px] truncate">{campaignName(c)}</td>
-                      <td className="px-3 py-2.5 text-right text-mh-muted tabular-nums">{sent(c).toLocaleString()}</td>
-                      <td className="px-3 py-2.5 text-right text-sky-400 tabular-nums">{fmtRate(openRate(c))}</td>
-                      <td className="px-3 py-2.5 text-right text-violet-400 tabular-nums">{fmtRate(clickRate(c))}</td>
-                      <td className="px-3 py-2.5 text-right text-emerald-400 tabular-nums">{fmtRate(replyRate(c))}</td>
-                      <td className="px-4 py-2.5 text-right text-mh-muted">{campaignDate(c)}</td>
-                    </tr>
-                  ))}
+                  {sortedCampaigns.map((c, i) => {
+                    const r = recipients(c)
+                    const stats = c.statistics ?? {}
+                    return (
+                      <tr key={c.campaignId ?? i} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-2.5 text-white font-medium max-w-[220px] truncate">{campaignName(c)}</td>
+                        <td className="px-3 py-2.5 text-mh-muted max-w-[140px] truncate hidden md:table-cell">{sheetName(c)}</td>
+                        <td className="px-3 py-2.5 text-right text-mh-muted tabular-nums">{r.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-right text-sky-400 tabular-nums">{pct(stats.opens ?? 0, r)}</td>
+                        <td className="px-3 py-2.5 text-right text-violet-400 tabular-nums">{pct(stats.clicks ?? 0, r)}</td>
+                        <td className="px-3 py-2.5 text-right text-emerald-400 tabular-nums">{pct(stats.replies ?? 0, r)}</td>
+                        <td className="px-4 py-2.5 text-right text-mh-muted">{campaignDate(c)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
