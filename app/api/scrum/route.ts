@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getMeetings, getCalls, getSheets } from '@/lib/sheets'
+import { getMeetings, getCalls, getSheets, getTargets, getTasks, getAccountIntelligence } from '@/lib/sheets'
+import { getDeals, getZohoEvents } from '@/lib/zoho'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,6 +8,9 @@ const SPREADSHEET_ID = process.env.SHEETS_SPREADSHEET_ID!
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 function nowIST() { return new Date(Date.now() + IST_OFFSET_MS) }
 function todayIST() { return nowIST().toISOString().slice(0, 10) }
+
+const JUNK = ['untagged company', 'the test tribe', 'test']
+const isJunk = (name: string) => JUNK.some(p => name.toLowerCase().includes(p))
 
 async function ensureScrumTab(sheets: ReturnType<typeof getSheets>) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
@@ -45,33 +49,96 @@ export async function GET() {
     await ensureScrumTab(sheets)
 
     const today = todayIST()
-    const [meetings, calls, scrumNotes] = await Promise.all([
+    const todayMonth = today.slice(0, 7)
+
+    const [meetings, calls, scrumNotes, targets, tasks, accountIntel, deals, zohoEvents] = await Promise.all([
       getMeetings(),
       getCalls(),
       readScrumNotes(sheets),
+      getTargets().catch(() => []),
+      getTasks().catch(() => []),
+      getAccountIntelligence().catch(() => []),
+      getDeals().catch(() => []),
+      getZohoEvents(today).catch(() => []),
     ])
 
+    // ── Daily targets (monthly ÷ 22) ─────────────────────────────────────────
+    const monthTargets = targets.filter(t => t.month === todayMonth)
+    const findTarget = (name: string) => monthTargets.find(t => t.metricName === name)?.targetValue ?? 0
+    const dailyTargets = {
+      dialled:        Math.round(findTarget('Calls Dialled') / 22),
+      connected:      Math.round(findTarget('Calls Connected') / 22),
+      meetingsBooked: Math.round(findTarget('Meetings Booked') / 22),
+    }
+
+    // ── Today's calls (stats) ─────────────────────────────────────────────────
     const todaysCalls = calls.filter(c => c.date === today)
     const dialled = todaysCalls.length
-    const connected = todaysCalls.filter(c => !['No Answer', 'Voicemail', 'Not Reachable', 'RNR', 'Busy', 'Unanswered'].some(s => c.outcome?.toLowerCase().includes(s.toLowerCase()))).length
+    const connected = todaysCalls.filter(c =>
+      !['No Answer', 'Voicemail', 'Not Reachable', 'RNR', 'Busy', 'Unanswered'].some(s =>
+        c.outcome?.toLowerCase().includes(s.toLowerCase())
+      )
+    ).length
     const meetingsBooked = todaysCalls.filter(c => c.outcome?.toLowerCase().includes('meeting')).length
-
-    const JUNK = ['untagged company', 'the test tribe', 'test']
-    const isJunk = (name: string) => JUNK.some(p => name.toLowerCase().includes(p))
-
-    const todayMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === today && !isJunk(m.accountName))
-    const tomorrowIST = new Date(Date.now() + IST_OFFSET_MS + 86400000).toISOString().slice(0, 10)
-    const tomorrowMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === tomorrowIST && !isJunk(m.accountName))
-
-    const suggestedItems: string[] = []
-    if (dialled > 0) suggestedItems.push(`${dialled} calls dialled today, ${connected} connected, ${meetingsBooked} meetings booked`)
-    if (todayMtgs.length > 0) suggestedItems.push(`${todayMtgs.length} meetings scheduled for today: ${todayMtgs.map(m => m.accountName).join(', ')}`)
-    if (tomorrowMtgs.length > 0) suggestedItems.push(`${tomorrowMtgs.length} meetings tomorrow: ${tomorrowMtgs.map(m => m.accountName).join(', ')}`)
-    if (suggestedItems.length === 0) suggestedItems.push('No calls or meetings recorded yet today')
-
     const stats = { dialled, connected, meetingsBooked }
 
-    // Organize past scrums by date, most recent first
+    // ── Scheduled meetings today (Sheets + Zoho Events deduped) ──────────────
+    const sheetsTodayMtgs = meetings.filter(m =>
+      m.meetingTime?.slice(0, 10) === today && !isJunk(m.accountName)
+    )
+    const existingDealIds = new Set(sheetsTodayMtgs.map(m => m.dealId).filter(Boolean))
+    const existingZohoIds = new Set(sheetsTodayMtgs.map(m => m.meetingId).filter(Boolean))
+    const zohoTodayExtra = zohoEvents.filter(e => {
+      const eDate = e.startDateTime?.slice(0, 10)
+      if (eDate !== today) return false
+      if (isJunk(e.whatName ?? '')) return false
+      if (existingZohoIds.has(e.id)) return false
+      if (e.whatId && existingDealIds.has(e.whatId)) return false
+      return true
+    })
+
+    const intelByAccount = new Map(accountIntel.map(a => [a.account.toLowerCase(), a]))
+
+    const scheduledMeetings = [
+      ...sheetsTodayMtgs.map(m => ({
+        meetingId:     m.meetingId,
+        accountName:   m.accountName,
+        contactName:   m.contactName,
+        meetingType:   m.meetingType,
+        conducted:     m.status === 'Conducted',
+        circlebakNotes: intelByAccount.get(m.accountName.toLowerCase())?.circlebakIntelligence ?? null,
+      })),
+      ...zohoTodayExtra.map(e => ({
+        meetingId:     e.id,
+        accountName:   e.whatName ?? '',
+        contactName:   e.whoName ?? '',
+        meetingType:   e.subject?.toLowerCase().includes('l2') ? 'L2+' : 'L1' as 'L1' | 'L2+',
+        conducted:     false,
+        circlebakNotes: intelByAccount.get((e.whatName ?? '').toLowerCase())?.circlebakIntelligence ?? null,
+      })),
+    ]
+
+    // ── Hot leads ─────────────────────────────────────────────────────────────
+    const hotLeads = deals
+      .filter(d => d.temperature === 'Hot' && d.stage !== 'Lost')
+      .map(d => ({ name: d.dealName, account: d.accountName, stage: d.stage, amount: d.amount }))
+
+    // ── P0 tasks for today ────────────────────────────────────────────────────
+    const p0Tasks = tasks
+      .filter(t => t.type === 'P0' && t.status !== 'Completed' && t.date === today)
+      .map(t => ({ task: t.task, linkedDeal: t.linkedDeal, type: t.type, status: t.status }))
+
+    // ── Suggested discussion items ────────────────────────────────────────────
+    const tomorrowIST = new Date(Date.now() + IST_OFFSET_MS + 86400000).toISOString().slice(0, 10)
+    const tomorrowMtgs = meetings.filter(m => m.meetingTime?.slice(0, 10) === tomorrowIST && !isJunk(m.accountName))
+    const suggestedItems: string[] = []
+    if (dialled > 0) suggestedItems.push(`${dialled} calls dialled today, ${connected} connected, ${meetingsBooked} meetings booked`)
+    if (scheduledMeetings.length > 0) suggestedItems.push(`${scheduledMeetings.length} meeting(s) scheduled today: ${scheduledMeetings.map(m => m.accountName).join(', ')}`)
+    if (tomorrowMtgs.length > 0) suggestedItems.push(`${tomorrowMtgs.length} meeting(s) tomorrow: ${tomorrowMtgs.map(m => m.accountName).join(', ')}`)
+    if (hotLeads.length > 0) suggestedItems.push(`${hotLeads.length} hot lead(s): ${hotLeads.map(l => l.account).join(', ')}`)
+    if (suggestedItems.length === 0) suggestedItems.push('No calls or meetings recorded yet today')
+
+    // ── Past scrums ───────────────────────────────────────────────────────────
     const pastMap = new Map<string, typeof scrumNotes>()
     for (const n of scrumNotes) {
       if (n.date === today) continue
@@ -80,12 +147,22 @@ export async function GET() {
     }
     const past = Array.from(pastMap.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .slice(0, 14)
+      .slice(0, 30)
       .map(([date, slots]) => ({ date, slots }))
 
     const todayNotes = scrumNotes.filter(n => n.date === today)
 
-    return NextResponse.json({ today, stats, suggestedItems, todayNotes, past })
+    return NextResponse.json({
+      today,
+      stats,
+      dailyTargets,
+      scheduledMeetings,
+      hotLeads,
+      p0Tasks,
+      suggestedItems,
+      todayNotes,
+      past,
+    })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -108,7 +185,6 @@ export async function POST(req: NextRequest) {
   const slotTime = body.slotTime ?? ''
 
   if (body.rowIndex) {
-    // Update existing row
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `'Scrum Notes'!C${body.rowIndex}:E${body.rowIndex}`,
@@ -116,7 +192,6 @@ export async function POST(req: NextRequest) {
       requestBody: { values: [[body.notes ?? '', body.actionItems ?? '', body.meetingHappened !== false ? 'Yes' : 'No']] },
     })
   } else {
-    // Append new row
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
       range: "'Scrum Notes'!A:E",

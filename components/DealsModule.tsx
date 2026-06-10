@@ -224,7 +224,11 @@ export default function DealsModule() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   async function handleTempUpdate(dealId: string, temperature: Temperature) {
     if (!data) return
@@ -237,6 +241,7 @@ export default function DealsModule() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, temperature }),
     })
+    await load()
   }
 
   async function handleKanbanDrop(e: React.DragEvent, newStage: string) {
@@ -254,6 +259,7 @@ export default function DealsModule() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dealId, stage: newStage }),
     })
+    await load()
   }
 
   async function handleMoveToNegative(deal: ActiveDeal, category: LostDealCategory, notes: string) {
