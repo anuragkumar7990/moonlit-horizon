@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   // Load existing sheet rows ONCE — avoids 1 Sheets read per call (quota killer).
   // This single read covers both dedup and re-enrichment.
-  const existingRows = await getAllCallRowsFromSheet().catch(() => new Map<string, { rowIndex: number; account: string }>())
+  const existingRows = await getAllCallRowsFromSheet().catch(() => new Map<string, { rowIndex: number; account: string; contactName: string }>())
 
   const results: { callId: string; status: string; account?: string }[] = []
 
