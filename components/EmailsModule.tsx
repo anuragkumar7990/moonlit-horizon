@@ -100,11 +100,8 @@ function weightedAvgPct(
 ): string {
   const totalRecipients = campaigns.reduce((s, c) => s + recipients(c), 0)
   if (!totalRecipients) return '—'
-  const weighted = campaigns.reduce((s, c) => {
-    const r = recipients(c)
-    return s + fn(c.statistics ?? {}) * r
-  }, 0)
-  return `${((weighted / totalRecipients) * 100).toFixed(1)}%`
+  const totalCount = campaigns.reduce((s, c) => s + fn(c.statistics ?? {}), 0)
+  return `${((totalCount / totalRecipients) * 100).toFixed(1)}%`
 }
 
 // ── Upload card ───────────────────────────────────────────────────────────────
