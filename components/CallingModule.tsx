@@ -130,10 +130,10 @@ export default function CallingModule({ calls, meetings }: { calls: Call[]; meet
     }
   }, [periodCalls])
 
-  const allOutcomes = useMemo(
-    () => Array.from(new Set(periodCalls.map(c => c.outcome).filter(Boolean))).sort(),
-    [periodCalls],
-  )
+  const allOutcomes = useMemo(() => {
+    const outcomes = Array.from(new Set(periodCalls.map(c => c.outcome || 'Unknown'))).sort()
+    return outcomes
+  }, [periodCalls])
 
   const logsFiltered = useMemo(() => {
     const noDur = (c: Call) => !c.duration || c.duration === '0:00' || c.duration === '0'
@@ -141,7 +141,10 @@ export default function CallingModule({ calls, meetings }: { calls: Call[]; meet
       .filter(c => {
         if (c.account.toLowerCase().startsWith('untagged company')) return false
         if (outcomeFilter === NO_DURATION_FILTER) return noDur(c)
-        if (outcomeFilter !== 'all' && c.outcome !== outcomeFilter) return false
+        if (outcomeFilter !== 'all') {
+          const effectiveOutcome = c.outcome || 'Unknown'
+          if (effectiveOutcome !== outcomeFilter) return false
+        }
         if (search) {
           const q = search.toLowerCase()
           return (

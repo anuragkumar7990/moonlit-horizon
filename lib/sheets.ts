@@ -511,6 +511,34 @@ export async function getProspects(): Promise<Prospect[]> {
   } catch { return [] }
 }
 
+export async function getProspectByEmail(email: string): Promise<{
+  company: string; designation: string; phone: string; firstName: string; lastName: string
+} | null> {
+  if (!email) return null
+  try {
+    const sheets = getSheets()
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Prospects!A:H',
+    })
+    const rows = res.data.values ?? []
+    const needle = email.toLowerCase().trim()
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i]
+      if ((r[1] ?? '').toString().toLowerCase().trim() === needle) {
+        return {
+          company:     (r[4] ?? '').toString().trim(),
+          designation: (r[5] ?? '').toString().trim(),
+          phone:       (r[7] ?? '').toString().trim(),
+          firstName:   (r[2] ?? '').toString().trim(),
+          lastName:    (r[3] ?? '').toString().trim(),
+        }
+      }
+    }
+    return null
+  } catch { return null }
+}
+
 const PROSPECTS_HEADERS = ['Date', 'Email', 'First Name', 'Last Name', 'Company', 'Designation', 'City', 'Phone', 'Lvl 1 Source', 'Lvl 2 Source', 'Priority', 'Status']
 
 export async function appendProspectRows(rows: {

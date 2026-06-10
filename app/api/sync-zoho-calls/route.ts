@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const now    = new Date()
   const until  = now.toISOString().slice(0, 10)
-  const since  = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const since  = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   let callsInRange: { id: string; date: string }[]
   try {

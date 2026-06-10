@@ -1,5 +1,5 @@
 import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus, findDealByName, createDealLight } from '@/lib/zoho'
-import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus, updateCallAccountRow } from '@/lib/sheets'
+import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus, updateCallAccountRow, getProspectByEmail } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
 const JUNK_ACCOUNT_NAMES = new Set([
@@ -78,6 +78,19 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     if (contact) { contactName = `${contact.firstName} ${contact.lastName}`.trim(); email = contact.email; accountName = contact.accountName; designation = contact.designation }
     if (!contactName && whoId.name) contactName = whoId.name
     if (!accountName && whatId?.name) accountName = whatId.name
+  }
+
+  // Enrich missing fields from Prospects sheet (Zoho leads often lack Company/Designation)
+  if (email && (!accountName || !designation || !contactPhone)) {
+    const prospect = await getProspectByEmail(email).catch(() => null)
+    if (prospect) {
+      if (!designation && prospect.designation)   designation   = prospect.designation
+      if (!contactPhone && prospect.phone)         contactPhone  = prospect.phone
+      if (!accountName  && prospect.company)       accountName   = prospect.company
+      if (!contactName  && (prospect.firstName || prospect.lastName)) {
+        contactName = `${prospect.firstName} ${prospect.lastName}`.trim()
+      }
+    }
   }
 
   if (!accountName && email) {
