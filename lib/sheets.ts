@@ -255,9 +255,10 @@ async function getCallsSheetId(sheets: ReturnType<typeof getSheets>): Promise<nu
   return sheet?.properties?.sheetId ?? 0
 }
 
-// Deletes all Calls rows where the account name (col C) exactly matches any of the given names.
+// Deletes Calls rows where account name (col C) exactly matches any given name,
+// or starts with "Untagged Company #" when deleteUntagged is true.
 // Rows are deleted bottom-up to avoid index shifting. Returns count of rows deleted.
-export async function deleteCallRowsByAccountNames(accountNames: string[]): Promise<number> {
+export async function deleteCallRowsByAccountNames(accountNames: string[], deleteUntagged = false): Promise<number> {
   const sheets = getSheets()
   const nameSet = new Set(accountNames.map(n => n.toLowerCase().trim()))
 
@@ -268,7 +269,8 @@ export async function deleteCallRowsByAccountNames(accountNames: string[]): Prom
   const toDelete: number[] = []
   for (let i = 1; i < rows.length; i++) {
     const account = String(rows[i][2] ?? '').toLowerCase().trim()
-    if (nameSet.has(account)) toDelete.push(i + 1) // i+1 because sheets are 1-indexed, header is row 1
+    const isUntagged = account.startsWith('untagged company #')
+    if (nameSet.has(account) || (deleteUntagged && isUntagged)) toDelete.push(i + 1)
   }
   if (toDelete.length === 0) return 0
 

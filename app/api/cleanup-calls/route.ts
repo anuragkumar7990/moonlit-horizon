@@ -16,9 +16,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json().catch(() => ({})) as { accountNames?: string[] }
+  const body = await req.json().catch(() => ({})) as { accountNames?: string[]; deleteUntagged?: boolean }
   const accountNames = body.accountNames ?? DEFAULT_JUNK
+  const deleteUntagged = body.deleteUntagged ?? false
 
-  const deleted = await deleteCallRowsByAccountNames(accountNames)
-  return NextResponse.json({ deleted, accountNames })
+  const deleted = await deleteCallRowsByAccountNames(accountNames, deleteUntagged)
+  return NextResponse.json({ deleted, accountNames, deleteUntagged })
 }
