@@ -684,18 +684,21 @@ export async function addLvl2SourceValue(value: string): Promise<void> {
   const token = await getAccessToken()
   const existing = await fetchLvl2Field(token)
   const body = {
-    pick_list_values: [
-      ...existing,
-      {
-        display_value: value,
-        actual_value: value,
-        reference_value: value,
-        colour_code: null,
-        sequence_number: existing.filter(v => v.actual_value !== '-None-').length + 1,
-      },
-    ],
+    fields: [{
+      id: LVL2_FIELD_ID,
+      pick_list_values: [
+        ...existing,
+        {
+          display_value: value,
+          actual_value: value,
+          reference_value: value,
+          colour_code: null,
+          sequence_number: existing.filter(v => v.actual_value !== '-None-').length + 1,
+        },
+      ],
+    }],
   }
-  const patchRes = await fetch(`${BASE_URL}/settings/fields/${LVL2_FIELD_ID}?module=Leads`, {
+  const patchRes = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
     method: 'PATCH',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
