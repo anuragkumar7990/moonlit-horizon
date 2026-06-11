@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
     notes?: string
   }
 
-  if (!dealId || !dealName || !account || !category) {
-    return NextResponse.json({ error: 'dealId, dealName, account, category required' }, { status: 400 })
+  if (!dealId || !dealName || !category) {
+    return NextResponse.json({ error: 'dealId, dealName, category required' }, { status: 400 })
   }
 
   try {
