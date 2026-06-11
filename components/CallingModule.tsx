@@ -14,6 +14,10 @@ const NOT_CONNECTED_KEYWORDS = [
   'rnr', 'rang no response', 'switched off', 'unreachable',
   'wrong number', 'incoming not available', 'no answer',
   'voicemail', 'busy', 'not reachable', 'unanswered',
+  'left voice message', 'left a message', 'left message',
+  'not available', 'disconnected', 'out of coverage',
+  'number not in service', 'call rejected', 'rejected',
+  'blocked', 'network busy', 'invalid number',
 ]
 
 function isConnected(outcome: string): boolean {

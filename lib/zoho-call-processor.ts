@@ -1,4 +1,4 @@
-import { getCallById, getContactById, getLeadById, updateLeadCompany, updateLeadStatus, findDealByName, createDealLight } from '@/lib/zoho'
+import { getCallById, getContactById, getLeadById, findLeadByEmail, updateLeadCompany, updateLeadStatus, findDealByName, createDealLight } from '@/lib/zoho'
 import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus, updateCallAccountRow, getProspectByEmail } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
 
@@ -102,6 +102,16 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
       if (!contactName  && (prospect.firstName || prospect.lastName)) {
         contactName = `${prospect.firstName} ${prospect.lastName}`.trim()
       }
+    }
+  }
+
+  // If still no company, try to find a Zoho Lead for this email (covers Contact-linked calls where
+  // the same person was uploaded as a Lead with company data)
+  if (!accountName && email) {
+    const leadId = await findLeadByEmail(email).catch(() => null)
+    if (leadId) {
+      const lead = await getLeadById(leadId).catch(() => null)
+      if (lead?.company) accountName = toTitleCase(lead.company)
     }
   }
 
