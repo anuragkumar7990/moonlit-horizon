@@ -235,7 +235,6 @@ export default function CallingModule({ calls, calEvents }: { calls: Call[]; cal
     const noDur = (c: Call) => !c.duration || c.duration === '0:00' || c.duration === '0'
     return periodCalls
       .filter(c => {
-        if (c.account.toLowerCase().startsWith('untagged company')) return false
         if (outcomeFilter === NO_DURATION_FILTER) return noDur(c)
         if (outcomeFilter !== 'all') {
           const effectiveOutcome = c.outcome || 'Unknown'

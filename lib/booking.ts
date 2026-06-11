@@ -36,9 +36,10 @@ export async function bookMeeting(payload: {
 }> {
   const { accountId, accountName, contactName, contactEmail, contactPhone = '', meetingTime, meetingType } = payload
 
+  const displayName = accountName.toLowerCase().startsWith('untagged company') ? contactName : accountName
   const title = meetingType === 'L1'
-    ? `${accountName} <> The Test Tribe | Upskilling for Teams`
-    : `${accountName} <> The Test Tribe | Training - Next Steps`
+    ? `${displayName} <> The Test Tribe | Upskilling for Teams`
+    : `${displayName} <> The Test Tribe | Training - Next Steps`
 
   const startTime = new Date(meetingTime)
   const endTime = new Date(startTime.getTime() + 30 * 60 * 1000)
