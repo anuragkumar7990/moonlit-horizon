@@ -42,15 +42,30 @@ export function mergeCallSources(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const NOT_CONNECTED = new Set([
-  'rnr', 'rang no response',
-  'wrong number',
-  'incoming not available',
+const NOT_CONNECTED_KEYWORDS = [
+  'rnr', 'rang no response', 'switched off', 'unreachable',
+  'wrong number', 'incoming not available', 'no answer',
+  'voicemail', 'busy', 'not reachable', 'unanswered',
+  'left voice message', 'left a message', 'left message',
+  'not available', 'disconnected', 'out of coverage',
+  'number not in service', 'call rejected', 'rejected',
+  'blocked', 'network busy', 'invalid number',
+]
+
+// Outcomes set automatically by Zoho AI telephony — not real SDR dials
+const AI_PROCESSED_OUTCOMES = new Set([
+  'ai processed', 'ai processed via cloud folder', 'ai call processed', 'processed',
 ])
+
+function isRealDial(outcome: string): boolean {
+  return !AI_PROCESSED_OUTCOMES.has(outcome.toLowerCase().trim())
+}
 
 function isConnected(outcome: string): boolean {
   const o = outcome.toLowerCase().trim()
-  return o !== '' && !NOT_CONNECTED.has(o)
+  if (!o) return false
+  if (!isRealDial(outcome)) return false
+  return !NOT_CONNECTED_KEYWORDS.some(kw => o.includes(kw))
 }
 
 // Server runs in UTC; all dates in sheets/Zoho are IST (UTC+5:30).
@@ -133,7 +148,7 @@ export function buildCallsData(
 
   for (const call of calls) {
     const d = safeParseDate(call.date)
-    if (!d) continue
+    if (!d || !isRealDial(call.outcome)) continue
     if (inWeek(d))  { wD++; if (isConnected(call.outcome)) wC++ }
     if (inMonth(d)) { mD++; if (isConnected(call.outcome)) mC++ }
   }
@@ -316,7 +331,7 @@ export function buildTanishqMetrics(
 
   for (const call of calls) {
     const d = safeParseDate(call.date)
-    if (!d) continue
+    if (!d || !isRealDial(call.outcome)) continue
     if (inToday(d)) { dD++; if (isConnected(call.outcome)) dC++ }
     if (inWeek(d))  { wD++; if (isConnected(call.outcome)) wC++ }
     if (inMonth(d)) { mD++; if (isConnected(call.outcome)) mC++ }
@@ -387,7 +402,7 @@ export function buildWeeklyTrend(calls: Call[], meetings: Meeting[]): WeeklyPoin
 
     let dialled = 0, connected = 0
     for (const c of calls) {
-      if (c.date === dayStr) {
+      if (c.date === dayStr && isRealDial(c.outcome)) {
         dialled++
         if (isConnected(c.outcome)) connected++
       }
