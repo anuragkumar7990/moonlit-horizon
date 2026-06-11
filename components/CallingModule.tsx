@@ -90,6 +90,60 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 const NO_DURATION_FILTER = '__no_duration__'
 
+function OutcomeCallsTable({ calls, color }: { calls: Call[]; color: string }) {
+  const sorted = [...calls].sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
+  return (
+    <div
+      className="mt-2 mb-1 rounded-lg overflow-hidden border"
+      style={{ borderColor: `${color}30` }}
+    >
+      <div className="overflow-y-auto" style={{ maxHeight: '650px' }}>
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10" style={{ background: '#0d0d1a' }}>
+            <tr className="text-[10px] uppercase tracking-widest" style={{ borderBottom: `1px solid ${color}30` }}>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted whitespace-nowrap">Date</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">Account</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">Contact</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">Designation</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">Phone</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">Email</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">SDR</th>
+              <th className="text-left px-3 py-2 font-semibold text-mh-muted">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((c, i) => {
+              const d = safeParse(c.date)
+              return (
+                <tr
+                  key={`${c.zohoCallId || i}-${c.date}`}
+                  className="border-t transition-colors hover:bg-white/[0.03]"
+                  style={{ borderColor: `${color}15` }}
+                >
+                  <td className="px-3 py-2 text-mh-muted whitespace-nowrap">
+                    {d ? format(d, 'dd MMM') : c.date || '—'}
+                    {c.time && <span className="ml-1 opacity-50">{c.time.slice(0, 5)}</span>}
+                  </td>
+                  <td className="px-3 py-2 font-medium text-mh-text max-w-[130px] truncate">{c.account || '—'}</td>
+                  <td className="px-3 py-2 text-mh-muted max-w-[110px] truncate">{c.contactName || '—'}</td>
+                  <td className="px-3 py-2 text-mh-muted max-w-[110px] truncate">{c.designation || '—'}</td>
+                  <td className="px-3 py-2 text-mh-muted whitespace-nowrap">{c.contactPhone || '—'}</td>
+                  <td className="px-3 py-2 text-mh-muted max-w-[150px] truncate">{c.email || '—'}</td>
+                  <td className="px-3 py-2 text-mh-muted whitespace-nowrap">{c.sdr || 'Tanishq'}</td>
+                  <td className="px-3 py-2 text-mh-muted max-w-[180px] truncate" title={c.notes}>{c.notes || '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-1.5 text-[10px] text-mh-muted" style={{ borderTop: `1px solid ${color}20` }}>
+        {calls.length} {calls.length === 1 ? 'call' : 'calls'}
+      </div>
+    </div>
+  )
+}
+
 export default function CallingModule({ calls, calEvents }: { calls: Call[]; calEvents: CalendarEvent[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -98,6 +152,15 @@ export default function CallingModule({ calls, calEvents }: { calls: Call[]; cal
   const [outcomeFilter, setOutcomeFilter] = useState('all')
   const [creatingZoho, setCreatingZoho] = useState<Set<string>>(new Set())
   const [zohoStatus, setZohoStatus] = useState<Map<string, 'created' | 'exists'>>(new Map())
+  const [expandedOutcomes, setExpandedOutcomes] = useState<Set<string>>(new Set())
+
+  function toggleOutcome(outcome: string) {
+    setExpandedOutcomes(prev => {
+      const next = new Set(prev)
+      next.has(outcome) ? next.delete(outcome) : next.add(outcome)
+      return next
+    })
+  }
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -265,20 +328,37 @@ export default function CallingModule({ calls, calEvents }: { calls: Call[]; cal
                     <span className="text-xs text-mh-muted tabular-nums">{total} calls · {pctOfAll}% of total</span>
                   </div>
                   <div className="space-y-2.5">
-                    {notConnectedBreakdown.map(({ outcome, count, pct }) => (
-                      <div key={outcome}>
-                        <div className="flex items-center justify-between mb-1">
-                          <OutcomeBadge outcome={outcome} />
-                          <span className="text-sm font-semibold text-mh-text tabular-nums">
-                            {count} <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
-                          </span>
+                    {notConnectedBreakdown.map(({ outcome, count, pct }) => {
+                      const expanded = expandedOutcomes.has(outcome)
+                      const outcomeCallRows = periodCalls.filter(c => (c.outcome || 'Unknown') === outcome)
+                      return (
+                        <div key={outcome}>
+                          <button
+                            onClick={() => toggleOutcome(outcome)}
+                            className="w-full text-left"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <OutcomeBadge outcome={outcome} />
+                                <svg className={`w-3 h-3 text-mh-muted transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                              <span className="text-sm font-semibold text-mh-text tabular-nums">
+                                {count} <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-[#1c1c1c] rounded-full">
+                              <div className="h-1.5 rounded-full transition-all"
+                                style={{ width: `${pct}%`, backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF' }} />
+                            </div>
+                          </button>
+                          {expanded && (
+                            <OutcomeCallsTable calls={outcomeCallRows} color={OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF'} />
+                          )}
                         </div>
-                        <div className="h-1.5 bg-[#1c1c1c] rounded-full">
-                          <div className="h-1.5 rounded-full transition-all"
-                            style={{ width: `${pct}%`, backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF' }} />
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )
@@ -297,18 +377,33 @@ export default function CallingModule({ calls, calEvents }: { calls: Call[]; cal
                   <div className="space-y-2.5">
                     {connectedBreakdown.map(({ outcome, count, pct }) => {
                       const isMtg = outcome.toLowerCase().includes('meeting') || outcome.toLowerCase().includes('scheduled')
+                      const expanded = expandedOutcomes.has(outcome)
+                      const outcomeCallRows = periodCalls.filter(c => (c.outcome || 'Unknown') === outcome)
                       return (
                         <div key={outcome} className={isMtg ? 'bg-emerald-900/10 rounded-lg px-2 py-2 -mx-2' : ''}>
-                          <div className="flex items-center justify-between mb-1">
-                            <OutcomeBadge outcome={outcome} />
-                            <span className={`font-semibold text-mh-text tabular-nums ${isMtg ? 'text-base' : 'text-sm'}`}>
-                              {count} <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
-                            </span>
-                          </div>
-                          <div className={`${isMtg ? 'h-2' : 'h-1.5'} bg-[#1c1c1c] rounded-full`}>
-                            <div className={`${isMtg ? 'h-2' : 'h-1.5'} rounded-full transition-all`}
-                              style={{ width: `${pct}%`, backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF' }} />
-                          </div>
+                          <button
+                            onClick={() => toggleOutcome(outcome)}
+                            className="w-full text-left"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <OutcomeBadge outcome={outcome} />
+                                <svg className={`w-3 h-3 text-mh-muted transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                              <span className={`font-semibold text-mh-text tabular-nums ${isMtg ? 'text-base' : 'text-sm'}`}>
+                                {count} <span className="text-mh-muted font-normal text-xs">({pct}%)</span>
+                              </span>
+                            </div>
+                            <div className={`${isMtg ? 'h-2' : 'h-1.5'} bg-[#1c1c1c] rounded-full`}>
+                              <div className={`${isMtg ? 'h-2' : 'h-1.5'} rounded-full transition-all`}
+                                style={{ width: `${pct}%`, backgroundColor: OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF' }} />
+                            </div>
+                          </button>
+                          {expanded && (
+                            <OutcomeCallsTable calls={outcomeCallRows} color={OUTCOME_STYLE[outcome.toLowerCase().trim()]?.color ?? '#9CA3AF'} />
+                          )}
                         </div>
                       )
                     })}
