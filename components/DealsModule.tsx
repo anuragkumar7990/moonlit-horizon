@@ -1,7 +1,9 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { LostDealCategory } from '@/lib/sheets'
+
+const AUTH_HEADER = 'Basic OnRoZXRlc3R0cmliZQ=='
 
 type Temperature = 'Hot' | 'Warm' | 'Cold' | null
 
@@ -142,18 +144,26 @@ function TempBadge({ temperature, dealId, onUpdate }: {
 
 function DealCard({
   deal,
+  isDragging,
   onTempUpdate,
   onMoveToNegative,
+  onDragStart,
+  onDragEnd,
 }: {
   deal: ActiveDeal
+  isDragging: boolean
   onTempUpdate: (id: string, t: Temperature) => void
   onMoveToNegative: (deal: ActiveDeal) => void
+  onDragStart: (id: string) => void
+  onDragEnd: () => void
 }) {
   return (
     <div
-      className="card py-2 px-3 mb-2 cursor-grab select-none text-xs"
+      className="card py-2 px-3 mb-2 cursor-grab select-none text-xs transition-all"
+      style={{ opacity: isDragging ? 0.35 : 1, transform: isDragging ? 'scale(0.97)' : undefined }}
       draggable
-      onDragStart={e => e.dataTransfer.setData('dealId', deal.id)}
+      onDragStart={e => { e.dataTransfer.setData('dealId', deal.id); e.dataTransfer.effectAllowed = 'move'; onDragStart(deal.id) }}
+      onDragEnd={onDragEnd}
     >
       <div className="font-semibold text-mh-text text-[11px] leading-tight mb-1 truncate" title={deal.name}>{deal.name}</div>
       <div className="text-mh-muted truncate mb-2" title={deal.account}>{deal.account}</div>
@@ -234,6 +244,14 @@ export default function DealsModule() {
   const [pendingCategory, setPendingCategory] = useState<LostDealCategory>('Lost')
   const [pendingNotes, setPendingNotes] = useState('')
   const [restoreStage, setRestoreStage] = useState(KANBAN_STAGES[0])
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [draggingOverStage, setDraggingOverStage] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
+
+  const showToast = useCallback((msg: string, type: 'ok' | 'err') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }, [])
 
   // Protects optimistic changes from being clobbered by background polls
   // while Zoho is still processing the write.
@@ -262,7 +280,7 @@ export default function DealsModule() {
   async function load(background = false) {
     if (!background) setLoading(true)
     try {
-      const res = await fetch('/api/deals')
+      const res = await fetch('/api/deals', { headers: { Authorization: AUTH_HEADER } })
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(`HTTP ${res.status}${body.error ? `: ${body.error}` : ''}`)
@@ -293,28 +311,45 @@ export default function DealsModule() {
     } : prev)
     fetch('/api/update-deal-temperature', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
       body: JSON.stringify({ dealId, temperature }),
     })
   }
 
   async function handleKanbanDrop(e: React.DragEvent, newStage: string) {
     e.preventDefault()
+    setDraggingOverStage(null)
     const dealId = e.dataTransfer.getData('dealId')
     if (!dealId) return
     const deal = data?.active.find(d => d.id === dealId)
     if (!deal || deal.stage === newStage) return
+
+    const oldStage = deal.stage
     const existing = pendingChanges.current.get(dealId)?.changes ?? {}
     pendingChanges.current.set(dealId, { changes: { ...existing, stage: newStage }, ts: Date.now() })
     setData(prev => prev ? {
       ...prev,
       active: prev.active.map(d => d.id === dealId ? { ...d, stage: newStage } : d),
     } : prev)
-    fetch('/api/update-deal-stage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dealId, stage: newStage }),
-    })
+
+    try {
+      const res = await fetch('/api/update-deal-stage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
+        body: JSON.stringify({ dealId, stage: newStage }),
+      })
+      const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`)
+      showToast(`Moved to "${newStage}"`, 'ok')
+    } catch (err) {
+      // Revert optimistic change
+      pendingChanges.current.delete(dealId)
+      setData(prev => prev ? {
+        ...prev,
+        active: prev.active.map(d => d.id === dealId ? { ...d, stage: oldStage } : d),
+      } : prev)
+      showToast(`Failed to update stage: ${String(err)}`, 'err')
+    }
   }
 
   async function handleMoveToNegative(deal: ActiveDeal, category: LostDealCategory, notes: string) {
@@ -324,7 +359,7 @@ export default function DealsModule() {
     setPendingNotes('')
     fetch('/api/move-deal-to-lost', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
       body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
     })
   }
@@ -341,7 +376,7 @@ export default function DealsModule() {
     setRestoreModal(null)
     fetch('/api/restore-deal', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
       body: JSON.stringify({ sheetRowIndex: lostDeal.rowIndex, dealId: lostDeal.dealId, targetStage }),
     })
   }
@@ -477,27 +512,42 @@ export default function DealsModule() {
           {KANBAN_STAGES.map(stage => {
             const cards = byStage(stage)
             const col = STAGE_COLORS[stage] ?? '#888899'
+            const isOver = draggingOverStage === stage
+            const isDragTarget = !!draggingId && draggingId !== '' && !cards.find(c => c.id === draggingId)
             return (
               <div
                 key={stage}
-                className="rounded-xl p-2 min-h-[120px]"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
-                onDragOver={e => e.preventDefault()}
+                className="rounded-xl p-2 min-h-[120px] transition-all"
+                style={{
+                  background: isOver ? `${col}14` : 'rgba(255,255,255,0.03)',
+                  border: isOver ? `2px solid ${col}80` : `1px solid ${isDragTarget ? `${col}30` : 'rgba(255,255,255,0.07)'}`,
+                }}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDraggingOverStage(stage) }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDraggingOverStage(null) }}
                 onDrop={e => handleKanbanDrop(e, stage)}
               >
                 <div className="flex items-center justify-between mb-2 px-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider truncate" style={{ color: col }}>{stage}</span>
                   <span className="text-[11px] font-bold ml-1 shrink-0" style={{ color: col }}>{cards.length}</span>
                 </div>
+                {isOver && isDragTarget && (
+                  <div className="rounded-lg border-2 border-dashed mb-2 py-3 text-center text-[10px]"
+                    style={{ borderColor: `${col}60`, color: `${col}99` }}>
+                    Drop here
+                  </div>
+                )}
                 {cards.map(deal => (
                   <DealCard
                     key={deal.id}
                     deal={deal}
+                    isDragging={draggingId === deal.id}
                     onTempUpdate={handleTempUpdate}
                     onMoveToNegative={d => { setMoveModal({ deal: d }); setPendingCategory('Lost') }}
+                    onDragStart={id => setDraggingId(id)}
+                    onDragEnd={() => { setDraggingId(null); setDraggingOverStage(null) }}
                   />
                 ))}
-                {cards.length === 0 && (
+                {cards.length === 0 && !isOver && (
                   <p className="text-[10px] text-mh-muted/30 italic px-1 py-4 text-center">Empty</p>
                 )}
               </div>
@@ -636,6 +686,22 @@ export default function DealsModule() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Stage update toast */}
+      {toast && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed bottom-6 right-6 z-[99999] px-4 py-2.5 rounded-xl text-sm font-medium shadow-xl"
+          style={{
+            background: toast.type === 'ok' ? 'rgba(34,197,94,0.15)' : 'rgba(232,52,28,0.15)',
+            border: `1px solid ${toast.type === 'ok' ? 'rgba(34,197,94,0.4)' : 'rgba(232,52,28,0.4)'}`,
+            color: toast.type === 'ok' ? '#22C55E' : '#E8341C',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
+          {toast.type === 'ok' ? '✓ ' : '✕ '}{toast.msg}
+        </div>,
+        document.body
       )}
     </div>
   )

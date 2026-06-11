@@ -820,12 +820,15 @@ export async function createDealLight(dealName: string, stage: string, closingDa
 
 export async function updateDealStage(dealId: string, stage: string): Promise<void> {
   const token = await getAccessToken()
-  await fetch(`${BASE_URL}/Deals/${dealId}`, {
+  const res = await fetch(`${BASE_URL}/Deals/${dealId}`, {
     method: 'PUT',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: [{ Stage: stage }] }),
     cache: 'no-store',
   })
+  const body = await res.json().catch(() => ({})) as { data?: { status?: string; message?: string; code?: string }[] }
+  const record = body.data?.[0]
+  if (record?.status === 'error') throw new Error(`Zoho stage update failed: ${record.message ?? record.code ?? 'unknown'}`)
 }
 
 export interface ZohoEvent {
