@@ -43,5 +43,11 @@ export async function GET() {
   })
   const contactsData = await contactsRes.json()
 
-  return NextResponse.json({ step: 'success', tokenData: { access_token: '***' }, accountsData, contactsData })
+  // Step 4: raw deal to see all fields
+  const dealRes = await fetch('https://www.zohoapis.in/crm/v2/Deals/1321968000001023010', {
+    headers: { Authorization: `Zoho-oauthtoken ${tokenData.access_token}` }
+  })
+  const dealData = await dealRes.json()
+
+  return NextResponse.json({ step: 'success', tokenData: { access_token: '***' }, accountsData, contactsData, dealData })
 }
