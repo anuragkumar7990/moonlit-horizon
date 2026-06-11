@@ -36,17 +36,18 @@ export async function getDeals(): Promise<ZohoDeal[]> {
   const results: ZohoDeal[] = []
   let page = 1
   while (true) {
-    const data = await zohoGet(`/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account_Name,Contact_Full_Name,Tag&per_page=200&page=${page}`) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    const data = await zohoGet(`/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account,Contact_Full_Name,Deal_Tag&per_page=200&page=${page}`) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     for (const d of data.data ?? []) {
-      const tags = Array.isArray(d.Tag) ? (d.Tag as Record<string, unknown>[]).map(t => String(t.name ?? '')) : []
-      const temperature: ZohoDeal['temperature'] = tags.includes('Hot') ? 'Hot' : tags.includes('Warm') ? 'Warm' : tags.includes('Cold') ? 'Cold' : null
+      const dealTag = String(d.Deal_Tag ?? '')
+      const temperature: ZohoDeal['temperature'] = dealTag === 'Hot' ? 'Hot' : dealTag === 'Warm' ? 'Warm' : dealTag === 'Cold' ? 'Cold' : null
+      const account = d.Account as Record<string, unknown> | null
       results.push({
         id: String(d.id ?? ''),
         dealName: String(d.Deal_Name ?? ''),
         stage: String(d.Stage ?? ''),
         amount: String(d.Amount ?? ''),
         closingDate: String(d.Closing_Date ?? ''),
-        accountName: typeof d.Account_Name === 'object' && d.Account_Name !== null ? String((d.Account_Name as Record<string, unknown>).name ?? '') : String(d.Account_Name ?? ''),
+        accountName: account ? String(account.name ?? '') : '',
         contactName: String(d.Contact_Full_Name ?? ''),
         temperature,
       })
@@ -59,11 +60,10 @@ export async function getDeals(): Promise<ZohoDeal[]> {
 
 export async function updateDealTemperature(dealId: string, temperature: 'Hot' | 'Warm' | 'Cold' | null): Promise<void> {
   const token = await getAccessToken()
-  const tagList = temperature ? [{ name: temperature }] : []
   const res = await fetch(`${BASE_URL}/Deals/${dealId}`, {
     method: 'PUT',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [{ Tag: tagList }] }),
+    body: JSON.stringify({ data: [{ Deal_Tag: temperature ?? '' }] }),
     cache: 'no-store',
   })
   const body = await res.json().catch(() => ({})) as { data?: { status?: string; message?: string; code?: string }[] }

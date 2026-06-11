@@ -39,7 +39,7 @@ export async function GET() {
       .map(d => ({
         id:          d.id,
         name:        d.dealName,
-        account:     d.accountName || d.dealName,
+        account:     d.accountName,
         stage:       d.stage,
         temperature: d.temperature ?? null,
         amount:      d.amount,
