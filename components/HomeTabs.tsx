@@ -290,7 +290,12 @@ export default function HomeTabs({
   }
 
   function refresh() {
-    startTransition(() => router.refresh())
+    startTransition(async () => {
+      await fetch('/api/sync-zoho-calls?key=thetesttribe', {
+        headers: { 'Authorization': 'Basic OnRoZXRlc3R0cmliZQ==' },
+      })
+      router.refresh()
+    })
   }
 
   return (

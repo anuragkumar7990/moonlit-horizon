@@ -99,7 +99,14 @@ export default function CallingModule({ calls, calEvents }: { calls: Call[]; cal
   const [creatingZoho, setCreatingZoho] = useState<Set<string>>(new Set())
   const [zohoStatus, setZohoStatus] = useState<Map<string, 'created' | 'exists'>>(new Map())
 
-  const refresh = useCallback(() => startTransition(() => router.refresh()), [router, startTransition])
+  const refresh = useCallback(() => {
+    startTransition(async () => {
+      await fetch('/api/sync-zoho-calls?key=thetesttribe', {
+        headers: { 'Authorization': 'Basic OnRoZXRlc3R0cmliZQ==' },
+      })
+      router.refresh()
+    })
+  }, [router, startTransition])
 
   const periodCalls = useMemo(() => filterByPeriod(calls, period), [calls, period])
 
