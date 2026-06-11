@@ -259,6 +259,32 @@ async function getCallsSheetId(sheets: ReturnType<typeof getSheets>): Promise<nu
   return sheet?.properties?.sheetId ?? 0
 }
 
+// Deletes Calls rows by Zoho call ID (col J). Bottom-up to avoid index shifting.
+export async function deleteCallRowsByZohoId(zohoIds: string[]): Promise<number> {
+  if (zohoIds.length === 0) return 0
+  const sheets = getSheets()
+  const idSet = new Set(zohoIds.map(id => id.trim()))
+
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Calls!J:J' })
+  const rows = res.data.values ?? []
+
+  const toDelete: number[] = []
+  for (let i = 1; i < rows.length; i++) {
+    const id = String(rows[i][0] ?? '').trim()
+    if (idSet.has(id)) toDelete.push(i + 1)
+  }
+  if (toDelete.length === 0) return 0
+
+  const sheetId = await getCallsSheetId(sheets)
+  const requests = [...toDelete].reverse().map(rowIndex => ({
+    deleteDimension: {
+      range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex },
+    },
+  }))
+  await sheets.spreadsheets.batchUpdate({ spreadsheetId: SPREADSHEET_ID, requestBody: { requests } })
+  return toDelete.length
+}
+
 // Deletes Calls rows where account name (col C) exactly matches any given name,
 // or starts with "Untagged Company #" when deleteUntagged is true.
 // Rows are deleted bottom-up to avoid index shifting. Returns count of rows deleted.

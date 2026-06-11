@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getZohoCallsInRange } from '@/lib/zoho'
-import { getAllCallRowsFromSheet } from '@/lib/sheets'
+import { getAllCallRowsFromSheet, deleteCallRowsByZohoId } from '@/lib/sheets'
 import { processZohoCall } from '@/lib/zoho-call-processor'
 
 export const dynamic = 'force-dynamic'
@@ -73,19 +73,30 @@ export async function GET(req: NextRequest) {
   )
   // Skip call IDs we already processed above to avoid double-processing
   const processedIds = new Set(results.map(r => r.callId))
+  const scheduledIdsToDelete: string[] = []
   for (const [callId, existingRow] of untagged) {
     if (processedIds.has(callId)) continue
     try {
       const r = await processZohoCall(callId, { existingRow })
-      const wasResolved = !r.skippedSheetsWrite
-      reenrichResults.push({ callId, status: wasResolved ? 'reenriched' : 'still_incomplete', account: r.account })
+      if (r.scheduledCall) {
+        // This was a planned activity, not an actual dial — remove it from the sheet
+        scheduledIdsToDelete.push(callId)
+        reenrichResults.push({ callId, status: 'deleted_scheduled' })
+      } else {
+        const wasResolved = !r.skippedSheetsWrite
+        reenrichResults.push({ callId, status: wasResolved ? 'reenriched' : 'still_incomplete', account: r.account })
+      }
     } catch (e) {
       reenrichResults.push({ callId, status: 'error', account: String(e) })
     }
   }
+  if (scheduledIdsToDelete.length > 0) {
+    await deleteCallRowsByZohoId(scheduledIdsToDelete).catch(e => console.error('[sync-zoho-calls] deleteCallRowsByZohoId failed:', e))
+    console.log(`[sync-zoho-calls] Deleted ${scheduledIdsToDelete.length} scheduled (non-completed) call rows`)
+  }
   const resolved = reenrichResults.filter(r => r.status === 'reenriched').length
   if (untagged.length > 0) {
-    console.log(`[sync-zoho-calls] re-enrich: total=${untagged.length} resolved=${resolved}`)
+    console.log(`[sync-zoho-calls] re-enrich: total=${untagged.length} resolved=${resolved} deleted_scheduled=${scheduledIdsToDelete.length}`)
   }
 
   return NextResponse.json({ since, until, synced, skipped, junk, errors, total: callsInRange.length, results, reenrichResults })

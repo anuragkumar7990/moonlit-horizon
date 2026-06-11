@@ -275,6 +275,7 @@ export async function getContactById(id: string): Promise<ZohoContact & { design
 export async function getCallById(id: string): Promise<{
   id: string
   callResult: string
+  callStatus: string
   proposedMeetingTime: string
   seModule: string
   whoId: { id: string; module: string; name: string } | null
@@ -285,7 +286,7 @@ export async function getCallById(id: string): Promise<{
   ownerName: string
 } | null> {
   const data = await zohoGet(
-    `/Calls/${id}?fields=id,Call_Result,Proposed_Meeting_Time,$se_module,Who_Id,What_Id,Call_Start_Time,Call_Duration,Description,Owner`
+    `/Calls/${id}?fields=id,Call_Result,Call_Status,Proposed_Meeting_Time,$se_module,Who_Id,What_Id,Call_Start_Time,Call_Duration,Description,Owner`
   ) as { data?: Record<string, unknown>[] }
   const c = data.data?.[0]
   if (!c) return null
@@ -301,6 +302,7 @@ export async function getCallById(id: string): Promise<{
   return {
     id: String(c.id ?? ''),
     callResult: String(c.Call_Result ?? ''),
+    callStatus: String(c.Call_Status ?? ''),
     proposedMeetingTime: String(c.Proposed_Meeting_Time ?? ''),
     seModule: String(c.$se_module ?? ''),
     whoId,
@@ -774,21 +776,24 @@ export async function createDeal(payload: {
   return record?.details?.id ?? ''
 }
 
-// Fetch all Zoho call IDs in a date range (yyyy-mm-dd) using COQL.
-// Returns at most 200 records per call — callers should page if needed.
+// Fetch completed outbound call IDs in a date range (yyyy-mm-dd).
+// Filters to Call_Status=Completed to exclude scheduled/planned activities that
+// exist in Zoho for every lead in a campaign but haven't been dialled yet.
 export async function getZohoCallsInRange(since: string, until: string): Promise<{ id: string; date: string }[]> {
   const token = await getAccessToken()
   const results: { id: string; date: string }[] = []
   let page = 1
   while (page <= 50) {
     const res = await fetch(
-      `${BASE_URL}/Calls?fields=id,Call_Start_Time&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
+      `${BASE_URL}/Calls?fields=id,Call_Start_Time,Call_Status&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
       { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
     )
     const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     const rows = data.data ?? []
     if (rows.length === 0) break
     for (const c of rows) {
+      const status = String(c.Call_Status ?? '').toLowerCase()
+      if (status && status !== 'completed') continue  // skip scheduled/cancelled/overdue
       const rawTime = String(c.Call_Start_Time ?? '')
       const date = rawTime.slice(0, 10)
       if (date >= since && date <= until && c.id) {

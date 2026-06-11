@@ -49,11 +49,18 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   callId: string
   account: string
   skippedSheetsWrite: boolean
+  scheduledCall: boolean   // true if Zoho status is not Completed — caller should delete the sheet row
   date: string
   error?: string
 }> {
   const call = await getCallById(callId)
-  if (!call) return { ok: false, callId, account: '', skippedSheetsWrite: false, date: '', error: `Call ${callId} not found in Zoho` }
+  if (!call) return { ok: false, callId, account: '', skippedSheetsWrite: false, scheduledCall: false, date: '', error: `Call ${callId} not found in Zoho` }
+
+  // Skip planned/scheduled activities — only process calls that were actually dialled
+  const callStatus = call.callStatus.toLowerCase()
+  if (callStatus && callStatus !== 'completed') {
+    return { ok: true, callId, account: '', skippedSheetsWrite: true, scheduledCall: true, date: '' }
+  }
 
   let contactName = ''
   let contactPhone = ''
@@ -126,7 +133,7 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   }
 
   if (JUNK_ACCOUNT_NAMES.has(accountName.toLowerCase().trim())) {
-    return { ok: true, callId, account: accountName, skippedSheetsWrite: true, date: '' }
+    return { ok: true, callId, account: accountName, skippedSheetsWrite: true, scheduledCall: false, date: '' }
   }
 
   const { date, time } = parseZohoDateTime(call.callStartTime)
@@ -174,5 +181,5 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   }
 
   const wasUpdated = !!(wasUntagged || isIncompleteRow)
-  return { ok: true, callId, account: accountName, skippedSheetsWrite: alreadyInSheets && !wasUpdated, date }
+  return { ok: true, callId, account: accountName, skippedSheetsWrite: alreadyInSheets && !wasUpdated, scheduledCall: false, date }
 }
