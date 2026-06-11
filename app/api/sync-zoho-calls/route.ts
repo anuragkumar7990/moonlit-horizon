@@ -38,6 +38,8 @@ export async function GET(req: NextRequest) {
   const existingRows = await getAllCallRowsFromSheet().catch(() => new Map<string, { rowIndex: number; account: string; contactName: string }>())
 
   const results: { callId: string; status: string; account?: string }[] = []
+  // Shared across the whole sync run — prevents the same account firing syncCallIntel multiple times
+  const intelSyncedAccounts = new Set<string>()
 
   for (const c of callsInRange) {
     try {
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
         continue
       }
       // Pass existingRow so processZohoCall skips its own sheet dedup read
-      const r = await processZohoCall(c.id, existingRow ? { existingRow } : undefined)
+      const r = await processZohoCall(c.id, existingRow ? { existingRow, intelSyncedAccounts } : { intelSyncedAccounts })
       results.push({
         callId: c.id,
         status: r.skippedSheetsWrite ? 'junk_skipped' : 'synced',
@@ -77,7 +79,7 @@ export async function GET(req: NextRequest) {
   for (const [callId, existingRow] of untagged) {
     if (processedIds.has(callId)) continue
     try {
-      const r = await processZohoCall(callId, { existingRow })
+      const r = await processZohoCall(callId, { existingRow, intelSyncedAccounts })
       if (r.scheduledCall) {
         // This was a planned activity, not an actual dial — remove it from the sheet
         scheduledIdsToDelete.push(callId)

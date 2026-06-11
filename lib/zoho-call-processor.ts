@@ -52,7 +52,7 @@ export function outcomeToLeadStatus(outcome: string): string | null {
   return null
 }
 
-export async function processZohoCall(callId: string, opts?: { existingRow?: { rowIndex: number; account: string; contactName?: string } }): Promise<{
+export async function processZohoCall(callId: string, opts?: { existingRow?: { rowIndex: number; account: string; contactName?: string }; intelSyncedAccounts?: Set<string> }): Promise<{
   ok: boolean
   callId: string
   account: string
@@ -158,17 +158,28 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   const isIncompleteRow = existingRow && !existingRow.contactName && contactName
   const wasUntagged = existingRow && existingRow.account.startsWith('Untagged Company') && !accountName.startsWith('Untagged Company')
 
+  let intelNeedsUpdate = false
   if (!alreadyInSheets) {
     await appendCallRow({ date, time, account: accountName, contactName, contactPhone, email, designation, sdr: call.ownerName, duration: call.callDuration, outcome: call.callResult, notes: call.description, followUpDate: '', zohoCallId: callId })
     console.log(`[zoho-call-processor] Wrote to Sheets — ${accountName} / ${call.callResult} / ${date}`)
+    intelNeedsUpdate = true
   } else if (wasUntagged || isIncompleteRow) {
     await updateCallAccountRow(existingRow!.rowIndex, accountName, contactName, contactPhone, email, designation, call.callDuration || undefined)
     console.log(`[zoho-call-processor] Updated row ${existingRow!.rowIndex} — ${accountName} (wasUntagged=${wasUntagged} isIncomplete=${!!isIncompleteRow})`)
+    // Only update intel if the company name actually changed (wasUntagged); outcome didn't change for isIncompleteRow
+    if (wasUntagged) intelNeedsUpdate = true
   } else {
     console.log(`[zoho-call-processor] Skipped — ${callId} already in Sheets`)
   }
 
-  if (accountName) syncCallIntel(accountName, date).catch(() => { /* best effort */ })
+  if (intelNeedsUpdate && accountName && !accountName.startsWith('Untagged Company')) {
+    // Dedup: if caller passes a Set, only fire intel sync once per account per run
+    const alreadySynced = opts?.intelSyncedAccounts
+    if (!alreadySynced || !alreadySynced.has(accountName)) {
+      syncCallIntel(accountName, date).catch(() => { /* best effort */ })
+      alreadySynced?.add(accountName)
+    }
+  }
 
   const newLeadStatus = outcomeToLeadStatus(call.callResult)
   if (newLeadStatus) {
