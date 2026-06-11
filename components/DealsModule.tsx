@@ -280,7 +280,10 @@ export default function DealsModule() {
   async function load(background = false) {
     if (!background) setLoading(true)
     try {
-      const res = await fetch('/api/deals', { headers: { Authorization: AUTH_HEADER } })
+      const res = await fetch('/api/deals', {
+        headers: { Authorization: AUTH_HEADER },
+        cache: 'no-store',
+      })
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(`HTTP ${res.status}${body.error ? `: ${body.error}` : ''}`)
@@ -341,6 +344,9 @@ export default function DealsModule() {
       const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
       if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`)
       showToast(`Moved to "${newStage}"`, 'ok')
+      // Clear the pending change now that Zoho confirmed success, then reload to get canonical state
+      pendingChanges.current.delete(dealId)
+      await load(true)
     } catch (err) {
       // Revert optimistic change
       pendingChanges.current.delete(dealId)
