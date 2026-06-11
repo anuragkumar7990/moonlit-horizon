@@ -776,16 +776,19 @@ export async function createDeal(payload: {
   return record?.details?.id ?? ''
 }
 
-// Fetch completed outbound call IDs in a date range (yyyy-mm-dd).
-// Filters to Call_Status=Completed to exclude scheduled/planned activities that
-// exist in Zoho for every lead in a campaign but haven't been dialled yet.
+const JUNK_CALL_RESULTS_ZOHO = new Set([
+  'ai processed', 'ai processed via cloud folder', 'ai call processed', 'processed',
+])
+
+// Fetch completed SDR call IDs in a date range (yyyy-mm-dd).
+// Excludes scheduled/planned activities and AI-auto-processed entries.
 export async function getZohoCallsInRange(since: string, until: string): Promise<{ id: string; date: string }[]> {
   const token = await getAccessToken()
   const results: { id: string; date: string }[] = []
   let page = 1
   while (page <= 50) {
     const res = await fetch(
-      `${BASE_URL}/Calls?fields=id,Call_Start_Time,Call_Status&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
+      `${BASE_URL}/Calls?fields=id,Call_Start_Time,Call_Status,Call_Result&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
       { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
     )
     const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
@@ -794,6 +797,8 @@ export async function getZohoCallsInRange(since: string, until: string): Promise
     for (const c of rows) {
       const status = String(c.Call_Status ?? '').toLowerCase()
       if (status && status !== 'completed') continue  // skip scheduled/cancelled/overdue
+      const result = String(c.Call_Result ?? '').toLowerCase().trim()
+      if (JUNK_CALL_RESULTS_ZOHO.has(result)) continue  // skip AI-auto-processed entries
       const rawTime = String(c.Call_Start_Time ?? '')
       const date = rawTime.slice(0, 10)
       if (date >= since && date <= until && c.id) {

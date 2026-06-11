@@ -9,6 +9,14 @@ const JUNK_ACCOUNT_NAMES = new Set([
   'india', '123', 'mt',
 ])
 
+// Call results set automatically by Zoho AI / telephony — not real SDR dials
+const JUNK_CALL_RESULTS = new Set([
+  'ai processed',
+  'ai processed via cloud folder',
+  'ai call processed',
+  'processed',
+])
+
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com', 'yahoo.com', 'yahoo.in', 'yahoo.co.in',
   'hotmail.com', 'hotmail.co.in', 'outlook.com', 'live.com',
@@ -59,6 +67,11 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   // Skip planned/scheduled activities — only process calls that were actually dialled
   const callStatus = call.callStatus.toLowerCase()
   if (callStatus && callStatus !== 'completed') {
+    return { ok: true, callId, account: '', skippedSheetsWrite: true, scheduledCall: true, date: '' }
+  }
+
+  // Skip calls auto-processed by Zoho AI telephony — not real SDR dials
+  if (JUNK_CALL_RESULTS.has(call.callResult.toLowerCase().trim())) {
     return { ok: true, callId, account: '', skippedSheetsWrite: true, scheduledCall: true, date: '' }
   }
 
