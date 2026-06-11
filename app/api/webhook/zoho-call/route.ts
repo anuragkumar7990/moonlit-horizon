@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { convertLead, findOrCreateAccount, linkContactToAccount, getContactById, getLeadById, getZohoAccounts, getCallById, updateLeadCompany } from '@/lib/zoho'
 import { bookMeeting } from '@/lib/booking'
+import { getProspectByEmail } from '@/lib/sheets'
 
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com','yahoo.com','yahoo.in','yahoo.co.in','hotmail.com','hotmail.co.in',
@@ -115,10 +116,13 @@ export async function POST(req: NextRequest) {
         console.log(`[webhook/zoho-call] Converted → Contact ${contactId} Account ${accountId || 'none'}`)
 
         // Zoho often returns Accounts:null on conversion — find/create account and link the contact
-        // Fall back to email-domain inference if company name is blank
-        const resolvedCompany = lead.company
-          || inferCompanyFromDomain(lead.email ?? '')
-          || `Untagged Company #${resolvedId.slice(-6).toUpperCase()}`
+        // Try: lead.company → domain inference → Prospects sheet → Untagged fallback
+        let resolvedCompany = lead.company || inferCompanyFromDomain(lead.email ?? '')
+        if (!resolvedCompany && lead.email) {
+          const prospect = await getProspectByEmail(lead.email).catch(() => null)
+          resolvedCompany = prospect?.company || ''
+        }
+        resolvedCompany = resolvedCompany || `Untagged Company #${resolvedId.slice(-6).toUpperCase()}`
         if (!accountId && resolvedCompany) {
           console.log(`[webhook/zoho-call] No account from conversion, finding/creating for "${resolvedCompany}"`)
           const acct = await findOrCreateAccount(resolvedCompany)
@@ -160,11 +164,15 @@ export async function POST(req: NextRequest) {
       if (found) { accountId = found.id; accountName = found.accountName }
     }
 
-    // Still no account — infer from email domain or use Untagged tag, then find/create
+    // Still no account — infer from email domain, then Prospects sheet, then Untagged fallback
     if (!accountId) {
       const contactFullName = `${contact.firstName} ${contact.lastName}`.trim()
-      const resolvedCompany = inferCompanyFromDomain(contact.email)
-        || `Untagged Company #${contactId.slice(-6).toUpperCase()}`
+      let resolvedCompany = inferCompanyFromDomain(contact.email)
+      if (!resolvedCompany) {
+        const prospect = await getProspectByEmail(contact.email).catch(() => null)
+        resolvedCompany = prospect?.company || ''
+      }
+      resolvedCompany = resolvedCompany || `Untagged Company #${contactId.slice(-6).toUpperCase()}`
       console.log(`[webhook/zoho-call] No account on contact — using "${resolvedCompany}"`)
       const acct = await findOrCreateAccount(resolvedCompany)
       accountId = acct.id

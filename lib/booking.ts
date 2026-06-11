@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { createDeal, findDealIdByName } from './zoho'
+import { getProspectByEmail } from './sheets'
 import { randomUUID } from 'crypto'
 
 const TTT_ATTENDEES = [
@@ -36,7 +37,13 @@ export async function bookMeeting(payload: {
 }> {
   const { accountId, accountName, contactName, contactEmail, contactPhone = '', meetingTime, meetingType } = payload
 
-  const displayName = accountName.toLowerCase().startsWith('untagged company') ? contactName : accountName
+  // Resolve company name: if accountName is untagged, try Prospects sheet lookup
+  let resolvedName = accountName
+  if (accountName.toLowerCase().startsWith('untagged company')) {
+    const prospect = await getProspectByEmail(contactEmail).catch(() => null)
+    resolvedName = prospect?.company || contactName
+  }
+  const displayName = resolvedName
   const title = meetingType === 'L1'
     ? `${displayName} <> The Test Tribe | Upskilling for Teams`
     : `${displayName} <> The Test Tribe | Training - Next Steps`
@@ -84,14 +91,14 @@ export async function bookMeeting(payload: {
   let dealError: string | undefined
 
   try {
-    const existingDealId = await findDealIdByName(accountName)
+    const existingDealId = await findDealIdByName(resolvedName)
     if (existingDealId) {
       dealId = existingDealId
-      console.log(`[bookMeeting] Reusing existing deal ${existingDealId} for ${accountName}`)
+      console.log(`[bookMeeting] Reusing existing deal ${existingDealId} for ${resolvedName}`)
     } else {
       dealId = await createDeal({
         accountId,
-        accountName,
+        accountName: resolvedName,
         contactName,
         contactEmail,
         contactPhone,
@@ -112,7 +119,7 @@ export async function bookMeeting(payload: {
     requestBody: {
       values: [[
         meetingId,
-        accountName,
+        resolvedName,
         contactName,
         contactEmail,
         startTime.toISOString(),
@@ -131,7 +138,7 @@ export async function bookMeeting(payload: {
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [[
-        accountName,
+        resolvedName,
         contactName,
         contactEmail,
         'Meeting Booked',
