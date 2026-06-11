@@ -306,17 +306,31 @@ export default function DealsModule() {
 
   async function handleTempUpdate(dealId: string, temperature: Temperature) {
     if (!data) return
+    const oldTemp = data.active.find(d => d.id === dealId)?.temperature ?? null
     const existing = pendingChanges.current.get(dealId)?.changes ?? {}
     pendingChanges.current.set(dealId, { changes: { ...existing, temperature }, ts: Date.now() })
     setData(prev => prev ? {
       ...prev,
       active: prev.active.map(d => d.id === dealId ? { ...d, temperature } : d),
     } : prev)
-    fetch('/api/update-deal-temperature', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
-      body: JSON.stringify({ dealId, temperature }),
-    })
+    try {
+      const res = await fetch('/api/update-deal-temperature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
+        body: JSON.stringify({ dealId, temperature }),
+      })
+      const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`)
+      pendingChanges.current.delete(dealId)
+      await load(true)
+    } catch (err) {
+      pendingChanges.current.delete(dealId)
+      setData(prev => prev ? {
+        ...prev,
+        active: prev.active.map(d => d.id === dealId ? { ...d, temperature: oldTemp } : d),
+      } : prev)
+      showToast(`Failed to update temperature: ${String(err)}`, 'err')
+    }
   }
 
   async function handleKanbanDrop(e: React.DragEvent, newStage: string) {
@@ -363,11 +377,23 @@ export default function DealsModule() {
     setData(prev => prev ? { ...prev, active: prev.active.filter(d => d.id !== deal.id) } : prev)
     setMoveModal(null)
     setPendingNotes('')
-    fetch('/api/move-deal-to-lost', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
-      body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
-    })
+    try {
+      const res = await fetch('/api/move-deal-to-lost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
+        body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
+      })
+      const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`)
+      pendingRemovals.current.delete(deal.id)
+      await load(true)
+      showToast(`Moved to "${category}"`, 'ok')
+    } catch (err) {
+      // Revert — put the deal back
+      pendingRemovals.current.delete(deal.id)
+      setData(prev => prev ? { ...prev, active: [...(prev.active), deal] } : prev)
+      showToast(`Failed to move deal: ${String(err)}`, 'err')
+    }
   }
 
   async function handleDrop(dealId: string, category: LostDealCategory) {

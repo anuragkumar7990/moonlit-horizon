@@ -57,14 +57,27 @@ export async function getDeals(): Promise<ZohoDeal[]> {
   return results
 }
 
+export async function updateDealTemperature(dealId: string, temperature: 'Hot' | 'Warm' | 'Cold' | null): Promise<void> {
+  const token = await getAccessToken()
+  const tagList = temperature ? [{ name: temperature }] : []
+  const res = await fetch(`${BASE_URL}/Deals/${dealId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [{ Tag: tagList }] }),
+    cache: 'no-store',
+  })
+  const body = await res.json().catch(() => ({})) as { data?: { status?: string; message?: string; code?: string }[] }
+  const record = body.data?.[0]
+  if (record?.status === 'error') throw new Error(`Zoho temperature update failed: ${record.message ?? record.code ?? 'unknown'}`)
+}
+
 export async function addTagToDeals(ids: string[], tagName: string): Promise<void> {
   if (ids.length === 0) return
   const token = await getAccessToken()
   const BATCH = 50
   for (let i = 0; i < ids.length; i += BATCH) {
     const batch = ids.slice(i, i + BATCH)
-    const params = new URLSearchParams({ tag_names: tagName })
-    batch.forEach(id => params.append('ids[]', id))
+    const params = new URLSearchParams({ tag_names: tagName, ids: batch.join(',') })
     await fetch(`${BASE_URL}/Deals/actions/add_tags?${params.toString()}`, {
       method: 'POST',
       headers: { Authorization: `Zoho-oauthtoken ${token}` },
@@ -78,8 +91,7 @@ export async function removeTagFromDeals(ids: string[], tagName: string): Promis
   const BATCH = 50
   for (let i = 0; i < ids.length; i += BATCH) {
     const batch = ids.slice(i, i + BATCH)
-    const params = new URLSearchParams({ tag_names: tagName })
-    batch.forEach(id => params.append('ids[]', id))
+    const params = new URLSearchParams({ tag_names: tagName, ids: batch.join(',') })
     await fetch(`${BASE_URL}/Deals/actions/remove_tags?${params.toString()}`, {
       method: 'POST',
       headers: { Authorization: `Zoho-oauthtoken ${token}` },
