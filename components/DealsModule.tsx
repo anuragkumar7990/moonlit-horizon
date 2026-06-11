@@ -381,7 +381,7 @@ export default function DealsModule() {
       const res = await fetch('/api/move-deal-to-lost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: AUTH_HEADER },
-        body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account, category, notes }),
+        body: JSON.stringify({ dealId: deal.id, dealName: deal.name, account: deal.account || deal.name, category, notes }),
       })
       const body = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
       if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`)
