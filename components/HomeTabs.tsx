@@ -19,6 +19,7 @@ import DealsModule from './DealsModule'
 import ObjectivesModule from './ObjectivesModule'
 import DailyScrumModule from './DailyScrumModule'
 import WBRModule from './WBRModule'
+import CalendarModule from './CalendarModule'
 import type { Call, Meeting, LeadCounts, FunnelData, WeeklyPoint } from '@/lib/types'
 import type { CallsColumnData, MeetingsColumnData } from '@/lib/dashboard'
 import type { CalendarEvent } from '@/lib/booking'
@@ -369,7 +370,7 @@ export default function HomeTabs({
       {tab === 'followups'  && <ContactTrackerModule />}
       {tab === 'updates'    && <UpdatesModule />}
       {tab === 'deals'      && <DealsModule />}
-      {tab === 'calendar'   && <ComingSoon label="Calendar" />}
+      {tab === 'calendar'   && <CalendarModule rawMeetings={rawMeetings} calEvents={calEvents} />}
       {tab === 'objectives' && <ObjectivesModule />}
       {tab === 'scrum'      && <DailyScrumModule />}
       {tab === 'wbr'        && <WBRModule />}
