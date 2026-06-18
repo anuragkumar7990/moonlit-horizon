@@ -38,12 +38,14 @@ export async function POST(req: NextRequest) {
       requestBody: metadata,
       media: { mimeType: file.type || 'application/octet-stream', body: stream },
       fields: 'id,webViewLink',
+      supportsAllDrives: true,
     })
 
     const fileId = created.data.id!
     await drive.permissions.create({
       fileId,
       requestBody: { role: 'reader', type: 'anyone' },
+      supportsAllDrives: true,
     })
 
     return NextResponse.json({ url: created.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view` })
