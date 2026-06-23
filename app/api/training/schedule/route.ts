@@ -40,6 +40,10 @@ function buildISTDateTime(date: string, time: string): string {
   return `${date}T${time}:00+05:30`
 }
 
+export async function GET() {
+  return NextResponse.json({ ok: true, endpoint: 'POST /api/training/schedule', status: 'ready' })
+}
+
 export async function POST(req: NextRequest) {
   const pwd = req.headers.get('x-dashboard-password') ?? req.nextUrl.searchParams.get('password')
   if (pwd !== SECRET) {
