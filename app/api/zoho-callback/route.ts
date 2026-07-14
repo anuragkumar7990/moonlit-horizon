@@ -7,8 +7,13 @@ export async function GET(req: NextRequest) {
     return new NextResponse('No code received from Zoho.', { status: 400 })
   }
 
+  // Must exactly match whatever redirect URI is registered in the Zoho API Console for this
+  // client. Defaults to localhost for local dev; set ZOHO_REDIRECT_URI in the deployed
+  // environment (and register that URL in the Zoho API Console) before re-authing in production —
+  // previously hardcoded to localhost, which silently failed if run against the deployed app.
+  const redirectUri = process.env.ZOHO_REDIRECT_URI || 'http://localhost:3000/api/zoho-callback'
   const res = await fetch(
-    `https://accounts.zoho.in/oauth/v2/token?code=${code}&client_id=${process.env.ZOHO_CLIENT_ID}&client_secret=${process.env.ZOHO_CLIENT_SECRET}&redirect_uri=http://localhost:3000/api/zoho-callback&grant_type=authorization_code`,
+    `https://accounts.zoho.in/oauth/v2/token?code=${code}&client_id=${process.env.ZOHO_CLIENT_ID}&client_secret=${process.env.ZOHO_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&grant_type=authorization_code`,
     { method: 'POST' }
   )
   const data = await res.json()

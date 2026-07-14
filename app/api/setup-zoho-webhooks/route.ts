@@ -52,6 +52,17 @@ async function registerChannel(token: string, channelId: number, events: string[
 }
 
 export async function GET(req: NextRequest) {
+  // Programmatic webhook registration via Zoho's Notifications API is broken for this org
+  // (returns OAUTH_SCOPE_MISMATCH) — see MOONLIT_HORIZON_MASTER.md §23.1. Webhooks are
+  // configured manually via two Zoho CRM Workflow Rules instead; this route is kept only
+  // for reference and intentionally does nothing live so it can't be mistaken for a working
+  // setup path by a future maintainer.
+  return NextResponse.json({
+    error: 'deprecated',
+    message: 'This route is non-functional (Zoho returns OAUTH_SCOPE_MISMATCH). Webhooks are configured manually in Zoho CRM — see MOONLIT_HORIZON_MASTER.md §23.1.',
+  }, { status: 501 })
+
+  // eslint-disable-next-line no-unreachable
   const pwd = req.headers.get('x-dashboard-password') ?? req.nextUrl.searchParams.get('password')
   if (pwd !== SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

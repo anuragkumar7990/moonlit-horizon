@@ -420,7 +420,7 @@ Fires to `/api/circleback-sync` after every meeting where `trainings@thetesttrib
 | Issue | Severity | Action |
 |---|---|---|
 | Gmail intel trigger is still pull-based | ✅ Fixed | Gmail Watch API + Pub/Sub live — auto-triggers on new inbox emails |
-| No retry logic on Zoho 429 rate limit | Medium | Add exponential backoff in `lib/zoho.ts` `zohoGet()` |
+| No retry logic on Zoho 429 rate limit | ✅ Fixed | `zohoGet()` now retries via `zohoFetchWithRetry()` — 3 retries, 1s/2s/4s backoff on 429/5xx |
 | Sheets write failures are silent (only `console.error`) | Low | Add Discord alert to `#sales-ops` on failure |
 | Contact Intelligence Notes Summary (col W) is blank | Medium | Run AI enrichment pass using call history JSON |
 | Objective current values don't auto-populate | Medium | Could auto-fill Calls Dialled / L1 Conducted from existing data |

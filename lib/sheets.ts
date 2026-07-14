@@ -176,6 +176,56 @@ export async function appendCallRow(row: {
   return match ? parseInt(match[1]) : -1
 }
 
+const SYNC_ERRORS_HEADERS = ['Timestamp', 'Operation', 'Context', 'Error']
+
+// Durable, queryable failure log for background/fire-and-forget Zoho and Sheets writes
+// that previously only went to console.error (invisible once the serverless function
+// exits). Never throws — logging a failure must not itself break the caller's flow.
+export async function appendSyncError(operation: string, context: string, error: unknown): Promise<void> {
+  try {
+    const sheets = getSheets()
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+    const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Sync_Errors')
+    if (!tabExists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { requests: [{ addSheet: { properties: { title: 'Sync_Errors' } } }] },
+      })
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Sync_Errors!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [SYNC_ERRORS_HEADERS] },
+      })
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Sync_Errors!A:D',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[new Date().toISOString(), operation, context, message]] },
+    })
+  } catch (e) {
+    console.error('[sheets] appendSyncError itself failed:', e)
+  }
+}
+
+// Count of Sync_Errors rows logged in the last `hours` hours — powers the dashboard badge.
+export async function getRecentSyncErrorCount(hours = 24): Promise<number> {
+  try {
+    const sheets = getSheets()
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID })
+    const tabExists = meta.data.sheets?.some(s => s.properties?.title === 'Sync_Errors')
+    if (!tabExists) return 0
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Sync_Errors!A:A' })
+    const rows = res.data.values ?? []
+    const cutoff = Date.now() - hours * 60 * 60 * 1000
+    return rows.slice(1).filter(r => r[0] && new Date(r[0]).getTime() >= cutoff).length
+  } catch {
+    return 0
+  }
+}
+
 export async function updateCallRowZohoId(rowNum: number, zohoCallId: string): Promise<void> {
   const sheets = getSheets()
   await sheets.spreadsheets.values.update({

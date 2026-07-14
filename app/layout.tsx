@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Poppins } from 'next/font/google'
 import NavActions from '@/components/NavActions'
+import SyncErrorsBadge from '@/components/SyncErrorsBadge'
 import './globals.css'
 
 const poppins = Poppins({
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <div className="flex items-center gap-4">
             <a href="/" className="text-sm text-mh-muted hover:text-mh-text font-medium transition-colors">Home</a>
+            <SyncErrorsBadge />
             <NavActions />
           </div>
         </nav>

@@ -1,42 +1,8 @@
 import { getCallById, getContactById, getLeadById, findLeadByEmail, updateLeadCompany, updateLeadStatus, findDealByName, createDealLight } from '@/lib/zoho'
 import { appendCallRow, callExistsInSheetByZohoId, upsertContactIntelRow, updateProspectCallStatus, updateCallAccountRow, getProspectByEmail } from '@/lib/sheets'
 import { syncCallIntel } from '@/lib/intel'
-
-const JUNK_ACCOUNT_NAMES = new Set([
-  'discord bot', 'test1', 'test', 'test call', 'test account',
-  'the test tribe', 'thetesttribe',
-  // Generic/bad inferences that are never real accounts
-  'india', '123', 'mt',
-])
-
-// Call results set automatically by Zoho AI / telephony — not real SDR dials
-const JUNK_CALL_RESULTS = new Set([
-  'ai processed',
-  'ai processed via cloud folder',
-  'ai call processed',
-  'processed',
-])
-
-const FREE_EMAIL_DOMAINS = new Set([
-  'gmail.com', 'yahoo.com', 'yahoo.in', 'yahoo.co.in',
-  'hotmail.com', 'hotmail.co.in', 'outlook.com', 'live.com',
-  'rediffmail.com', 'icloud.com', 'me.com', 'mac.com',
-  'protonmail.com', 'proton.me', 'aol.com', 'ymail.com',
-])
-
-function toTitleCase(str: string): string {
-  if (!str) return str
-  // Preserve all-caps tokens (abbreviations like LTM, KPMG, ABB)
-  return str.replace(/\w+/g, w => w === w.toUpperCase() ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-}
-
-function inferCompanyFromDomain(email: string): string {
-  const domain = email.split('@')[1]?.toLowerCase()
-  if (!domain || FREE_EMAIL_DOMAINS.has(domain)) return ''
-  const label = domain.split('.')[0]
-  if (!label) return ''
-  return label.length <= 4 ? label.toUpperCase() : label.charAt(0).toUpperCase() + label.slice(1)
-}
+import { toTitleCase, isJunkAccountName, isJunkCallResult, resolveFallbackAccountName } from '@/lib/company-resolution'
+import { notifySyncError } from '@/lib/sync-errors'
 
 function parseZohoDateTime(callStartTime: string): { date: string; time: string } {
   if (!callStartTime || callStartTime === 'null') return { date: '', time: '' }
@@ -71,7 +37,7 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
   }
 
   // Skip calls auto-processed by Zoho AI telephony — not real SDR dials
-  if (JUNK_CALL_RESULTS.has(call.callResult.toLowerCase().trim())) {
+  if (isJunkCallResult(call.callResult)) {
     return { ok: true, callId, account: '', skippedSheetsWrite: true, scheduledCall: true, date: '' }
   }
 
@@ -118,7 +84,7 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     if (prospect) {
       if (!designation && prospect.designation)   designation   = prospect.designation
       if (!contactPhone && prospect.phone)         contactPhone  = prospect.phone
-      if (!accountName  && prospect.company)       accountName   = prospect.company
+      if (!accountName  && prospect.company)       accountName   = toTitleCase(prospect.company)
       if (!contactName  && (prospect.firstName || prospect.lastName)) {
         contactName = `${prospect.firstName} ${prospect.lastName}`.trim()
       }
@@ -135,17 +101,14 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     }
   }
 
-  if (!accountName && email) {
-    accountName = inferCompanyFromDomain(email) || `Untagged Company #${callId.slice(-6).toUpperCase()}`
+  if (!accountName) {
+    accountName = resolveFallbackAccountName(email, callId)
     if (!accountName.startsWith('Untagged') && leadIdForUpdate) {
-      updateLeadCompany(leadIdForUpdate, accountName).catch(() => { /* best effort */ })
+      updateLeadCompany(leadIdForUpdate, accountName).catch(e => notifySyncError('updateLeadCompany', `leadId=${leadIdForUpdate} accountName=${accountName}`, e))
     }
   }
-  if (!accountName) {
-    accountName = `Untagged Company #${callId.slice(-6).toUpperCase()}`
-  }
 
-  if (JUNK_ACCOUNT_NAMES.has(accountName.toLowerCase().trim())) {
+  if (isJunkAccountName(accountName)) {
     return { ok: true, callId, account: accountName, skippedSheetsWrite: true, scheduledCall: false, date: '' }
   }
 
@@ -176,15 +139,15 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
     // Dedup: if caller passes a Set, only fire intel sync once per account per run
     const alreadySynced = opts?.intelSyncedAccounts
     if (!alreadySynced || !alreadySynced.has(accountName)) {
-      syncCallIntel(accountName, date).catch(() => { /* best effort */ })
+      syncCallIntel(accountName, date).catch(e => notifySyncError('syncCallIntel', `account=${accountName} date=${date}`, e))
       alreadySynced?.add(accountName)
     }
   }
 
   const newLeadStatus = outcomeToLeadStatus(call.callResult)
   if (newLeadStatus) {
-    if (leadIdForUpdate) updateLeadStatus(leadIdForUpdate, newLeadStatus).catch(() => { /* best effort */ })
-    if (email) updateProspectCallStatus(email, newLeadStatus).catch(() => { /* best effort */ })
+    if (leadIdForUpdate) updateLeadStatus(leadIdForUpdate, newLeadStatus).catch(e => notifySyncError('updateLeadStatus', `leadId=${leadIdForUpdate} status=${newLeadStatus}`, e))
+    if (email) updateProspectCallStatus(email, newLeadStatus).catch(e => notifySyncError('updateProspectCallStatus', `email=${email} status=${newLeadStatus}`, e))
   }
 
   if (newLeadStatus === 'Meeting Scheduled' && accountName && !accountName.startsWith('Untagged')) {
@@ -197,11 +160,12 @@ export async function processZohoCall(callId: string, opts?: { existingRow?: { r
         }
         console.log(`[zoho-call-processor] Deal already exists for ${accountName}, skipping`)
       })
-      .catch(e => console.error(`[zoho-call-processor] Deal creation failed for ${accountName}:`, e))
+      .catch(e => notifySyncError('createDealLight', `account=${accountName}`, e))
   }
 
   if (email) {
-    upsertContactIntelRow(email, { date, time, outcome: call.callResult, notes: call.description, duration: call.callDuration, zohoCallId: callId }).catch(() => { /* best effort */ })
+    upsertContactIntelRow(email, { date, time, outcome: call.callResult, notes: call.description, duration: call.callDuration, zohoCallId: callId })
+      .catch(e => notifySyncError('upsertContactIntelRow', `email=${email}`, e))
   }
 
   const wasUpdated = !!(wasUntagged || isIncompleteRow)

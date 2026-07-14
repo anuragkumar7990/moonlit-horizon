@@ -1,4 +1,5 @@
 import type { ZohoDeal, ZohoContact, ZohoAccount, LeadCounts } from './types'
+import { isJunkCallResult, isJunkAccountName } from './company-resolution'
 
 const BASE_URL = 'https://www.zohoapis.in/crm/v3'
 
@@ -22,12 +23,28 @@ async function getAccessToken(): Promise<string> {
   return _tokenCache.token
 }
 
+// Max ~50 pages (200/page = 10,000 records) per paginated fetch — a safety net in case
+// Zoho's more_records flag ever gets stuck, so a single bad response can't loop forever
+// or hammer the rate limit indefinitely (compounds badly with retry/backoff below).
+const MAX_PAGES = 50
+
+// Retries GET requests on 429 (rate limit) and 5xx with exponential backoff (1s/2s/4s,
+// max 3 retries). Only used for reads — retrying a write (POST/PUT) risks creating/updating
+// the same record twice if the original request actually succeeded but the response was lost.
+async function zohoFetchWithRetry(url: string, token: string, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      cache: 'no-store',
+    })
+    if ((res.status !== 429 && res.status < 500) || attempt >= maxRetries) return res
+    await new Promise(resolve => setTimeout(resolve, 2 ** attempt * 1000))
+  }
+}
+
 async function zohoGet(path: string): Promise<unknown> {
   const token = await getAccessToken()
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    cache: 'no-store',
-  })
+  const res = await zohoFetchWithRetry(`${BASE_URL}${path}`, token)
   const text = await res.text()
   return text ? JSON.parse(text) : {}
 }
@@ -35,26 +52,15 @@ async function zohoGet(path: string): Promise<unknown> {
 export async function getDeals(): Promise<ZohoDeal[]> {
   const results: ZohoDeal[] = []
   let page = 1
-  while (true) {
-    const data = await zohoGet(`/Deals?fields=Deal_Name,Stage,Amount,Closing_Date,Account,Contact_Full_Name,Deal_Tag&per_page=200&page=${page}`) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+  while (page <= MAX_PAGES) {
+    const data = await zohoGet(`/Deals?fields=${DEAL_FIELDS}&per_page=200&page=${page}`) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     for (const d of data.data ?? []) {
-      const dealTag = String(d.Deal_Tag ?? '')
-      const temperature: ZohoDeal['temperature'] = dealTag === 'Hot' ? 'Hot' : dealTag === 'Warm' ? 'Warm' : dealTag === 'Cold' ? 'Cold' : null
-      const account = d.Account as Record<string, unknown> | null
-      results.push({
-        id: String(d.id ?? ''),
-        dealName: String(d.Deal_Name ?? ''),
-        stage: String(d.Stage ?? ''),
-        amount: String(d.Amount ?? ''),
-        closingDate: String(d.Closing_Date ?? ''),
-        accountName: account ? String(account.name ?? '') : '',
-        contactName: String(d.Contact_Full_Name ?? ''),
-        temperature,
-      })
+      results.push(toZohoDeal(d))
     }
     if (!data.info?.more_records) break
     page++
   }
+  if (page > MAX_PAGES) console.error(`[zoho] getDeals hit the ${MAX_PAGES}-page cap — results may be truncated`)
   return results
 }
 
@@ -99,21 +105,44 @@ export async function removeTagFromDeals(ids: string[], tagName: string): Promis
   }
 }
 
+const DEAL_FIELDS = 'Deal_Name,Stage,Amount,Closing_Date,Account,Contact_Full_Name,Deal_Tag'
+
+function toZohoDeal(d: Record<string, unknown>): ZohoDeal {
+  const dealTag = String(d.Deal_Tag ?? '')
+  const temperature: ZohoDeal['temperature'] = dealTag === 'Hot' ? 'Hot' : dealTag === 'Warm' ? 'Warm' : dealTag === 'Cold' ? 'Cold' : null
+  const account = d.Account as Record<string, unknown> | null
+  return {
+    id: String(d.id ?? ''),
+    dealName: String(d.Deal_Name ?? ''),
+    stage: String(d.Stage ?? ''),
+    amount: String(d.Amount ?? ''),
+    closingDate: String(d.Closing_Date ?? ''),
+    accountName: account ? String(account.name ?? '') : '',
+    contactName: String(d.Contact_Full_Name ?? ''),
+    temperature,
+  }
+}
+
+// Tries an exact Zoho-side search first (fast, no full-table fetch); falls back to a
+// case-insensitive scan of all Deals only if that finds nothing — so the "does a Deal
+// already exist for this account" answer is consistent with findDealByName/findDealIdByName
+// (which use the same exact-match search) instead of two independently-drifting checks.
 export async function getDealByAccount(accountName: string): Promise<ZohoDeal | null> {
+  const encoded = encodeURIComponent(accountName)
+  const data = await zohoGet(`/Deals/search?criteria=(Deal_Name:equals:${encoded})&fields=${DEAL_FIELDS}&per_page=1`) as { data?: Record<string, unknown>[]; status?: string }
+  if (data.status !== 'error' && data.data?.[0]) return toZohoDeal(data.data[0])
+
   const all = await getDeals()
   return all.find(d => d.accountName.toLowerCase() === accountName.toLowerCase()) ?? null
 }
 
 export async function getContacts(): Promise<ZohoContact[]> {
-  const token = await getAccessToken()
   const results: ZohoContact[] = []
   let page = 1
-  while (true) {
-    const res = await fetch(
-      `${BASE_URL}/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact&per_page=200&page=${page}`,
-      { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
-    )
-    const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+  while (page <= MAX_PAGES) {
+    const data = await zohoGet(
+      `/Contacts?fields=First_Name,Last_Name,Email,Phone,Mobile,Account_Contact&per_page=200&page=${page}`
+    ) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     const rows = data.data ?? []
     for (const c of rows) {
       const acct = typeof c.Account_Contact === 'object' && c.Account_Contact !== null ? c.Account_Contact as Record<string, unknown> : null
@@ -130,6 +159,7 @@ export async function getContacts(): Promise<ZohoContact[]> {
     if (!data.info?.more_records || rows.length < 200) break
     page++
   }
+  if (page > MAX_PAGES) console.error(`[zoho] getContacts hit the ${MAX_PAGES}-page cap — results may be truncated`)
   return results
 }
 
@@ -139,6 +169,30 @@ export async function getZohoAccounts(): Promise<ZohoAccount[]> {
     id: String(a.id ?? ''),
     accountName: String(a.Account_Name ?? ''),
   }))
+}
+
+// Maps the CSV-upload source dropdown (Lvl_1_Source values) to the closest existing
+// Lead_Source picklist option in Zoho — Lead_Source is a strict system picklist whose
+// values don't match Lvl_1_Source's, so the raw dropdown value can't be passed through
+// directly (Zoho rejects unknown picklist values). Lvl_1_Source/Lvl_2_Source remain the
+// real segmentation fields; this is just keeping the standard field populated sensibly
+// instead of hardcoded to one literal regardless of actual source.
+const LEAD_SOURCE_MAP: Record<string, string> = {
+  'Webinar': 'Webinar Attendee',
+  'Events': 'Corporate Training Event Attendee',
+  'Email': 'Cold Email',
+  'Cold Outreach': 'Cold Call',
+  'Referrals': 'External Referral',
+  'Internal Community Data': 'Internal Community Data',
+}
+
+// Lvl_1_Source is ALSO a strict Zoho picklist (Events, Webinar, Email, Referrals,
+// Internal Community Data) — "Cold Outreach" is an upload-dropdown option that isn't
+// a valid value there, so it was silently failing/dropping on every upload that used it.
+// Folds it into "Internal Community Data" per owner decision; every other value passes through.
+function normaliseLvl1Source(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  return value === 'Cold Outreach' ? 'Internal Community Data' : value
 }
 
 export async function createLeads(leads: {
@@ -173,9 +227,9 @@ export async function createLeads(leads: {
       Mobile: l.phone || undefined,
       Designation: l.designation || undefined,
       City: l.city || undefined,
-      Lead_Source: 'Internal Community Data',
+      Lead_Source: (l.lvl1Source && LEAD_SOURCE_MAP[l.lvl1Source]) || 'Internal Community Data',
       Lead_Status: l.leadStatus || 'Not Contacted',
-      Lvl_1_Source: l.lvl1Source || undefined,
+      Lvl_1_Source: normaliseLvl1Source(l.lvl1Source),
       Lvl_2_Source: l.lvl2Source || undefined,
       Tag: l.priority ? [{ name: l.priority }] : undefined,
     }))
@@ -209,15 +263,12 @@ export async function createLeads(leads: {
 }
 
 export async function getLeads(): Promise<{ id: string; firstName: string; lastName: string; email: string; phone: string; company: string }[]> {
-  const token = await getAccessToken()
   const results: { id: string; firstName: string; lastName: string; email: string; phone: string; company: string }[] = []
   let page = 1
-  while (true) {
-    const res = await fetch(
-      `${BASE_URL}/Leads?fields=First_Name,Last_Name,Email,Phone,Mobile,Company,Company_Name,Converted__s&per_page=200&page=${page}`,
-      { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
-    )
-    const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+  while (page <= MAX_PAGES) {
+    const data = await zohoGet(
+      `/Leads?fields=First_Name,Last_Name,Email,Phone,Mobile,Company,Company_Name,Converted__s&per_page=200&page=${page}`
+    ) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     const rows = data.data ?? []
     for (const l of rows) {
       if (l.Converted__s) continue
@@ -233,6 +284,7 @@ export async function getLeads(): Promise<{ id: string; firstName: string; lastN
     if (!data.info?.more_records || rows.length < 200) break
     page++
   }
+  if (page > MAX_PAGES) console.error(`[zoho] getLeads hit the ${MAX_PAGES}-page cap — results may be truncated`)
   return results
 }
 
@@ -342,15 +394,12 @@ export async function getZohoCalls(): Promise<{
   outcome: string
 }[]> {
   try {
-    const token = await getAccessToken()
     const results: { id: string; date: string; accountName: string; contactName: string; outcome: string }[] = []
     let page = 1
-    while (true) {
-      const res = await fetch(
-        `${BASE_URL}/Calls?fields=id,Call_Start_Time,Call_Result,What_Id,Who_Id&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
-        { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
-      )
-      const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+    while (page <= MAX_PAGES) {
+      const data = await zohoGet(
+        `/Calls?fields=id,Call_Start_Time,Call_Result,What_Id,Who_Id&per_page=200&page=${page}&sort_by=id&sort_order=desc`
+      ) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
       const rows = data.data ?? []
       for (const c of rows) {
         const whatId = c.What_Id && typeof c.What_Id === 'object' ? c.What_Id as Record<string, unknown> : null
@@ -359,13 +408,18 @@ export async function getZohoCalls(): Promise<{
         const contactName = whoId ? String(whoId.name ?? '') : ''
         const rawTime = String(c.Call_Start_Time ?? '')
         const date = rawTime ? rawTime.slice(0, 10) : ''
+        const outcome = String(c.Call_Result ?? '')
+        // Match getZohoCallsInRange's filtering so dashboard stats and the Sheets sync agree
+        // on what counts as a real dialled call.
+        if (isJunkCallResult(outcome) || isJunkAccountName(accountName)) continue
         if (date && accountName) {
-          results.push({ id: String(c.id ?? ''), date, accountName, contactName, outcome: String(c.Call_Result ?? '') })
+          results.push({ id: String(c.id ?? ''), date, accountName, contactName, outcome })
         }
       }
       if (!data.info?.more_records || rows.length < 200) break
       page++
     }
+    if (page > MAX_PAGES) console.error(`[zoho] getZohoCalls hit the ${MAX_PAGES}-page cap — results may be truncated`)
     return results
   } catch { return [] }
 }
@@ -583,8 +637,6 @@ export async function convertLead(leadId: string, leadEmail?: string): Promise<{
   }
 }
 
-const LVL2_FIELD_ID = '1321968000000748250'
-
 export async function findLeadByEmail(email: string): Promise<string | null> {
   const token = await getAccessToken()
   const res = await fetch(
@@ -678,14 +730,24 @@ export async function getLeadsByStatus(): Promise<LeadCounts> {
 
 type PickListValue = { actual_value: string; sequence_number: number; display_value: string; colour_code: null; id?: string; reference_value: string }
 
-async function fetchLvl2Field(token: string): Promise<PickListValue[]> {
-  const res = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
+// Cache of field id lookups by (module, api_name) so repeated calls don't re-fetch metadata.
+const fieldIdCache = new Map<string, string>()
+
+async function fetchPicklistField(token: string, module: string, apiName: string): Promise<{ id: string; values: PickListValue[] }> {
+  const res = await fetch(`${BASE_URL}/settings/fields?module=${module}`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
     cache: 'no-store',
   })
-  const data = await res.json() as { fields?: ({ api_name: string; pick_list_values?: PickListValue[] })[] }
-  const field = data.fields?.find(f => f.api_name === 'Lvl_2_Source')
-  return field?.pick_list_values ?? []
+  const data = await res.json() as { fields?: ({ id: string; api_name: string; pick_list_values?: PickListValue[] })[] }
+  const field = data.fields?.find(f => f.api_name === apiName)
+  if (!field) throw new Error(`Field ${apiName} not found on module ${module}`)
+  fieldIdCache.set(`${module}:${apiName}`, field.id)
+  return { id: field.id, values: field.pick_list_values ?? [] }
+}
+
+async function fetchLvl2Field(token: string): Promise<PickListValue[]> {
+  const { values } = await fetchPicklistField(token, 'Leads', 'Lvl_2_Source')
+  return values
 }
 
 export async function getLvl2SourceValues(): Promise<string[]> {
@@ -695,11 +757,25 @@ export async function getLvl2SourceValues(): Promise<string[]> {
 }
 
 export async function addLvl2SourceValue(value: string): Promise<void> {
+  await addPicklistValue('Leads', 'Lvl_2_Source', value)
+}
+
+// Generic add for any picklist field on any module — add new values as data grows
+// (new webinars, new Lead Type buckets, etc.) without needing a code change each time.
+export async function getPicklistValues(module: string, apiName: string): Promise<string[]> {
   const token = await getAccessToken()
-  const existing = await fetchLvl2Field(token)
+  const { values } = await fetchPicklistField(token, module, apiName)
+  return values.filter(v => v.actual_value !== '-None-').map(v => v.actual_value)
+}
+
+export async function addPicklistValue(module: string, apiName: string, value: string): Promise<void> {
+  const token = await getAccessToken()
+  const { id, values: existing } = await fetchPicklistField(token, module, apiName)
+  if (existing.some(v => v.actual_value === value)) return // already there, nothing to do
+
   const body = {
     fields: [{
-      id: LVL2_FIELD_ID,
+      id,
       pick_list_values: [
         ...existing,
         {
@@ -712,7 +788,7 @@ export async function addLvl2SourceValue(value: string): Promise<void> {
       ],
     }],
   }
-  const patchRes = await fetch(`${BASE_URL}/settings/fields?module=Leads`, {
+  const patchRes = await fetch(`${BASE_URL}/settings/fields?module=${module}`, {
     method: 'PATCH',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -721,7 +797,7 @@ export async function addLvl2SourceValue(value: string): Promise<void> {
     status?: string; message?: string; code?: string
     fields?: { status?: string; message?: string; code?: string }[]
   }
-  console.log('[addLvl2SourceValue] Zoho response:', JSON.stringify(result))
+  console.log(`[addPicklistValue] ${module}.${apiName} += "${value}" ->`, JSON.stringify(result))
   if (!patchRes.ok || result.status === 'error') {
     throw new Error(result.message ?? result.code ?? `HTTP ${patchRes.status}: ${JSON.stringify(result)}`)
   }
@@ -776,29 +852,22 @@ export async function createDeal(payload: {
   return record?.details?.id ?? ''
 }
 
-const JUNK_CALL_RESULTS_ZOHO = new Set([
-  'ai processed', 'ai processed via cloud folder', 'ai call processed', 'processed',
-])
-
 // Fetch completed SDR call IDs in a date range (yyyy-mm-dd).
 // Excludes scheduled/planned activities and AI-auto-processed entries.
 export async function getZohoCallsInRange(since: string, until: string): Promise<{ id: string; date: string }[]> {
-  const token = await getAccessToken()
   const results: { id: string; date: string }[] = []
   let page = 1
-  while (page <= 50) {
-    const res = await fetch(
-      `${BASE_URL}/Calls?fields=id,Call_Start_Time,Call_Status,Call_Result&per_page=200&page=${page}&sort_by=id&sort_order=desc`,
-      { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: 'no-store' }
-    )
-    const data = await res.json() as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
+  while (page <= MAX_PAGES) {
+    const data = await zohoGet(
+      `/Calls?fields=id,Call_Start_Time,Call_Status,Call_Result&per_page=200&page=${page}&sort_by=id&sort_order=desc`
+    ) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
     const rows = data.data ?? []
     if (rows.length === 0) break
     for (const c of rows) {
       const status = String(c.Call_Status ?? '').toLowerCase()
       if (status && status !== 'completed') continue  // skip scheduled/cancelled/overdue
       const result = String(c.Call_Result ?? '').toLowerCase().trim()
-      if (JUNK_CALL_RESULTS_ZOHO.has(result)) continue  // skip AI-auto-processed entries
+      if (isJunkCallResult(result)) continue  // skip AI-auto-processed entries
       const rawTime = String(c.Call_Start_Time ?? '')
       const date = rawTime.slice(0, 10)
       if (date >= since && date <= until && c.id) {
@@ -808,6 +877,7 @@ export async function getZohoCallsInRange(since: string, until: string): Promise
     if (!data.info?.more_records) break
     page++
   }
+  if (page > MAX_PAGES) console.error(`[zoho] getZohoCallsInRange hit the ${MAX_PAGES}-page cap — results may be truncated`)
   return results
 }
 
@@ -816,13 +886,8 @@ export async function findDealByName(dealName: string): Promise<boolean> {
 }
 
 export async function findDealIdByName(dealName: string): Promise<string | null> {
-  const token = await getAccessToken()
   const encoded = encodeURIComponent(dealName)
-  const res = await fetch(`${BASE_URL}/Deals/search?criteria=(Deal_Name:equals:${encoded})&fields=id&per_page=1`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    cache: 'no-store',
-  })
-  const data = await res.json() as { data?: { id?: string }[]; status?: string }
+  const data = await zohoGet(`/Deals/search?criteria=(Deal_Name:equals:${encoded})&fields=id&per_page=1`) as { data?: { id?: string }[]; status?: string }
   if (data.status === 'error') return null
   return data.data?.[0]?.id ?? null
 }
@@ -832,7 +897,7 @@ export async function createDealLight(dealName: string, stage: string, closingDa
   const res = await fetch(`${BASE_URL}/Deals`, {
     method: 'POST',
     headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: [{ Deal_Name: dealName, Stage: stage, Pipeline: 'Internal Community Data', Closing_Date: closingDate }] }),
+    body: JSON.stringify({ data: [{ Deal_Name: dealName, Stage: stage, Pipeline: 'Internal Community Data', Closing_Date: closingDate, Company_Name: dealName }] }),
   })
   const data = await res.json() as { data?: { details?: { id: string }; status?: string; message?: string }[] }
   const record = data.data?.[0]
@@ -866,7 +931,7 @@ export interface ZohoEvent {
 export async function getZohoEvents(sinceDate?: string): Promise<ZohoEvent[]> {
   const results: ZohoEvent[] = []
   let page = 1
-  while (true) {
+  while (page <= MAX_PAGES) {
     const data = await zohoGet(
       `/Events?fields=id,Subject,Start_DateTime,Who_Id,What_Id,Description&per_page=200&page=${page}`
     ) as { data?: Record<string, unknown>[]; info?: { more_records?: boolean } }
@@ -888,5 +953,6 @@ export async function getZohoEvents(sinceDate?: string): Promise<ZohoEvent[]> {
     if (!data.info?.more_records) break
     page++
   }
+  if (page > MAX_PAGES) console.error(`[zoho] getZohoEvents hit the ${MAX_PAGES}-page cap — results may be truncated`)
   return results
 }

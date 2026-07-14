@@ -75,6 +75,17 @@ async function main() {
   // CSV cols: Name(0) Email(1) Phone(2) Title(3) Company(4) L1(5) L2(6) SDR(7)
   //           FirstContactDate(8) TotalCalls(9) ConnRate%(10) MeetingBooked(11)
   //           LastCallDate(12) LastCallOutcome(13) Notes(14)
+  //
+  // Lead_Source is a strict Zoho picklist and does NOT include a plain "Internal" value —
+  // must keep this mapping in sync with LEAD_SOURCE_MAP in lib/zoho.ts (createLeads()).
+  const LEAD_SOURCE_MAP = {
+    'Webinar': 'Webinar Attendee',
+    'Events': 'Corporate Training Event Attendee',
+    'Email': 'Cold Email',
+    'Cold Outreach': 'Cold Call',
+    'Referrals': 'External Referral',
+    'Internal Community Data': 'Internal Community Data',
+  }
   const leads = rows.map(r => {
     const fullName = (r[0] || '').trim()
     const nameParts = fullName.split(' ')
@@ -92,7 +103,7 @@ async function main() {
       Lvl_2_Source:    r[6] || undefined,
       Lead_Status:     mapLeadStatus(r[13]),
       Description:     r[14] ? `Last call outcome: ${r[13]}. Notes: ${r[14]}` : `Last call outcome: ${r[13]}`,
-      Lead_Source:     'Internal',
+      Lead_Source:     LEAD_SOURCE_MAP[r[5]] || 'Internal Community Data',
     }
   }).filter(l => l.Last_Name) // must have at least a name
 

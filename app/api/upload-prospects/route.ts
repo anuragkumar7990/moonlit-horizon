@@ -91,11 +91,21 @@ function clean(val: string): string {
   return t
 }
 
-// Rule 4: normalise phone — strip non-digits, prepend + if > 10 digits
+// Rule 4: normalise phone to a clean, consistent +91XXXXXXXXXX shape (TTT's prospects are
+// India-based). Strips non-digits, then a leading 0 / country-code variant if present, and
+// requires exactly 10 digits left. Anything that doesn't reduce to a valid 10-digit number is
+// rejected (undefined) rather than kept in a mangled/partial form — the old logic just
+// prepended "+" once past 10 digits with no validation, so a stray leading 0 (e.g.
+// "09876543210") produced an invalid "+09876543210" that looked plausible but wasn't, and
+// anything under 10 digits was kept as-is instead of being flagged as missing.
 function normalisePhone(val: string): string | undefined {
-  const digits = val.trim().replace(/\D/g, '')
+  let digits = val.trim().replace(/\D/g, '')
   if (!digits) return undefined
-  return digits.length > 10 ? `+${digits}` : digits
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)   // leading 0
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2)  // country code, no +
+  if (digits.length === 13 && digits.startsWith('091')) digits = digits.slice(3) // leading 0 + country code
+  if (digits.length !== 10) return undefined
+  return `+91${digits}`
 }
 
 // Rule 5: validate city
